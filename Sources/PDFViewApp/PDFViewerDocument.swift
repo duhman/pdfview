@@ -1,5 +1,5 @@
 import SwiftUI
-import Quartz
+@preconcurrency import Quartz
 import UniformTypeIdentifiers
 
 /// Document model for PDF files conforming to FileDocument protocol
@@ -7,6 +7,9 @@ struct PDFViewerDocument: FileDocument {
     
     /// The underlying PDFKit document
     var pdfDocument: PDFDocument?
+    
+    /// Original data when no file URL is provided
+    private var sourceData: Data?
     
     /// Supported content types (PDF only)
     static var readableContentTypes: [UTType] {
@@ -16,6 +19,7 @@ struct PDFViewerDocument: FileDocument {
     /// Initialize with empty document
     init() {
         self.pdfDocument = nil
+        self.sourceData = nil
     }
     
     /// Initialize from file configuration
@@ -29,11 +33,12 @@ struct PDFViewerDocument: FileDocument {
         }
         
         self.pdfDocument = document
+        self.sourceData = data
     }
     
     /// Write document to file (read-only for now)
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        // Return empty data since we're read-only
-        return FileWrapper(regularFileWithContents: Data())
+        // Explicitly disallow writes to enforce read-only behavior
+        throw CocoaError(.fileWriteNoPermission)
     }
 }

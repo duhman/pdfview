@@ -1,11 +1,11 @@
-// swift-tools-version:6.1
+// swift-tools-version:6.2
 
 import PackageDescription
 
 let package = Package(
     name: "PDFView",
     platforms: [
-        .macOS("15.0")
+        .macOS("26.2")
     ],
     products: [
         .executable(

@@ -7,10 +7,13 @@ CONFIG="${1:-release}"
 # Configuration
 APP_NAME="PDFView"
 BUNDLE_ID="com.bigmac.pdfview"
-MACOS_MIN_VERSION="15.0"
+MACOS_MIN_VERSION="26.2"
 ARCHES="$(uname -m)"
 VERSION="1.0.0"
 BUILD_NUMBER="1"
+SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
+NOTARIZE="${NOTARIZE:-false}"
+NOTARY_PROFILE="${NOTARY_PROFILE:-}"
 
 APP_BUNDLE="$APP_NAME.app"
 CONTENTS="$APP_BUNDLE/Contents"
@@ -110,7 +113,7 @@ cat > "$CONTENTS/Info.plist" << EOF
 </plist>
 EOF
 
-# Create default entitlements for local use
+# Create default entitlements for distribution
 ENTITLEMENTS=$(mktemp)
 cat > "$ENTITLEMENTS" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -118,8 +121,8 @@ cat > "$ENTITLEMENTS" << EOF
 <plist version="1.0">
 <dict>
     <key>com.apple.security.app-sandbox</key>
-    <false/>
-    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <key>com.apple.security.files.user-selected.read-only</key>
     <true/>
 </dict>
 </plist>
@@ -128,9 +131,28 @@ EOF
 # Clear extended attributes
 xattr -cr "$APP_BUNDLE"
 
-# Ad-hoc code signing for local use
-echo "==> Ad-hoc signing"
-codesign --force --deep --sign - --entitlements "$ENTITLEMENTS" "$APP_BUNDLE"
+# Code signing (Developer ID or ad-hoc) with hardened runtime when available
+echo "==> Code signing ($SIGNING_IDENTITY)"
+SIGN_ARGS=(--force --deep --sign "$SIGNING_IDENTITY" --entitlements "$ENTITLEMENTS")
+if [[ "$SIGNING_IDENTITY" != "-" ]]; then
+    SIGN_ARGS+=(--timestamp --options runtime)
+fi
+codesign "${SIGN_ARGS[@]}" "$APP_BUNDLE"
+
+if [[ "$NOTARIZE" == "true" ]]; then
+    if [[ "$SIGNING_IDENTITY" == "-" ]]; then
+        echo "ERROR: NOTARIZE=true requires a valid Developer ID signing identity"
+        exit 1
+    fi
+    if [[ -z "$NOTARY_PROFILE" ]]; then
+        echo "ERROR: NOTARY_PROFILE is required when NOTARIZE=true"
+        exit 1
+    fi
+    echo "==> Submitting for notarization"
+    xcrun notarytool submit "$APP_BUNDLE" --keychain-profile "$NOTARY_PROFILE" --wait
+    echo "==> Stapling notarization ticket"
+    xcrun stapler staple "$APP_BUNDLE"
+fi
 
 echo "==> Created: $APP_BUNDLE"
 echo ""

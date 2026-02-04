@@ -27,8 +27,8 @@ open PDFView.app
 
 ## 📋 Requirements
 
-- **macOS**: 15.0+ (Sequoia)
-- **Swift**: 6.1+
+- **macOS**: 26.2+ (latest only)
+- **Swift**: 6.2+
 - **Xcode**: 16.0+ (Command Line Tools)
 
 ## 🛠️ Building from Source
@@ -127,6 +127,7 @@ struct PDFViewApp: App {
 ```swift
 struct PDFKitView: NSViewRepresentable {
     var document: PDFDocument?
+    @Binding var zoomScale: CGFloat
     
     func makeNSView(context: Context) -> PDFView {
         let pdfView = PDFView()
@@ -160,7 +161,7 @@ struct PDFKitView: NSViewRepresentable {
 
 ### Adding Features
 
-The codebase follows Swift 6.1 best practices with strict concurrency checking:
+The codebase follows Swift 6.2 best practices with strict concurrency checking:
 
 1. **Document Handling**: Extend `PDFViewerDocument.swift` for new file types
 2. **UI Components**: Add SwiftUI views in `Sources/Views/`
@@ -168,7 +169,7 @@ The codebase follows Swift 6.1 best practices with strict concurrency checking:
 
 ### Code Quality
 
-- **Swift 6.1** with complete concurrency checking
+- **Swift 6.2** with complete concurrency checking
 - **No external dependencies** (pure Apple frameworks)
 - **Type-safe** document handling via `FileDocument` protocol
 - **Memory-efficient** single-window-per-document architecture
@@ -192,9 +193,27 @@ The built `PDFView.app` is self-contained and can be:
 - Shared via AirDrop, Dropbox, etc.
 - Installed by simply dragging to `/Applications`
 
-**Note**: Since the app is ad-hoc signed, users may need to:
+**Note**: If the app is ad-hoc signed (default), users may need to:
 1. Right-click the app and select **Open** (first launch only)
 2. Or run: `xattr -cr PDFView.app` to remove quarantine
+
+### Distribution (Developer ID + Notarization)
+
+```bash
+# Sign with Developer ID (requires SIGNING_IDENTITY)
+SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./build_app.sh
+
+# Verify entitlements and signature
+codesign -dv --entitlements :- PDFView.app
+
+# Notarize (requires a keychain profile created via notarytool)
+NOTARIZE=true NOTARY_PROFILE="your-notary-profile" \
+  SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+  ./build_app.sh
+
+# Verify notarization
+spctl -a -v PDFView.app
+```
 
 ## 🐛 Troubleshooting
 

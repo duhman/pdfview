@@ -15,7 +15,7 @@ struct PDFContentView: View {
         GeometryReader { geometry in
             VStack(spacing: 0) {
                 // PDF Viewer takes full available space
-                PDFKitView(document: document.pdfDocument)
+                PDFKitView(document: document.pdfDocument, zoomScale: $zoomScale)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(NSColor.windowBackgroundColor))
             }
@@ -33,6 +33,7 @@ struct PDFContentView: View {
                 Button(action: zoomIn) {
                     Image(systemName: "plus.magnifyingglass")
                 }
+                .keyboardShortcut("=", modifiers: .command)
                 .keyboardShortcut("+", modifiers: .command)
                 .help("Zoom In")
                 
