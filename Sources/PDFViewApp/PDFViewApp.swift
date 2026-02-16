@@ -19,8 +19,10 @@ struct PDFViewApp: App {
 
 private struct SigningCommandMenu: Commands {
     @FocusedValue(\.startSigningAction) private var startSigningAction
+    @FocusedValue(\.canStartSigningAction) private var canStartSigningAction
     @FocusedValue(\.toggleFreePlacementAction) private var toggleFreePlacementAction
     @FocusedValue(\.saveSignedCopyAction) private var saveSignedCopyAction
+    @FocusedValue(\.canSaveSignedCopyAction) private var canSaveSignedCopyAction
     @FocusedValue(\.saveSignedCopyAsAction) private var saveSignedCopyAsAction
     @FocusedValue(\.undoSignaturePlacementAction) private var undoSignaturePlacementAction
     @FocusedValue(\.redoSignaturePlacementAction) private var redoSignaturePlacementAction
@@ -35,23 +37,7 @@ private struct SigningCommandMenu: Commands {
                 startSigningAction?()
             }
             .keyboardShortcut("s", modifiers: [.command, .shift])
-
-            Button("Toggle Free Placement") {
-                toggleFreePlacementAction?()
-            }
-            .keyboardShortcut("f", modifiers: [.command, .shift])
-
-            Divider()
-
-            Button("Undo Last Signature Placement") {
-                undoSignaturePlacementAction?()
-            }
-            .disabled(!(canUndoSignaturePlacementAction?() ?? false))
-
-            Button("Redo Last Signature Placement") {
-                redoSignaturePlacementAction?()
-            }
-            .disabled(!(canRedoSignaturePlacementAction?() ?? false))
+            .disabled(!(canStartSigningAction?() ?? false))
 
             Divider()
 
@@ -65,15 +51,35 @@ private struct SigningCommandMenu: Commands {
 
             Divider()
 
+            Button("Toggle Free Placement") {
+                toggleFreePlacementAction?()
+            }
+            .keyboardShortcut("f", modifiers: [.command, .shift])
+            .disabled(!(canStartSigningAction?() ?? false))
+
+            Divider()
+
             Button("Save Signed Copy") {
                 saveSignedCopyAction?()
             }
-            .keyboardShortcut("s", modifiers: .command)
+            .disabled(!(canSaveSignedCopyAction?() ?? false))
 
             Button("Save Signed Copy As…") {
                 saveSignedCopyAsAction?()
             }
-            .keyboardShortcut("s", modifiers: [.command, .option, .shift])
+            .disabled(!(canSaveSignedCopyAction?() ?? false))
+
+            Divider()
+
+            Button("Undo Last Signature Placement") {
+                undoSignaturePlacementAction?()
+            }
+            .disabled(!(canUndoSignaturePlacementAction?() ?? false))
+
+            Button("Redo Last Signature Placement") {
+                redoSignaturePlacementAction?()
+            }
+            .disabled(!(canRedoSignaturePlacementAction?() ?? false))
         }
     }
 }

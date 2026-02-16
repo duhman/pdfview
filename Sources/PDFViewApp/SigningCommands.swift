@@ -40,6 +40,14 @@ private struct DeleteSignatureActionKey: FocusedValueKey {
     typealias Value = () -> Void
 }
 
+private struct CanStartSigningActionKey: FocusedValueKey {
+    typealias Value = () -> Bool
+}
+
+private struct CanSaveSignedCopyActionKey: FocusedValueKey {
+    typealias Value = () -> Bool
+}
+
 extension FocusedValues {
     var startSigningAction: (() -> Void)? {
         get { self[StartSigningActionKey.self] }
@@ -89,5 +97,15 @@ extension FocusedValues {
     var deleteSignatureAction: (() -> Void)? {
         get { self[DeleteSignatureActionKey.self] }
         set { self[DeleteSignatureActionKey.self] = newValue }
+    }
+
+    var canStartSigningAction: (() -> Bool)? {
+        get { self[CanStartSigningActionKey.self] }
+        set { self[CanStartSigningActionKey.self] = newValue }
+    }
+
+    var canSaveSignedCopyAction: (() -> Bool)? {
+        get { self[CanSaveSignedCopyActionKey.self] }
+        set { self[CanSaveSignedCopyActionKey.self] = newValue }
     }
 }

@@ -5,6 +5,28 @@ import AppKit
 
 /// Document model for PDF files conforming to FileDocument protocol
 struct PDFViewerDocument: FileDocument {
+    enum ExportError: LocalizedError, Equatable {
+        case missingDocument
+        case invalidDestinationURL
+        case cannotEncodeDocumentData
+        case cannotCreatePDFContext
+        case writeFailed(description: String)
+
+        var errorDescription: String? {
+            switch self {
+            case .missingDocument:
+                return "No PDF document is loaded."
+            case .invalidDestinationURL:
+                return "The destination must be a local file URL."
+            case .cannotEncodeDocumentData:
+                return "The PDF data could not be encoded."
+            case .cannotCreatePDFContext:
+                return "Could not create a PDF writing context."
+            case .writeFailed(let description):
+                return "Failed to write the signed copy: \(description)"
+            }
+        }
+    }
 
     struct SignaturePlacement: Identifiable, Equatable {
         let id: UUID
@@ -31,6 +53,9 @@ struct PDFViewerDocument: FileDocument {
     /// The underlying PDFKit document
     var pdfDocument: PDFDocument?
 
+    /// Immutable baseline bytes used for deterministic flattened visual signature exports.
+    private var originalPDFData: Data?
+
     /// Signature placements added during this document session.
     var signaturePlacements: [SignaturePlacement] = []
 
@@ -42,6 +67,12 @@ struct PDFViewerDocument: FileDocument {
     /// Initialize with empty document
     init() {
         self.pdfDocument = nil
+        self.originalPDFData = nil
+    }
+
+    init(pdfDocument: PDFDocument?, originalPDFData: Data? = nil) {
+        self.pdfDocument = pdfDocument
+        self.originalPDFData = originalPDFData
     }
 
     /// Initialize from file configuration
@@ -55,12 +86,13 @@ struct PDFViewerDocument: FileDocument {
         }
 
         self.pdfDocument = document
+        self.originalPDFData = data
     }
 
     /// Write document to file.
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         guard let data = pdfDocument?.dataRepresentation() else {
-            throw CocoaError(.fileWriteUnknown)
+            throw ExportError.cannotEncodeDocumentData
         }
         return FileWrapper(regularFileWithContents: data)
     }
@@ -77,26 +109,33 @@ struct PDFViewerDocument: FileDocument {
         return signaturePlacements.remove(at: index)
     }
 
+    /// Writes a flattened visual signature export to disk.
     func writeSignedCopy(to destinationURL: URL) throws {
-        guard let pdfDocument else {
-            throw CocoaError(.fileWriteUnknown)
+        guard destinationURL.isFileURL else {
+            throw ExportError.invalidDestinationURL
         }
 
-        // Fast path: no placements in this session, so preserve original PDF serialization.
+        guard let baselineDocument = baselineDocumentForExport() else {
+            throw ExportError.missingDocument
+        }
+
+        // Fast path: no placements in this session, so preserve baseline serialization.
         if signaturePlacements.isEmpty {
-            guard let data = pdfDocument.dataRepresentation() else {
-                throw CocoaError(.fileWriteUnknown)
+            let data = try baselineDataForExport()
+            do {
+                try data.write(to: destinationURL, options: [.atomic])
+            } catch {
+                throw ExportError.writeFailed(description: error.localizedDescription)
             }
-            try data.write(to: destinationURL, options: [.atomic])
             return
         }
 
         guard let context = CGContext(destinationURL as CFURL, mediaBox: nil, nil) else {
-            throw CocoaError(.fileWriteUnknown)
+            throw ExportError.cannotCreatePDFContext
         }
 
-        for index in 0..<pdfDocument.pageCount {
-            guard let page = pdfDocument.page(at: index) else {
+        for index in 0..<baselineDocument.pageCount {
+            guard let page = baselineDocument.page(at: index) else {
                 continue
             }
 
@@ -125,5 +164,23 @@ struct PDFViewerDocument: FileDocument {
         }
 
         context.closePDF()
+    }
+
+    private func baselineDocumentForExport() -> PDFDocument? {
+        if let originalPDFData, let originalDocument = PDFDocument(data: originalPDFData) {
+            return originalDocument
+        }
+        return pdfDocument
+    }
+
+    private func baselineDataForExport() throws -> Data {
+        if let originalPDFData {
+            return originalPDFData
+        }
+
+        guard let encoded = pdfDocument?.dataRepresentation() else {
+            throw ExportError.cannotEncodeDocumentData
+        }
+        return encoded
     }
 }

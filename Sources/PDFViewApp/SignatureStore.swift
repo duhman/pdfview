@@ -8,11 +8,15 @@ final class SignatureStore: ObservableObject {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    init(fileManager: FileManager = .default) {
-        let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSTemporaryDirectory())
-        let folder = appSupport.appendingPathComponent("PDFView", isDirectory: true)
-        self.fileURL = folder.appendingPathComponent("signature_profile.json", isDirectory: false)
+    init(fileManager: FileManager = .default, storageURL: URL? = nil) {
+        if let storageURL {
+            self.fileURL = storageURL
+        } else {
+            let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+                ?? URL(fileURLWithPath: NSTemporaryDirectory())
+            let folder = appSupport.appendingPathComponent("PDFView", isDirectory: true)
+            self.fileURL = folder.appendingPathComponent("signature_profile.json", isDirectory: false)
+        }
 
         self.encoder = JSONEncoder()
         self.encoder.dateEncodingStrategy = .iso8601
@@ -20,7 +24,10 @@ final class SignatureStore: ObservableObject {
         self.decoder.dateDecodingStrategy = .iso8601
 
         do {
-            try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+            try fileManager.createDirectory(
+                at: fileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
         } catch {
             // Keep running with in-memory state if folder creation fails.
         }

@@ -39,7 +39,6 @@ struct PDFKitView: NSViewRepresentable {
         private var isObserving = false
 
         private var hasReportedFieldAvailabilityForDocument = false
-        private var placementAnnotations: [UUID: PDFAnnotation] = [:]
 
         init(_ parent: PDFKitView) {
             self.parent = parent
@@ -65,7 +64,6 @@ struct PDFKitView: NSViewRepresentable {
         func updateDocument(_ document: PDFDocument?) {
             if pdfView?.document !== document {
                 hasReportedFieldAvailabilityForDocument = false
-                placementAnnotations.removeAll()
             }
 
             guard !hasReportedFieldAvailabilityForDocument else { return }
@@ -89,43 +87,19 @@ struct PDFKitView: NSViewRepresentable {
 
         func syncPlacements() {
             guard let pdfView, let document = pdfView.document else {
-                placementAnnotations.removeAll()
+                pdfView?.overlayPlacements = []
                 return
             }
 
-            let desiredPlacementsByID = Dictionary(uniqueKeysWithValues: parent.signaturePlacements.map { ($0.id, $0) })
-            let currentIDs = Set(placementAnnotations.keys)
-            let desiredIDs = Set(desiredPlacementsByID.keys)
-
-            for removedID in currentIDs.subtracting(desiredIDs) {
-                guard let annotation = placementAnnotations[removedID],
-                      let page = annotation.page
-                else {
-                    placementAnnotations.removeValue(forKey: removedID)
-                    continue
+            let clampedPlacements = parent.signaturePlacements.compactMap { placement -> PDFViewerDocument.SignaturePlacement? in
+                guard let page = document.page(at: placement.pageIndex) else {
+                    return nil
                 }
-
-                page.removeAnnotation(annotation)
-                placementAnnotations.removeValue(forKey: removedID)
+                var adjusted = placement
+                adjusted.bounds = Self.clamped(rect: placement.bounds, to: page.bounds(for: .cropBox))
+                return adjusted
             }
-
-            for addedID in desiredIDs.subtracting(currentIDs) {
-                guard let placement = desiredPlacementsByID[addedID],
-                      let page = document.page(at: placement.pageIndex),
-                      let image = NSImage(data: placement.signaturePNGData)
-                else {
-                    continue
-                }
-
-                let clampedBounds = Self.clamped(rect: placement.bounds, to: page.bounds(for: .cropBox))
-                let annotation = SignatureImageAnnotation(
-                    bounds: clampedBounds,
-                    image: image,
-                    signerName: placement.signerName
-                )
-                page.addAnnotation(annotation)
-                placementAnnotations[addedID] = annotation
-            }
+            pdfView.overlayPlacements = clampedPlacements
         }
 
         private func handleTap(page: PDFPage, pagePoint: CGPoint, annotation: PDFAnnotation?) {
@@ -276,6 +250,11 @@ struct PDFKitView: NSViewRepresentable {
 @MainActor
 final class SigningPDFView: PDFView {
     var signatureTapHandler: ((PDFPage, CGPoint, PDFAnnotation?) -> Void)?
+    var overlayPlacements: [PDFViewerDocument.SignaturePlacement] = [] {
+        didSet {
+            needsDisplay = true
+        }
+    }
 
     override func mouseDown(with event: NSEvent) {
         let viewPoint = convert(event.locationInWindow, from: nil)
@@ -289,35 +268,22 @@ final class SigningPDFView: PDFView {
         signatureTapHandler?(page, pagePoint, annotation)
         super.mouseDown(with: event)
     }
-}
 
-final class SignatureImageAnnotation: PDFAnnotation {
-    private let signatureImage: NSImage
-    private let signerName: String
-
-    init(bounds: CGRect, image: NSImage, signerName: String) {
-        self.signatureImage = image
-        self.signerName = signerName
-        super.init(bounds: bounds, forType: .stamp, withProperties: nil)
-
-        color = .clear
-        border = nil
-        shouldDisplay = true
-        shouldPrint = true
-        contents = signerName
-    }
-
-    required init?(coder: NSCoder) {
-        return nil
-    }
-
-    override func draw(with box: PDFDisplayBox, in context: CGContext) {
-        guard let cgImage = signatureImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let document else {
             return
         }
 
-        context.saveGState()
-        context.draw(cgImage, in: bounds)
-        context.restoreGState()
+        for placement in overlayPlacements {
+            guard let page = document.page(at: placement.pageIndex),
+                  let image = NSImage(data: placement.signaturePNGData)
+            else {
+                continue
+            }
+
+            let viewRect = convert(placement.bounds, from: page)
+            image.draw(in: viewRect)
+        }
     }
 }

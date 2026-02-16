@@ -34,6 +34,12 @@ struct SignatureSetupSheet: View {
     @State private var importedImage: NSImage?
     @State private var isImportPickerPresented = false
     @State private var errorMessage: String?
+    @FocusState private var focusedField: Field?
+
+    private enum Field {
+        case fullName
+        case typedSignature
+    }
 
     let existingProfile: SignatureProfile?
     let onCancel: () -> Void
@@ -51,6 +57,20 @@ struct SignatureSetupSheet: View {
         let existingName = existingProfile?.fullName ?? ""
         _fullName = State(initialValue: existingName)
         _typedSignature = State(initialValue: existingName)
+        _selectedMode = State(initialValue: Self.mode(for: existingProfile?.sourceKind))
+    }
+
+    private static func mode(for sourceKind: SignatureProfile.SourceKind?) -> Mode {
+        switch sourceKind {
+        case .draw:
+            return .draw
+        case .type:
+            return .type
+        case .import:
+            return .import
+        case .none:
+            return .draw
+        }
     }
 
     var body: some View {
@@ -61,6 +81,7 @@ struct SignatureSetupSheet: View {
 
             TextField("Full legal name", text: $fullName)
                 .textFieldStyle(.roundedBorder)
+                .focused($focusedField, equals: .fullName)
 
             Picker("Method", selection: $selectedMode) {
                 ForEach(Mode.allCases) { mode in
@@ -89,6 +110,7 @@ struct SignatureSetupSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         TextField("Type signature text", text: $typedSignature)
                             .textFieldStyle(.roundedBorder)
+                            .focused($focusedField, equals: .typedSignature)
 
                         SignaturePreview(image: typePreviewImage)
                             .frame(height: 120)
@@ -126,6 +148,10 @@ struct SignatureSetupSheet: View {
                     .foregroundStyle(.red)
             }
 
+            Text("This creates a visual signature stamp (not a certificate-based digital signature).")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             HStack {
                 Spacer()
                 Button("Cancel", action: onCancel)
@@ -136,6 +162,9 @@ struct SignatureSetupSheet: View {
         }
         .padding(20)
         .frame(width: 560)
+        .onAppear {
+            focusedField = .fullName
+        }
     }
 
     private var canSave: Bool {
@@ -160,6 +189,15 @@ struct SignatureSetupSheet: View {
     }
 
     private func save() {
+        errorMessage = nil
+
+        let trimmedName = fullName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            errorMessage = "Enter your full name before saving."
+            focusedField = .fullName
+            return
+        }
+
         guard let previewImage,
               let normalizedPNGData = Self.normalizeToSignaturePNG(image: previewImage)
         else {
@@ -169,7 +207,7 @@ struct SignatureSetupSheet: View {
 
         let profile = SignatureProfile(
             id: existingProfile?.id ?? UUID(),
-            fullName: fullName.trimmingCharacters(in: .whitespacesAndNewlines),
+            fullName: trimmedName,
             createdAt: existingProfile?.createdAt ?? Date(),
             signaturePNGData: normalizedPNGData,
             sourceKind: selectedMode.sourceKind

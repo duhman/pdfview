@@ -131,13 +131,37 @@ EOF
 # Clear extended attributes
 xattr -cr "$APP_BUNDLE"
 
-# Code signing (Developer ID or ad-hoc) with hardened runtime when available
+# Code signing (Developer ID or ad-hoc) without blanket --deep usage.
 echo "==> Code signing ($SIGNING_IDENTITY)"
-SIGN_ARGS=(--force --deep --sign "$SIGNING_IDENTITY" --entitlements "$ENTITLEMENTS")
+
+BASE_SIGN_ARGS=(--force --sign "$SIGNING_IDENTITY")
 if [[ "$SIGNING_IDENTITY" != "-" ]]; then
-    SIGN_ARGS+=(--timestamp --options runtime)
+    BASE_SIGN_ARGS+=(--timestamp --options runtime)
 fi
-codesign "${SIGN_ARGS[@]}" "$APP_BUNDLE"
+
+sign_path() {
+    local target="$1"
+    local with_entitlements="${2:-false}"
+    local args=("${BASE_SIGN_ARGS[@]}")
+    if [[ "$with_entitlements" == "true" ]]; then
+        args+=(--entitlements "$ENTITLEMENTS")
+    fi
+    codesign "${args[@]}" "$target"
+}
+
+# Sign nested code first if present.
+if [[ -d "$FRAMEWORKS_DIR" ]]; then
+    while IFS= read -r nested; do
+        sign_path "$nested"
+    done < <(find "$FRAMEWORKS_DIR" -type f \( -name "*.dylib" -o -perm -111 \) -print | sort)
+fi
+
+if [[ -x "$MACOS_DIR/$APP_NAME" ]]; then
+    sign_path "$MACOS_DIR/$APP_NAME"
+fi
+
+# Sign bundle root with entitlements.
+sign_path "$APP_BUNDLE" "true"
 
 if [[ "$NOTARIZE" == "true" ]]; then
     if [[ "$SIGNING_IDENTITY" == "-" ]]; then
@@ -154,10 +178,18 @@ if [[ "$NOTARIZE" == "true" ]]; then
     xcrun stapler staple "$APP_BUNDLE"
 fi
 
+echo "==> Verifying signature integrity"
+codesign --verify --strict --verbose=2 "$APP_BUNDLE"
+if [[ "$SIGNING_IDENTITY" != "-" ]]; then
+    spctl -a -vv --type execute "$APP_BUNDLE"
+else
+    echo "==> Skipping Gatekeeper assessment for ad-hoc signing"
+fi
+
 echo "==> Created: $APP_BUNDLE"
 echo ""
 echo "To set as default PDF app:"
-echo "  1. Open System Settings > Desktop & Dock > Default web browser (for documents)"
-echo "  2. Or right-click any PDF > Get Info > Open with: PDFView > Change All"
+echo "  1. Right-click any PDF > Get Info > Open with: PDFView > Change All"
+echo "  2. Or run: duti -s $BUNDLE_ID com.adobe.pdf all"
 echo ""
 ls -la "$APP_BUNDLE"

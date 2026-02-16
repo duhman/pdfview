@@ -28,111 +28,141 @@ struct PDFContentView: View {
     @State private var activeAlertMessage: String?
 
     var body: some View {
+        content
+            .frame(minWidth: 600, minHeight: 400)
+            .toolbar {
+                toolbarContent
+            }
+            .sheet(isPresented: $showSignatureSetupSheet) {
+                signatureSetupSheet
+            }
+            .alert("Delete Signature?", isPresented: $showDeleteSignatureAlert) {
+                Button("Delete", role: .destructive) {
+                    do {
+                        try signatureStore.deleteProfile()
+                        signingMode = .idle
+                    } catch {
+                        activeAlertMessage = "Could not delete signature: \(error.localizedDescription)"
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The saved signature will be removed from this device.")
+            }
+            .alert("Error", isPresented: errorAlertIsPresented) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(activeAlertMessage ?? "Unknown error")
+            }
+            .focusedSceneValue(\.startSigningAction, startSigning)
+            .focusedSceneValue(\.canStartSigningAction, canStartSigningAction)
+            .focusedSceneValue(\.toggleFreePlacementAction, toggleFreePlacementMode)
+            .focusedSceneValue(\.saveSignedCopyAction, saveSignedCopy)
+            .focusedSceneValue(\.canSaveSignedCopyAction, canSaveSignedCopyAction)
+            .focusedSceneValue(\.saveSignedCopyAsAction, saveSignedCopyAs)
+            .focusedSceneValue(\.undoSignaturePlacementAction, performUndoSignaturePlacement)
+            .focusedSceneValue(\.redoSignaturePlacementAction, performRedoSignaturePlacement)
+            .focusedSceneValue(\.canUndoSignaturePlacementAction, canUndoSignaturePlacement)
+            .focusedSceneValue(\.canRedoSignaturePlacementAction, canRedoSignaturePlacement)
+            .focusedSceneValue(\.editSignatureAction, editSignature)
+            .focusedSceneValue(\.deleteSignatureAction, { showDeleteSignatureAlert = true })
+    }
+
+    private var content: some View {
         VStack(spacing: 0) {
             if signingMode != .idle {
                 signingStatusBanner
             }
 
-            PDFKitView(
-                document: document.pdfDocument,
-                signaturePlacements: document.signaturePlacements,
-                zoomScale: $zoomScale,
-                signingMode: signingMode,
-                signatureProfile: signatureStore.profile,
-                onSignaturePlacement: handleSignaturePlacement,
-                onSignatureFieldAvailability: { hasSignatureFields = $0 }
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(NSColor.windowBackgroundColor))
+            pdfView
         }
-        .frame(minWidth: 600, minHeight: 400)
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Button(action: startSigning) {
-                    Image(systemName: "signature")
-                }
-                .help("Sign PDF")
-                .disabled(!canStartSigning)
+    }
 
-                Button(action: saveSignedCopy) {
-                    Image(systemName: "square.and.arrow.down")
-                }
-                .help("Save Signed Copy")
-                .disabled(!canSaveSignedCopy)
+    private var pdfView: some View {
+        PDFKitView(
+            document: document.pdfDocument,
+            signaturePlacements: document.signaturePlacements,
+            zoomScale: $zoomScale,
+            signingMode: signingMode,
+            signatureProfile: signatureStore.profile,
+            onSignaturePlacement: handleSignaturePlacement,
+            onSignatureFieldAvailability: { hasSignatureFields = $0 }
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(NSColor.windowBackgroundColor))
+    }
 
-                Button(action: zoomOut) {
-                    Image(systemName: "minus.magnifyingglass")
-                }
-                .keyboardShortcut("-", modifiers: .command)
-                .help("Zoom Out")
-
-                Button(action: zoomIn) {
-                    Image(systemName: "plus.magnifyingglass")
-                }
-                .keyboardShortcut("=", modifiers: .command)
-                .keyboardShortcut("+", modifiers: .command)
-                .help("Zoom In")
-
-                Button(action: resetZoom) {
-                    Image(systemName: "arrow.uturn.left.circle")
-                }
-                .keyboardShortcut("0", modifiers: .command)
-                .help("Reset Zoom")
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button(action: startSigning) {
+                Image(systemName: "signature")
             }
+            .help("Sign PDF")
+            .disabled(!canStartSigning)
+            .accessibilityLabel("Start signing")
+            .accessibilityHint("Creates or uses your saved visual signature stamp.")
+
+            Button(action: saveSignedCopy) {
+                Image(systemName: "square.and.arrow.down")
+            }
+            .help("Save Signed Copy")
+            .disabled(!canSaveSignedCopy)
+            .accessibilityLabel("Save signed copy")
+            .accessibilityHint("Exports a flattened visual signature copy.")
+
+            Button(action: zoomOut) {
+                Image(systemName: "minus.magnifyingglass")
+            }
+            .keyboardShortcut("-", modifiers: .command)
+            .help("Zoom Out")
+            .accessibilityLabel("Zoom out")
+
+            Button(action: zoomIn) {
+                Image(systemName: "plus.magnifyingglass")
+            }
+            .keyboardShortcut("=", modifiers: .command)
+            .keyboardShortcut("+", modifiers: .command)
+            .help("Zoom In")
+            .accessibilityLabel("Zoom in")
+
+            Button(action: resetZoom) {
+                Image(systemName: "arrow.uturn.left.circle")
+            }
+            .keyboardShortcut("0", modifiers: .command)
+            .help("Reset Zoom")
+            .accessibilityLabel("Reset zoom")
         }
-        .sheet(isPresented: $showSignatureSetupSheet) {
-            SignatureSetupSheet(
-                existingProfile: isEditingSignature ? signatureStore.profile : nil,
-                onCancel: {
-                    showSignatureSetupSheet = false
-                    shouldResumeSigningAfterSetup = false
-                    signingMode = .idle
-                },
-                onSave: { profile in
-                    do {
-                        try signatureStore.upsert(profile: profile)
-                        showSignatureSetupSheet = false
-                        if shouldResumeSigningAfterSetup {
-                            enterSigningMode()
-                        }
-                        shouldResumeSigningAfterSetup = false
-                    } catch {
-                        activeAlertMessage = "Could not save signature: \(error.localizedDescription)"
-                    }
-                }
-            )
-        }
-        .alert("Delete Signature?", isPresented: $showDeleteSignatureAlert) {
-            Button("Delete", role: .destructive) {
+    }
+
+    private var signatureSetupSheet: some View {
+        SignatureSetupSheet(
+            existingProfile: isEditingSignature ? signatureStore.profile : nil,
+            onCancel: {
+                showSignatureSetupSheet = false
+                shouldResumeSigningAfterSetup = false
+                signingMode = .idle
+            },
+            onSave: { profile in
                 do {
-                    try signatureStore.deleteProfile()
-                    signingMode = .idle
+                    try signatureStore.upsert(profile: profile)
+                    showSignatureSetupSheet = false
+                    if shouldResumeSigningAfterSetup {
+                        enterSigningMode()
+                    }
+                    shouldResumeSigningAfterSetup = false
                 } catch {
-                    activeAlertMessage = "Could not delete signature: \(error.localizedDescription)"
+                    activeAlertMessage = "Could not save signature: \(error.localizedDescription)"
                 }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The saved signature will be removed from this device.")
-        }
-        .alert("Error", isPresented: Binding(
+        )
+    }
+
+    private var errorAlertIsPresented: Binding<Bool> {
+        Binding(
             get: { activeAlertMessage != nil },
             set: { if !$0 { activeAlertMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(activeAlertMessage ?? "Unknown error")
-        }
-        .focusedSceneValue(\.startSigningAction, startSigning)
-        .focusedSceneValue(\.toggleFreePlacementAction, toggleFreePlacementMode)
-        .focusedSceneValue(\.saveSignedCopyAction, saveSignedCopy)
-        .focusedSceneValue(\.saveSignedCopyAsAction, saveSignedCopyAs)
-        .focusedSceneValue(\.undoSignaturePlacementAction, performUndoSignaturePlacement)
-        .focusedSceneValue(\.redoSignaturePlacementAction, performRedoSignaturePlacement)
-        .focusedSceneValue(\.canUndoSignaturePlacementAction, canUndoSignaturePlacement)
-        .focusedSceneValue(\.canRedoSignaturePlacementAction, canRedoSignaturePlacement)
-        .focusedSceneValue(\.editSignatureAction, editSignature)
-        .focusedSceneValue(\.deleteSignatureAction, { showDeleteSignatureAlert = true })
+        )
     }
 
     private var signingStatusBanner: some View {
@@ -152,14 +182,7 @@ struct PDFContentView: View {
     }
 
     private var signingBannerText: String {
-        if hasSignatureFields {
-            if signingMode.allowsFreePlacement {
-                return "Signing mode: click any page location to place your signature."
-            }
-            return "Signing mode: click a signature field, or switch to free placement."
-        }
-
-        return "Signing mode: no signature fields detected. Click anywhere to place your signature."
+        SigningFlowLogic.statusText(mode: signingMode, hasSignatureFields: hasSignatureFields)
     }
 
     private var canStartSigning: Bool {
@@ -201,7 +224,7 @@ struct PDFContentView: View {
     }
 
     private func enterSigningMode() {
-        signingMode = hasSignatureFields ? .fieldPlacement : .freePlacement
+        signingMode = SigningFlowLogic.entryMode(hasSignatureFields: hasSignatureFields)
     }
 
     private func toggleFreePlacementMode() {
@@ -212,11 +235,7 @@ struct PDFContentView: View {
             return
         }
 
-        if signingMode == .fieldPlacement {
-            signingMode = .freePlacement
-        } else {
-            signingMode = hasSignatureFields ? .fieldPlacement : .freePlacement
-        }
+        signingMode = SigningFlowLogic.toggledMode(current: signingMode, hasSignatureFields: hasSignatureFields)
     }
 
     private func handleSignaturePlacement(_ placement: PDFViewerDocument.SignaturePlacement) {
@@ -240,6 +259,14 @@ struct PDFContentView: View {
 
     private func canRedoSignaturePlacement() -> Bool {
         undoManager?.canRedo ?? false
+    }
+
+    private func canStartSigningAction() -> Bool {
+        canStartSigning
+    }
+
+    private func canSaveSignedCopyAction() -> Bool {
+        canSaveSignedCopy
     }
 
     private func syncUndoController() {
