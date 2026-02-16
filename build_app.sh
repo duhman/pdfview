@@ -100,7 +100,7 @@ cat > "$CONTENTS/Info.plist" << EOF
             <key>CFBundleTypeName</key>
             <string>PDF Document</string>
             <key>CFBundleTypeRole</key>
-            <string>Viewer</string>
+            <string>Editor</string>
             <key>LSHandlerRank</key>
             <string>Default</string>
             <key>LSItemContentTypes</key>
@@ -122,7 +122,7 @@ cat > "$ENTITLEMENTS" << EOF
 <dict>
     <key>com.apple.security.app-sandbox</key>
     <true/>
-    <key>com.apple.security.files.user-selected.read-only</key>
+    <key>com.apple.security.files.user-selected.read-write</key>
     <true/>
 </dict>
 </plist>
