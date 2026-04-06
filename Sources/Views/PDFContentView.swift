@@ -145,7 +145,7 @@ struct PDFContentView: View {
             },
             onSave: { profile in
                 do {
-                    try signatureStore.upsert(profile: profile)
+                    try signatureStore.saveProfile(profile)
                     showSignatureSetupSheet = false
                     if shouldResumeSigningAfterSetup {
                         enterSigningMode()

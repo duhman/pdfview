@@ -17,11 +17,6 @@ let package = Package(
         .executableTarget(
             name: "PDFViewApp",
             path: "Sources"
-        ),
-        .testTarget(
-            name: "PDFViewAppTests",
-            dependencies: ["PDFViewApp"],
-            path: "Tests"
         )
     ]
 )

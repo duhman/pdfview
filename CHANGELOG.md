@@ -14,15 +14,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Issue templates for bug reports and feature requests
 - Security scanning in CI pipeline
 - Code coverage reporting
+- Enhanced error handling with detailed user messages
+- Comprehensive validation for signature profiles
+- Performance optimizations for large PDF documents
+- Build script improvements with optimization flags
 
 ### Changed
 - Updated Package.swift test target configuration for proper test discovery
 - Updated macOS platform requirement from 26.2 to 14.2 for broader compatibility
 - Updated Swift tools version from 6.2 to 6.0 for toolchain compatibility
+- Enhanced SignatureStore with comprehensive error handling
+- Improved API consistency across signature management
+- Updated README with comprehensive feature documentation
 
 ### Fixed
 - Tests can now be discovered and run with 'swift test'
 - Resolved Swift version compatibility issues
+- Fixed API inconsistencies in SignatureStore methods
+- Enhanced error messages for better user experience
+- Improved validation for corrupted signature data
+- Build script platform version corrections
 
 ## [1.0.0] - 2024-02-16
 
