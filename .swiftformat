@@ -1,0 +1,55 @@
+# SwiftFormat Configuration for PDFView
+
+# File options
+--exclude .build,build,Package.swift
+
+# Format options
+--allman false
+--binarygrouping 4,8
+--closingparen balanced
+--commas always
+--decimalgrouping 3,6
+--elseposition same-line
+--empty void
+--exponentcase lowercase
+--exponentgrouping disabled
+--fractiongrouping disabled
+--header strip
+--hexgrouping 4,8
+--hexliteralcase uppercase
+--ifdef no-indent
+--importgrouping testable-bottom
+--indent 4
+--indentcase false
+--linebreaks lf
+--maxwidth 120
+--octalgrouping 4,8
+--operatorfunc spaced
+--patternlet hoist
+--ranges spaced
+--self remove
+--semicolons never
+--stripunusedargs always
+--tabwidth unspecified
+--trailingclosures
+--trimwhitespace always
+--wraparguments preserve
+--wrapcollections preserve
+--wrapparameters preserve
+
+# Rules
+--enable isEmpty
+--enable sortedImports
+--enable strongifiedSelf
+--enable trailingCommas
+--enable typeSugar
+--enable unusedArguments
+--enable void
+--enable wrap
+--enable wrapMultilineStatementBraces
+
+# Disabled rules
+--disable andOperator
+--disable acronyms
+--disable blankLinesAtEndOfScope
+--disable blankLinesAtStartOfScope

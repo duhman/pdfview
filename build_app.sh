@@ -7,10 +7,10 @@ CONFIG="${1:-release}"
 # Configuration
 APP_NAME="PDFView"
 BUNDLE_ID="com.bigmac.pdfview"
-MACOS_MIN_VERSION="26.2"
-ARCHES="$(uname -m)"
-VERSION="1.0.0"
-BUILD_NUMBER="1"
+MACOS_MIN_VERSION="14.2"
+ARCHES="${ARCHES:-$(uname -m)}"
+VERSION="${VERSION:-1.0.0}"
+BUILD_NUMBER="${BUILD_NUMBER:-1}"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:--}"
 NOTARIZE="${NOTARIZE:-false}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-}"
@@ -23,10 +23,15 @@ FRAMEWORKS_DIR="$CONTENTS/Frameworks"
 
 echo "==> Building $APP_NAME ($CONFIG) for: $ARCHES"
 
-# Build for each architecture
+# Build for each architecture with optimization
+SWIFT_BUILD_FLAGS=""
+if [[ "$CONFIG" == "release" ]]; then
+    SWIFT_BUILD_FLAGS="-Xswiftc -O -Xswiftc -whole-module-optimization"
+fi
+
 for arch in $ARCHES; do
-    echo "==> swift build --arch $arch -c $CONFIG"
-    swift build --arch "$arch" -c "$CONFIG"
+    echo "==> swift build --arch $arch -c $CONFIG $SWIFT_BUILD_FLAGS"
+    swift build --arch "$arch" -c "$CONFIG" $SWIFT_BUILD_FLAGS
 done
 
 # Clean and create bundle structure
