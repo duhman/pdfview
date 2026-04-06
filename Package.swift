@@ -1,11 +1,11 @@
-// swift-tools-version:6.2
+// swift-tools-version:6.0
 
 import PackageDescription
 
 let package = Package(
     name: "PDFView",
     platforms: [
-        .macOS("26.2")
+        .macOS("14.2")
     ],
     products: [
         .executable(
@@ -17,6 +17,11 @@ let package = Package(
         .executableTarget(
             name: "PDFViewApp",
             path: "Sources"
+        ),
+        .testTarget(
+            name: "PDFViewAppTests",
+            dependencies: ["PDFViewApp"],
+            path: "Tests"
         )
     ]
 )
