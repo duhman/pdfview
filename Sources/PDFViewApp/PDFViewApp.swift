@@ -13,6 +13,25 @@ struct PDFViewApp: App {
         .windowStyle(.titleBar)
         .commands {
             SigningCommandMenu()
+            HelpCommands()
+        }
+
+        Window("About PDFView", id: "about") {
+            AboutView()
+        }
+        .windowResizability(.contentSize)
+        .windowStyle(.titleBar)
+    }
+}
+
+private struct HelpCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .help) {
+            Button("About PDFView") {
+                openWindow(id: "about")
+            }
         }
     }
 }
