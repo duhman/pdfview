@@ -208,5 +208,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Made with ❤️ for the macOS community**
-
-For support, feature requests, or contributions, please visit our [GitHub repository](https://github.com/your-repo/pdfview).
