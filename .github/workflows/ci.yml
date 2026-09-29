@@ -84,7 +84,7 @@ jobs:
         run: .tools/swiftformat/swiftformat Sources Tests
 
       - name: Check SwiftFormat
-        run: .tools/swiftformat/swiftformat --lint Sources Tests
+        run: .tools/swiftformat/swiftformat Sources Tests --lint
 
   docs:
     name: Documentation sanity
