@@ -71,7 +71,7 @@ Main SwiftUI content view coordinating the entire user interface.
 - `@Environment` for system services (undo manager)
 
 #### `PDFKitView.swift`
-UIViewRepresentable bridge connecting SwiftUI to PDFKit.
+`NSViewRepresentable` bridge connecting SwiftUI to PDFKit.
 
 ```swift
 struct PDFKitView: NSViewRepresentable {
@@ -101,23 +101,12 @@ Modal sheet for signature profile creation and editing.
 ### 3. Business Logic Layer
 
 #### `SigningFlowLogic.swift`
-Core signing workflow orchestration.
+Pure functions for signing mode transitions and user-facing status text. UI state (`signingMode`, `hasSignatureFields`) lives in `PDFContentView`.
 
-```swift
-class SigningFlowLogic: ObservableObject {
-    @Published var signingMode: SigningMode = .idle
-    @Published var hasSignatureFields = false
-    
-    func startSigning() { /* ... */ }
-    func placeSignature(at point: CGPoint) { /* ... */ }
-}
-```
-
-**State Machine:**
-- `idle`: Normal viewing mode
-- `selectingProfile`: Choosing signature profile
-- `placingSignatures`: Active signing mode
-- `reviewingPlacements`: Final review before export
+**Signing modes (`SigningMode`):**
+- `idle`: Normal viewing
+- `fieldPlacement`: Prefer taps on PDF signature widget annotations
+- `freePlacement`: Allow taps anywhere on the page
 
 #### `SignatureStore.swift`
 Signature profile persistence and management.
@@ -147,9 +136,8 @@ struct SignatureProfile: Codable {
 ```swift
 enum SigningMode {
     case idle
-    case selectingProfile
-    case placingSignatures(profile: SignatureProfile)
-    case reviewingPlacements
+    case fieldPlacement
+    case freePlacement
 }
 ```
 
@@ -305,37 +293,30 @@ let clampedRect = CGRect(
 
 ## 🧪 Testing Strategy
 
-### Unit Tests
+### Automated tests (`Tests/PDFViewAppTests`)
 
-Focus on business logic and data models:
-- Document signature placement/removal
-- Export functionality
-- Signature store operations
-- Error handling paths
+Swift Testing targets that run on macOS CI:
 
-### Integration Tests
+- `PDFViewerDocument` placement and export helpers
+- `SignatureStore` persistence
+- `SigningFlowLogic` mode and copy
 
-Test component interactions:
-- PDF loading and validation
-- Signature workflow end-to-end
-- File system operations
+### Manual testing (required for releases)
 
-### Manual Testing
-
-UI and user experience validation:
-- Signature placement accuracy
-- Export quality verification
-- Performance with large PDFs
-- Accessibility compliance
+- Open PDFs via DocumentGroup and Finder association
+- Signature draw/type/import and placement accuracy
+- Save signed copy and re-open in Preview/Acrobat
+- Sandbox behavior for import/export paths
+- Accessibility (VoiceOver labels on toolbar)
 
 ## 🚀 Build and Distribution
 
 ### Build Process
 
-1. **Swift Package Manager**: Dependency management and building
-2. **build_app.sh**: App bundle creation with proper Info.plist
-3. **Code Signing**: Developer ID or ad-hoc signing
-4. **Notarization**: Apple notary service for distribution
+1. **Swift Package Manager**: builds the `PDFView` executable target
+2. **build_app.sh**: copies `Resources/Info.plist`, applies version metadata, signs with `Resources/PDFView.entitlements`
+3. **Code signing**: Developer ID or ad-hoc (`SIGNING_IDENTITY=-`)
+4. **Notarization**: optional via `notarytool` when distributing outside the Mac App Store
 
 ### Distribution Channels
 

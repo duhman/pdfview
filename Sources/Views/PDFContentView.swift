@@ -305,6 +305,13 @@ struct PDFContentView: View {
     }
 
     private func writeSignedCopy(to url: URL) {
+        let didAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
         do {
             try document.writeSignedCopy(to: url)
             lastSignedOutputURL = url
@@ -330,8 +337,12 @@ private final class SignaturePlacementUndoController: ObservableObject {
         document.wrappedValue.addSignaturePlacement(placement)
 
         guard registerUndo, let undoManager else { return }
+        let placementID = placement.id
         undoManager.registerUndo(withTarget: self) { target in
-            target.removePlacement(id: placement.id, registerUndo: true)
+            // UndoManager invokes handlers on the main thread; assumeIsolated satisfies Swift 6 MainActor checking.
+            MainActor.assumeIsolated {
+                target.removePlacement(id: placementID, registerUndo: true)
+            }
         }
         undoManager.setActionName("Add Signature")
     }
@@ -345,7 +356,9 @@ private final class SignaturePlacementUndoController: ObservableObject {
 
         guard registerUndo, let undoManager else { return }
         undoManager.registerUndo(withTarget: self) { target in
-            target.addPlacement(removedPlacement, registerUndo: true)
+            MainActor.assumeIsolated {
+                target.addPlacement(removedPlacement, registerUndo: true)
+            }
         }
         undoManager.setActionName("Remove Signature")
     }

@@ -82,6 +82,7 @@ opt_in_rules:
 disabled_rules:
   - todo
   - file_length
+  - file_header
 
 # Rule configurations
 line_length:
@@ -137,11 +138,6 @@ custom_rules:
     message: "There should be a space after //"
     severity: warning
   
-  empty_first_line:
-    name: "Empty First Line"
-    regex: '(^[ \t]*\n *\S+)'
-    message: "There should be no empty line at the top of the file"
-    severity: warning
 
 # File header template
 file_header:

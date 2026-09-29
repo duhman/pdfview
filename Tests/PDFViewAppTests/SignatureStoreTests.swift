@@ -18,11 +18,18 @@ import Foundation
         sourceKind: .draw
     )
 
-    try store.upsert(profile: profile)
+    try store.saveProfile(profile)
     #expect(store.profile?.fullName == "Test User")
 
     let reloadedStore = SignatureStore(storageURL: storageURL)
-    #expect(reloadedStore.profile == profile)
+    let reloaded = try #require(reloadedStore.profile)
+    #expect(reloaded.id == profile.id)
+    #expect(reloaded.fullName == profile.fullName)
+    #expect(reloaded.signaturePNGBase64 == profile.signaturePNGBase64)
+    #expect(reloaded.sourceKind == profile.sourceKind)
+    // ISO8601 JSON encoding may drop sub-second precision in createdAt.
+    let createdAtDelta = abs(reloaded.createdAt.timeIntervalSince1970 - profile.createdAt.timeIntervalSince1970)
+    #expect(createdAtDelta < 1.0)
 }
 
 @MainActor
@@ -41,7 +48,7 @@ import Foundation
         sourceKind: .type
     )
 
-    try store.upsert(profile: profile)
+    try store.saveProfile(profile)
     #expect(store.profile != nil)
 
     try store.deleteProfile()

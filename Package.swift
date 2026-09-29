@@ -5,18 +5,29 @@ import PackageDescription
 let package = Package(
     name: "PDFView",
     platforms: [
-        .macOS("14.2")
+        .macOS("14.2"),
     ],
     products: [
         .executable(
             name: "PDFView",
             targets: ["PDFViewApp"]
-        )
+        ),
     ],
     targets: [
         .executableTarget(
             name: "PDFViewApp",
-            path: "Sources"
-        )
+            path: "Sources",
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency"),
+            ]
+        ),
+        .testTarget(
+            name: "PDFViewAppTests",
+            dependencies: ["PDFViewApp"],
+            path: "Tests/PDFViewAppTests",
+            swiftSettings: [
+                .enableUpcomingFeature("StrictConcurrency"),
+            ]
+        ),
     ]
 )

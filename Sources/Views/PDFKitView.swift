@@ -4,6 +4,7 @@ import AppKit
 
 /// NSViewRepresentable wrapper for PDFKit's PDFView
 /// Enables native PDF rendering within SwiftUI
+@MainActor
 struct PDFKitView: NSViewRepresentable {
 
     /// The PDF document to display

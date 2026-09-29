@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// About dialog displaying app version, build date, and copyright information
