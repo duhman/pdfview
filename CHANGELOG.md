@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ARCHITECTURE.md aligned with current signing modes and test layout
 
 ### Fixed
+- UndoManager registration uses `MainActor.assumeIsolated` for Swift 6.1 CI
+- Signature store reload test avoids brittle `createdAt` equality after JSON round-trip
+- CI installs SwiftLint/SwiftFormat into `.tools/` to avoid unzip LICENSE prompts
 - Unit tests call `SignatureStore.saveProfile` (was stale `upsert` API)
 - `AboutView` imports AppKit for `NSApp` / `NSImage`
 - Security-scoped access when importing signature images and writing signed copies

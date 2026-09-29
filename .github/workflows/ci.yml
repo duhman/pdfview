@@ -80,8 +80,11 @@ jobs:
           curl -fsSL https://github.com/nicklockwood/SwiftFormat/releases/latest/download/swiftformat.zip -o .tools/swiftformat.zip
           unzip -oq .tools/swiftformat.zip -d .tools/swiftformat
 
+      - name: Apply SwiftFormat
+        run: .tools/swiftformat/swiftformat Sources Tests
+
       - name: Check SwiftFormat
-        run: .tools/swiftformat/swiftformat --lint .
+        run: .tools/swiftformat/swiftformat --lint Sources Tests
 
   docs:
     name: Documentation sanity
