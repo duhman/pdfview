@@ -67,21 +67,21 @@ jobs:
 
       - name: Install SwiftLint
         run: |
-          curl -fsSL https://github.com/realm/SwiftLint/releases/latest/download/portable_swiftlint.zip -o swiftlint.zip
-          unzip -q swiftlint.zip
-          chmod +x swiftlint
+          mkdir -p .tools/swiftlint
+          curl -fsSL https://github.com/realm/SwiftLint/releases/latest/download/portable_swiftlint.zip -o .tools/swiftlint.zip
+          unzip -oq .tools/swiftlint.zip -d .tools/swiftlint
 
       - name: Run SwiftLint
-        run: ./swiftlint lint --reporter github-actions-logging
+        run: .tools/swiftlint/swiftlint lint --reporter github-actions-logging
 
       - name: Install SwiftFormat
         run: |
-          curl -fsSL https://github.com/nicklockwood/SwiftFormat/releases/latest/download/swiftformat.zip -o swiftformat.zip
-          unzip -q swiftformat.zip
-          chmod +x swiftformat
+          mkdir -p .tools/swiftformat
+          curl -fsSL https://github.com/nicklockwood/SwiftFormat/releases/latest/download/swiftformat.zip -o .tools/swiftformat.zip
+          unzip -oq .tools/swiftformat.zip -d .tools/swiftformat
 
       - name: Check SwiftFormat
-        run: ./swiftformat --lint .
+        run: .tools/swiftformat/swiftformat --lint .
 
   docs:
     name: Documentation sanity
