@@ -20,18 +20,25 @@ CONTENTS="$APP_BUNDLE/Contents"
 MACOS_DIR="$CONTENTS/MacOS"
 RESOURCES_DIR="$CONTENTS/Resources"
 FRAMEWORKS_DIR="$CONTENTS/Frameworks"
+ENTITLEMENTS="${ENTITLEMENTS:-Resources/PDFView.entitlements}"
+INFO_PLIST_SOURCE="${INFO_PLIST_SOURCE:-Resources/Info.plist}"
 
 echo "==> Building $APP_NAME ($CONFIG) for: $ARCHES"
 
+if [[ ! -f "$ENTITLEMENTS" ]]; then
+    echo "ERROR: Missing entitlements at $ENTITLEMENTS"
+    exit 1
+fi
+
 # Build for each architecture with optimization
-SWIFT_BUILD_FLAGS=""
+SWIFT_BUILD_FLAGS=()
 if [[ "$CONFIG" == "release" ]]; then
-    SWIFT_BUILD_FLAGS="-Xswiftc -O -Xswiftc -whole-module-optimization"
+    SWIFT_BUILD_FLAGS=(-Xswiftc -O -Xswiftc -whole-module-optimization)
 fi
 
 for arch in $ARCHES; do
-    echo "==> swift build --arch $arch -c $CONFIG $SWIFT_BUILD_FLAGS"
-    swift build --arch "$arch" -c "$CONFIG" $SWIFT_BUILD_FLAGS
+    echo "==> swift build --arch $arch -c $CONFIG ${SWIFT_BUILD_FLAGS[*]:-}"
+    swift build --arch "$arch" -c "$CONFIG" "${SWIFT_BUILD_FLAGS[@]}"
 done
 
 # Clean and create bundle structure
@@ -39,7 +46,7 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
 
 # Find and copy binary
-ARCH_ARRAY=($ARCHES)
+read -r -a ARCH_ARRAY <<< "$ARCHES"
 if [[ ${#ARCH_ARRAY[@]} -eq 1 ]]; then
     BINARY_PATH=".build/${ARCH_ARRAY[0]}-apple-macosx/$CONFIG/$APP_NAME"
     cp "$BINARY_PATH" "$MACOS_DIR/$APP_NAME"
@@ -51,6 +58,8 @@ else
     echo "==> Creating universal binary"
     lipo -create "${LIPO_INPUTS[@]}" -output "$MACOS_DIR/$APP_NAME"
 fi
+
+chmod +x "$MACOS_DIR/$APP_NAME"
 
 # Verify architecture
 echo "==> Binary architectures:"
@@ -65,73 +74,33 @@ fi
 GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# Generate Info.plist with PDF file association
-cat > "$CONTENTS/Info.plist" << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleName</key>
-    <string>$APP_NAME</string>
-    <key>CFBundleDisplayName</key>
-    <string>$APP_NAME</string>
-    <key>CFBundleIdentifier</key>
-    <string>$BUNDLE_ID</string>
-    <key>CFBundleVersion</key>
-    <string>$BUILD_NUMBER</string>
-    <key>CFBundleShortVersionString</key>
-    <string>$VERSION</string>
-    <key>CFBundleExecutable</key>
-    <string>$APP_NAME</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>$MACOS_MIN_VERSION</string>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSPrincipalClass</key>
-    <string>NSApplication</string>
-    <key>BuildMachineOSBuild</key>
-    <string>$(sw_vers -buildVersion)</string>
-    <key>GitCommit</key>
-    <string>$GIT_COMMIT</string>
-    <key>BuildDate</key>
-    <string>$BUILD_DATE</string>
-    <key>CFBundleDocumentTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleTypeName</key>
-            <string>PDF Document</string>
-            <key>CFBundleTypeRole</key>
-            <string>Editor</string>
-            <key>LSHandlerRank</key>
-            <string>Default</string>
-            <key>LSItemContentTypes</key>
-            <array>
-                <string>com.adobe.pdf</string>
-            </array>
-        </dict>
-    </array>
-</dict>
-</plist>
-EOF
+# Info.plist: start from repo template when present, then patch build metadata.
+if [[ -f "$INFO_PLIST_SOURCE" ]]; then
+    cp "$INFO_PLIST_SOURCE" "$CONTENTS/Info.plist"
+else
+    echo "ERROR: Missing Info.plist template at $INFO_PLIST_SOURCE"
+    exit 1
+fi
 
-# Create default entitlements for distribution
-ENTITLEMENTS=$(mktemp)
-cat > "$ENTITLEMENTS" << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>com.apple.security.app-sandbox</key>
-    <true/>
-    <key>com.apple.security.files.user-selected.read-write</key>
-    <true/>
-</dict>
-</plist>
-EOF
+/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$CONTENTS/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $APP_NAME" "$CONTENTS/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$CONTENTS/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$CONTENTS/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$CONTENTS/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$CONTENTS/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MACOS_MIN_VERSION" "$CONTENTS/Info.plist"
+
+if /usr/libexec/PlistBuddy -c "Print :BuildDate" "$CONTENTS/Info.plist" >/dev/null 2>&1; then
+    /usr/libexec/PlistBuddy -c "Set :BuildDate $BUILD_DATE" "$CONTENTS/Info.plist"
+else
+    /usr/libexec/PlistBuddy -c "Add :BuildDate string $BUILD_DATE" "$CONTENTS/Info.plist"
+fi
+
+if /usr/libexec/PlistBuddy -c "Print :GitCommit" "$CONTENTS/Info.plist" >/dev/null 2>&1; then
+    /usr/libexec/PlistBuddy -c "Set :GitCommit $GIT_COMMIT" "$CONTENTS/Info.plist"
+else
+    /usr/libexec/PlistBuddy -c "Add :GitCommit string $GIT_COMMIT" "$CONTENTS/Info.plist"
+fi
 
 # Clear extended attributes
 xattr -cr "$APP_BUNDLE"
@@ -161,11 +130,11 @@ if [[ -d "$FRAMEWORKS_DIR" ]]; then
     done < <(find "$FRAMEWORKS_DIR" -type f \( -name "*.dylib" -o -perm -111 \) -print | sort)
 fi
 
+# Sandbox entitlements belong on the main executable.
 if [[ -x "$MACOS_DIR/$APP_NAME" ]]; then
-    sign_path "$MACOS_DIR/$APP_NAME"
+    sign_path "$MACOS_DIR/$APP_NAME" "true"
 fi
 
-# Sign bundle root with entitlements.
 sign_path "$APP_BUNDLE" "true"
 
 if [[ "$NOTARIZE" == "true" ]]; then

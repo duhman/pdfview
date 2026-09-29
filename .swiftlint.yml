@@ -82,6 +82,7 @@ opt_in_rules:
 disabled_rules:
   - todo
   - file_length
+  - file_header
 
 # Rule configurations
 line_length:

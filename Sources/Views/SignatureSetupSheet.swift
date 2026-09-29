@@ -128,6 +128,12 @@ struct SignatureSetupSheet: View {
                             switch result {
                             case .success(let urls):
                                 guard let first = urls.first else { return }
+                                let didStartAccess = first.startAccessingSecurityScopedResource()
+                                defer {
+                                    if didStartAccess {
+                                        first.stopAccessingSecurityScopedResource()
+                                    }
+                                }
                                 if let image = NSImage(contentsOf: first) {
                                     importedImage = image
                                 }

@@ -18,7 +18,7 @@ import Foundation
         sourceKind: .draw
     )
 
-    try store.upsert(profile: profile)
+    try store.saveProfile(profile)
     #expect(store.profile?.fullName == "Test User")
 
     let reloadedStore = SignatureStore(storageURL: storageURL)
@@ -41,7 +41,7 @@ import Foundation
         sourceKind: .type
     )
 
-    try store.upsert(profile: profile)
+    try store.saveProfile(profile)
     #expect(store.profile != nil)
 
     try store.deleteProfile()

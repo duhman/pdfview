@@ -305,6 +305,13 @@ struct PDFContentView: View {
     }
 
     private func writeSignedCopy(to url: URL) {
+        let didAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
         do {
             try document.writeSignedCopy(to: url)
             lastSignedOutputURL = url

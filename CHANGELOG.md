@@ -8,32 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Comprehensive CI/CD pipeline with GitHub Actions
-- Code quality tools (SwiftLint, SwiftFormat)
-- Developer documentation (CONTRIBUTING.md, ARCHITECTURE.md)
-- Issue templates for bug reports and feature requests
-- Security scanning in CI pipeline
-- Code coverage reporting
-- Enhanced error handling with detailed user messages
-- Comprehensive validation for signature profiles
-- Performance optimizations for large PDF documents
-- Build script improvements with optimization flags
+- Restored `PDFViewAppTests` Swift Testing target in `Package.swift`
+- Committed `Resources/PDFView.entitlements` sandbox template
+- `.github/SECURITY.md` vulnerability reporting policy
 
 ### Changed
-- Updated Package.swift test target configuration for proper test discovery
-- Updated macOS platform requirement from 26.2 to 14.2 for broader compatibility
-- Updated Swift tools version from 6.2 to 6.0 for toolchain compatibility
-- Enhanced SignatureStore with comprehensive error handling
-- Improved API consistency across signature management
-- Updated README with comprehensive feature documentation
+- README and CONTRIBUTING now use the real repository URL and accurate CI/test claims
+- CI uses Xcode on `macos-15` (no overlapping Swift toolchain install)
+- `build_app.sh` uses `Resources/Info.plist`, patches metadata, signs the executable with entitlements
+- ARCHITECTURE.md aligned with current signing modes and test layout
 
 ### Fixed
-- Tests can now be discovered and run with 'swift test'
-- Resolved Swift version compatibility issues
-- Fixed API inconsistencies in SignatureStore methods
-- Enhanced error messages for better user experience
-- Improved validation for corrupted signature data
-- Build script platform version corrections
+- Unit tests call `SignatureStore.saveProfile` (was stale `upsert` API)
+- `AboutView` imports AppKit for `NSApp` / `NSImage`
+- Security-scoped access when importing signature images and writing signed copies
+- `Resources/Info.plist` minimum macOS version set to 14.2 (was 26.2)
+- SwiftLint `file_header` rule disabled (sources use doc comments, not banner headers)
 
 ## [1.0.0] - 2024-02-16
 

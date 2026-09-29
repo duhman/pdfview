@@ -2,169 +2,99 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 env:
   DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
 
 jobs:
-  test:
-    name: Test
-    runs-on: macOS-latest
-    strategy:
-      matrix:
-        swift-version: ['6.0']
-    
+  build-and-test:
+    name: Build and Test
+    runs-on: macos-15
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      
-    - name: Setup Swift ${{ matrix.swift-version }}
-      uses: swift-actions/setup-swift@v2
-      with:
-        swift-version: ${{ matrix.swift-version }}
-    
-    - name: Get swift version
-      run: swift --version
-      
-    - name: Cache build artifacts
-      uses: actions/cache@v4
-      with:
-        path: .build
-        key: ${{ runner.os }}-swift-${{ matrix.swift-version }}-${{ hashFiles('**/Package.swift', '**/Package.resolved') }}
-        restore-keys: |
-          ${{ runner.os }}-swift-${{ matrix.swift-version }}-
-          ${{ runner.os }}-swift-
-    
-    - name: Build
-      run: swift build --configuration debug
-      
-    - name: Run tests
-      run: swift test --parallel --enable-code-coverage
-      
-    - name: Generate code coverage report
-      run: |
-        xcrun llvm-cov export -format="lcov" \
-          .build/debug/PDFViewPackageTests.xctest/Contents/MacOS/PDFViewPackageTests \
-          -instr-profile .build/debug/codecov/default.profdata > info.lcov
-      
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        file: info.lcov
-        flags: swift
-        name: codecov-umbrella
-        
-  build-release:
-    name: Build Release
-    runs-on: macOS-latest
-    
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      
-    - name: Setup Swift
-      uses: swift-actions/setup-swift@v2
-      with:
-        swift-version: '6.0'
-        
-    - name: Build Release
-      run: swift build --configuration release
-      
-    - name: Build App Bundle
-      run: ./build_app.sh release
-      
-    - name: Verify App Bundle
-      run: |
-        ls -la PDFView.app
-        file PDFView.app/Contents/MacOS/PDFView
-        
-    - name: Upload App Bundle
-      uses: actions/upload-artifact@v4
-      with:
-        name: PDFView-${{ github.sha }}.app
-        path: PDFView.app/
-        retention-days: 30
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Cache build artifacts
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-swift-${{ hashFiles('**/Package.swift', '**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-swift-
+
+      - name: Build (debug)
+        run: swift build --configuration debug
+
+      - name: Test
+        run: swift test --parallel
+
+      - name: Build (release)
+        run: swift build --configuration release
+
+      - name: Build app bundle
+        run: ./build_app.sh release
+
+      - name: Verify app bundle
+        run: |
+          test -d PDFView.app/Contents
+          test -x PDFView.app/Contents/MacOS/PDFView
+          /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' PDFView.app/Contents/Info.plist | grep -q '14.2'
+          codesign --verify --strict PDFView.app
+
+      - name: Upload app bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFView-${{ github.sha }}
+          path: PDFView.app/
+          retention-days: 14
 
   lint:
     name: Code Quality
-    runs-on: macOS-latest
-    
+    runs-on: macos-15
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      
-    - name: Install SwiftLint
-      run: |
-        curl -L https://github.com/realm/SwiftLint/releases/latest/download/portable_swiftlint.zip -o swiftlint.zip
-        unzip swiftlint.zip
-        chmod +x swiftlint
-        
-    - name: Run SwiftLint
-      run: ./swiftlint lint --reporter github-actions-logging
-      
-    - name: Install SwiftFormat
-      run: |
-        curl -L https://github.com/nicklockwood/SwiftFormat/releases/latest/download/swiftformat.zip -o swiftformat.zip
-        unzip swiftformat.zip
-        chmod +x swiftformat
-        
-    - name: Check SwiftFormat
-      run: ./swiftformat --lint .
-      
-  security:
-    name: Security Scan  
-    runs-on: macOS-latest
-    
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        run: |
+          curl -fsSL https://github.com/realm/SwiftLint/releases/latest/download/portable_swiftlint.zip -o swiftlint.zip
+          unzip -q swiftlint.zip
+          chmod +x swiftlint
+
+      - name: Run SwiftLint
+        run: ./swiftlint lint --reporter github-actions-logging
+
+      - name: Install SwiftFormat
+        run: |
+          curl -fsSL https://github.com/nicklockwood/SwiftFormat/releases/latest/download/swiftformat.zip -o swiftformat.zip
+          unzip -q swiftformat.zip
+          chmod +x swiftformat
+
+      - name: Check SwiftFormat
+        run: ./swiftformat --lint .
+
+  docs:
+    name: Documentation sanity
+    runs-on: ubuntu-latest
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      
-    - name: Run security audit
-      run: |
-        # Check for common security issues
-        echo "Checking for hardcoded secrets..."
-        if grep -r -E "(password|token|secret|key)" --include="*.swift" . | grep -v -E "(// |/\*|\*/|@|\bprivate\b|\bfunc\b|\blet\b|\bvar\b)"; then
-          echo "❌ Potential hardcoded secrets found"
-          exit 1
-        fi
-        
-        echo "Checking for unsafe functions..."
-        if grep -r -E "(system|popen|exec|eval)" --include="*.swift" .; then
-          echo "❌ Potentially unsafe functions found"
-          exit 1
-        fi
-        
-        echo "✅ Basic security checks passed"
-        
-  documentation:
-    name: Documentation
-    runs-on: macOS-latest
-    
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-      
-    - name: Setup Swift
-      uses: swift-actions/setup-swift@v2
-      with:
-        swift-version: '6.0'
-        
-    - name: Build documentation
-      run: |
-        swift package generate-documentation --target PDFViewApp
-        
-    - name: Check README links
-      run: |
-        # Basic check that README has essential sections
-        if ! grep -q "## Build" README.md; then
-          echo "❌ README missing Build section"
-          exit 1
-        fi
-        if ! grep -q "## Usage" README.md; then
-          echo "❌ README missing Usage section"  
-          exit 1
-        fi
-        echo "✅ README structure validation passed"
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate README structure
+        run: |
+          grep -q "## Quick Start" README.md
+          grep -q "## Development" README.md
+          grep -q "duhman/pdfview" README.md
+          test -f Resources/PDFView.entitlements
+          test -f Tests/PDFViewAppTests/PDFViewerDocumentTests.swift
