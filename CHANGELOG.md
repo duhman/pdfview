@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ARCHITECTURE.md aligned with current signing modes and test layout
 
 ### Fixed
+- `build_app.sh` locates the SwiftPM binary via `--show-bin-path` with Products and triple-path fallbacks
 - UndoManager registration uses `MainActor.assumeIsolated` for Swift 6.1 CI
 - Signature store reload test avoids brittle `createdAt` equality after JSON round-trip
 - CI installs SwiftLint/SwiftFormat into `.tools/` to avoid unzip LICENSE prompts

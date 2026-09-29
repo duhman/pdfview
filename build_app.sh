@@ -23,6 +23,55 @@ FRAMEWORKS_DIR="$CONTENTS/Frameworks"
 ENTITLEMENTS="${ENTITLEMENTS:-Resources/PDFView.entitlements}"
 INFO_PLIST_SOURCE="${INFO_PLIST_SOURCE:-Resources/Info.plist}"
 
+products_configuration_name() {
+    case "${1,,}" in
+        release) echo "Release" ;;
+        debug) echo "Debug" ;;
+        *)
+            echo "ERROR: Unsupported build configuration: $1" >&2
+            exit 1
+            ;;
+    esac
+}
+
+# Resolve the built executable for a given architecture (SwiftPM layout varies by toolchain).
+resolve_binary_path() {
+    local arch="$1"
+    local config="$2"
+    local bin_dir=""
+    local candidate=""
+
+    if bin_dir="$(swift build --show-bin-path -c "$config" --arch "$arch" 2>/dev/null)"; then
+        if [[ -f "$bin_dir/$APP_NAME" ]]; then
+            echo "$bin_dir/$APP_NAME"
+            return 0
+        fi
+        if [[ -f "$bin_dir" ]]; then
+            echo "$bin_dir"
+            return 0
+        fi
+    fi
+
+    local products_config
+    products_config="$(products_configuration_name "$config")"
+
+    local fallback_paths=(
+        ".build/out/Products/$products_config/$APP_NAME"
+        ".build/${arch}-apple-macosx/${config}/$APP_NAME"
+    )
+
+    for candidate in "${fallback_paths[@]}"; do
+        if [[ -f "$candidate" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    echo "ERROR: Could not find $APP_NAME binary for arch=$arch config=$config" >&2
+    echo "       Checked: swift build --show-bin-path and ${fallback_paths[*]}" >&2
+    return 1
+}
+
 echo "==> Building $APP_NAME ($CONFIG) for: $ARCHES"
 
 if [[ ! -f "$ENTITLEMENTS" ]]; then
@@ -48,12 +97,15 @@ mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
 # Find and copy binary
 read -r -a ARCH_ARRAY <<< "$ARCHES"
 if [[ ${#ARCH_ARRAY[@]} -eq 1 ]]; then
-    BINARY_PATH=".build/${ARCH_ARRAY[0]}-apple-macosx/$CONFIG/$APP_NAME"
+    BINARY_PATH="$(resolve_binary_path "${ARCH_ARRAY[0]}" "$CONFIG")"
+    echo "==> Using binary: $BINARY_PATH"
     cp "$BINARY_PATH" "$MACOS_DIR/$APP_NAME"
 else
     LIPO_INPUTS=()
     for arch in $ARCHES; do
-        LIPO_INPUTS+=(".build/${arch}-apple-macosx/$CONFIG/$APP_NAME")
+        arch_binary="$(resolve_binary_path "$arch" "$CONFIG")"
+        echo "==> Using binary ($arch): $arch_binary"
+        LIPO_INPUTS+=("$arch_binary")
     done
     echo "==> Creating universal binary"
     lipo -create "${LIPO_INPUTS[@]}" -output "$MACOS_DIR/$APP_NAME"
