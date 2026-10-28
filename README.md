@@ -2,9 +2,7 @@
 
 A native macOS PDF reader and visual signature stamp app built with Swift 6, SwiftUI, and PDFKit.
 
-![macOS](https://img.shields.io/badge/macOS-14.2+-blue)
-![Swift](https://img.shields.io/badge/Swift-6.0-orange)
-![License](https://img.shields.io/badge/license-MIT-green)
+macOS 14.2 or later. Swift 6, SwiftUI and PDFKit. MIT licensed.
 
 ## Features
 
@@ -31,6 +29,14 @@ A native macOS PDF reader and visual signature stamp app built with Swift 6, Swi
 
 ## Quick Start
 
+### Download the app (macOS 14.2 or later)
+
+Download `PDFView-0.1.0-universal.zip` from the [latest release](https://github.com/duhman/pdfview/releases/latest), unzip it, and drag `PDFView.app` to Applications.
+
+The build is ad-hoc signed, not notarized, so Gatekeeper blocks the first launch. To open it anyway: right-click `PDFView.app`, choose Open, then confirm Open in the dialog. On macOS 15 and later you can also allow it once under System Settings > Privacy & Security > Open Anyway.
+
+Requires macOS 14.2 or later. The release is a universal binary for Apple silicon and Intel Macs.
+
 ### Build from source (macOS)
 
 ```bash
@@ -40,8 +46,6 @@ swift build -c release
 ./build_app.sh release
 cp -R PDFView.app /Applications/
 ```
-
-Pre-built release artifacts may be published on the [GitHub Releases](https://github.com/duhman/pdfview/releases) page when available.
 
 ### Set as default PDF reader
 
@@ -96,7 +100,7 @@ pdfview/
 export SIGNING_IDENTITY="Developer ID Application: Your Name"
 export NOTARIZE="true"
 export NOTARY_PROFILE="your-notary-profile"
-export VERSION="1.0.0"
+export VERSION="0.1.0"
 export BUILD_NUMBER="1"
 ./build_app.sh release
 ```
