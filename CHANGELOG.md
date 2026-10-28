@@ -5,6 +5,19 @@ All notable changes to PDFView will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2026-10-28
+
+First downloadable build. The app is unchanged from the 2026-09-29 modernization; this release makes it installable without Xcode.
+
+### Added
+- `PDFView-0.1.0-universal.zip` release asset, a universal binary for Apple silicon and Intel Macs, ad-hoc signed and not notarized
+- README download path with the exact Gatekeeper first-launch steps
+- `release.yml` workflow that builds, zips and attaches the app when a `v*` tag is pushed
+
+### Changed
+- README opens with one plain requirement line instead of a three-badge row
+- `build_app.sh` and `Resources/Info.plist` default to version 0.1.0
+
 ## [Unreleased]
 
 ### Added
