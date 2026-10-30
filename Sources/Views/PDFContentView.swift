@@ -95,6 +95,7 @@ struct PDFContentView: View {
                         onUnlock: {
                             protectionSession.refresh()
                             reader.refresh()
+                            viewer.focusDocumentWhenShown()
                         },
                         onCancel: { protectionSession.showsUnlock = false }
                     )

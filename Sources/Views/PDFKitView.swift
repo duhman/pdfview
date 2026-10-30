@@ -38,6 +38,13 @@ enum ZoomState: Equatable {
 final class PDFViewerProxy {
     fileprivate weak var pdfView: SigningPDFView?
     fileprivate weak var coordinator: PDFKitView.Coordinator?
+    /// A new window should accept arrow keys and Page Down at once, so focus starts in the document.
+    private var focusPending = true
+
+    func bind(_ pdfView: SigningPDFView, coordinator: PDFKitView.Coordinator) {
+        self.pdfView = pdfView
+        self.coordinator = coordinator
+    }
 
     var window: NSWindow? {
         pdfView?.window
@@ -66,6 +73,22 @@ final class PDFViewerProxy {
     /// Reports any form edit PDFKit has made since the last check.
     func refreshFormValues() {
         coordinator?.checkFormValues()
+    }
+
+    /// Focuses the document as soon as it has pages on screen, e.g. once an unlock has opened it.
+    func focusDocumentWhenShown() {
+        focusPending = true
+        focusIfPending()
+    }
+
+    /// Runs on the next turn, after a dismissed sheet has handed focus back to the window.
+    fileprivate func focusIfPending() {
+        guard focusPending, let pdfView, pdfView.window != nil, pdfView.document != nil else { return }
+        focusPending = false
+        DispatchQueue.main.async { [weak pdfView] in
+            guard let pdfView, let window = pdfView.window else { return }
+            window.makeFirstResponder(pdfView)
+        }
     }
 
     /// Returns keyboard focus to the document, e.g. after a banner or the Find bar closes.
@@ -169,8 +192,7 @@ struct PDFKitView: NSViewRepresentable {
     func updateNSView(_ nsView: SigningPDFView, context: Context) {
         let coordinator = context.coordinator
         coordinator.parent = self
-        viewer.pdfView = nsView
-        viewer.coordinator = coordinator
+        viewer.bind(nsView, coordinator: coordinator)
 
         // Compare identity before assigning: re-assigning the same document resets PDFKit state.
         if nsView.document !== document {
@@ -232,7 +254,10 @@ extension PDFKitView {
             pdfView.isSigning = { [weak self] in self?.parent.signingMode != .idle }
             pdfView.onIdleMouseDown = { [weak self] in self?.selectedPlacementID = nil }
             pdfView.keyHandler = { [weak self] event in self?.handleKey(event) ?? false }
-            pdfView.onWindowChange = { [weak self] window in self?.parent.onWindow(window) }
+            pdfView.onWindowChange = { [weak self] window in
+                self?.parent.onWindow(window)
+                self?.parent.viewer.focusIfPending()
+            }
             pdfView.onUserInteraction = { [weak self] in self?.scheduleFormValueCheck() }
             pdfView.onStopSigning = { [weak self] in self?.parent.onStopSigning() }
             pdfView.hasSelectedStamp = { [weak self] in self?.selectedPlacementID != nil }
@@ -268,6 +293,7 @@ extension PDFKitView {
                     name: .PDFDocumentDidUnlock,
                     object: document
                 )
+                parent.viewer.focusIfPending()
             }
             rescanDocument()
         }

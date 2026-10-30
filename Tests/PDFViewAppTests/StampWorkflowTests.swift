@@ -378,3 +378,42 @@ private func initials(page: Int, bounds: CGRect) -> PDFViewerDocument.SignatureP
     #expect(UnlockDocumentSheet.attempt("reader", with: protection) == nil)
     #expect(!protection.isLocked)
 }
+
+// MARK: Focus on open
+
+@MainActor
+@Test func documentTakesKeyboardFocusOnceItIsShown() async throws {
+    let document = try #require(PDFDocument(data: makeBlankPDF(pages: 2)))
+    let viewer = PDFViewerProxy()
+    var representable = makeRepresentable()
+    representable.viewer = viewer
+    let coordinator = representable.makeCoordinator()
+    let pdfView = SigningPDFView(frame: CGRect(x: 0, y: 0, width: 400, height: 600))
+    coordinator.attach(to: pdfView)
+    viewer.bind(pdfView, coordinator: coordinator)
+
+    let field = NSTextField(frame: CGRect(x: 0, y: 600, width: 100, height: 20))
+    let container = NSView(frame: CGRect(x: 0, y: 0, width: 400, height: 620))
+    container.addSubview(pdfView)
+    container.addSubview(field)
+    let window = NSWindow(contentRect: container.frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = container
+    window.makeFirstResponder(field)
+
+    // Locked or not yet loaded: nothing to focus, so the request waits.
+    try await Task.sleep(for: .milliseconds(20))
+    #expect(window.firstResponder !== pdfView)
+
+    pdfView.document = document
+    coordinator.documentDidChange(document)
+    for _ in 0 ..< 50 where window.firstResponder !== pdfView {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(window.firstResponder === pdfView)
+
+    // Only once: later document updates leave focus where the user put it.
+    window.makeFirstResponder(field)
+    coordinator.documentDidChange(document)
+    try await Task.sleep(for: .milliseconds(30))
+    #expect(window.firstResponder !== pdfView)
+}
