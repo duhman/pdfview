@@ -6,7 +6,7 @@ import os
 final class SignatureStore: ObservableObject {
     @Published private var profiles = StoredProfiles()
 
-    /// Compatibility access for the existing signature placement path.
+    /// The saved signature (not initials).
     var profile: SignatureProfile? {
         profile(for: .signature)
     }

@@ -4,7 +4,7 @@ A full native Mac PDF reader with private, offline visual signing.
 
 - Native and fast, built with SwiftUI and Apple's PDFKit.
 - Sign into the PDF's own signature fields or anywhere on a page, then move and resize your signature.
-- Save a flattened signed copy that keeps page sizes, links, and bookmarks.
+- Save a flattened signed copy that keeps page sizes, rotation, links, bookmarks, document info, form entries, and existing annotations such as another party’s signature.
 - Private: no network access, cloud services, or telemetry; your saved signature stays only on this Mac.
 
 <picture>
@@ -47,7 +47,7 @@ duti -s com.bigmac.pdfview com.adobe.pdf all
 ### Read
 
 - Page indicator with PDF page labels and a validated Go to Page sheet.
-- A native sidebar with a Thumbnails/Outline selector (Outline is disabled when the PDF has none) and current-section selection in the outline.
+- A native sidebar with page thumbnails and, when the PDF has an outline, an Outline tab that selects the current section.
 - Asynchronous text search with match highlights and previous/next navigation; VoiceOver hears the result and each move.
 - Unlock password-protected PDFs with secure entry; cancel keeps the locked reader open with an Unlock banner.
 - Move between form fields with Go > Next/Previous Form Field, which reads each field’s name, kind and state; text fields open for typing, and Go > Activate Form Field (or Space or Return) toggles checkboxes and radio buttons and opens pop-up and list choices.
