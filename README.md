@@ -46,7 +46,8 @@ duti -s com.bigmac.pdfview com.adobe.pdf all
 
 - Create and edit independent signature and initials profiles by drawing, typing, or importing an image.
 - Choose Signature, Initials, or Date from the Sign toolbar menu; dates use today’s date and your locale at placement time.
-- Place each stamp in the PDF’s own signature fields or anywhere on a page, including the keyboard placement commands. Place in Next Field skips fields that already hold a stamp.
+- Place each stamp in the PDF’s own signature fields or anywhere on a page, including the keyboard placement commands. Signatures start in Fields when the PDF has signature fields; initials and dates start in Anywhere, and each kind remembers your choice for the window. Place Signature in Next Field skips fields that already hold a stamp.
+- When an action can’t do anything (a click outside every field, every field already filled, a cancelled save), the banner says why for a few seconds instead of beeping, and VoiceOver reads the same message.
 - Initials and dates start at their own sizes (60 and 110 pt wide; signatures 180 pt), and the last size you resize each kind to is reused while the app is open.
 - Place Initials on Every Page initials each page that has none, in one undoable step, at the position of your selected or last initials, or in the bottom-right margin.
 - After each stamp the Sign menu goes back to Signature, and its commands say which kind they will place.

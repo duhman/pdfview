@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Initials and dates start in Anywhere even when the PDF has signature fields; only signatures start in Fields, and each kind remembers its Fields/Anywhere choice for the window
+- Place Signature in Next Field is disabled, with the reason, while placing initials or a date
+- A just-placed stamp leaves plain arrow keys to scrolling; click it or choose Select Next Stamp (⌥⌘]) to move it with the arrows
+- The save and print progress banner appears only when the work takes longer than 300 ms
+- Sign menu titles: Create Initials… / Edit Initials… follow whether initials exist; Select Next / Previous Stamp replace Select Next / Previous Signature
+
+### Added
+- Banner messages instead of beeps, also read by VoiceOver: a click outside every signature field in Fields mode, every field already filled, nothing left for Place Initials on Every Page, a stamp at the page edge or size limit, and a cancelled save or print ("Save cancelled.")
+- Place Initials on Every Page shortcut (⌥⌘I), named in the signing banner while placing initials
+- Command-arrows move a selected stamp 50 pt
+- Go > Activate Form Field (⌥⌘↩), or Space / Return on the field just moved to: toggles checkboxes, selects radio buttons, offers pop-up and list choices, and starts editing text fields; field announcements include the state ("Agree, checkbox, checked, page 2")
+- Help > Keyboard Shortcuts window generated from the menu chord table, listed before the online help
+- VoiceOver announcements for Escape deselecting a stamp ("Stamp deselected.") and for the unlock sheet's title and instruction when it opens
+
+### Fixed
+- Cancelling initials setup while signing returns to the previous stamp kind and placement mode instead of leaving initials active without artwork
+
 ## [0.2.0] - 2026-10-30
 
 A full native reader with offline visual signing: correct signed export, visible and editable stamps, initials and dates, password-protected copies, keyboard and VoiceOver support.
