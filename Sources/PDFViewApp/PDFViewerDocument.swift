@@ -7,6 +7,13 @@ import AppKit
 struct PDFViewerDocument: FileDocument {
     enum ExportError: LocalizedError, Equatable {
         case missingDocument
+        case documentLocked
+        case cannotReadPage(index: Int)
+        case invalidPlacementPage(index: Int)
+        case cannotDecodeSignature(id: UUID)
+        case cannotPreservePageGeometry
+        case cannotPreserveNavigation
+        case invalidExportedDocument
         case invalidDestinationURL
         case cannotEncodeDocumentData
         case cannotCreatePDFContext
@@ -15,15 +22,29 @@ struct PDFViewerDocument: FileDocument {
         var errorDescription: String? {
             switch self {
             case .missingDocument:
-                return "No PDF document is loaded."
+                "No PDF document is loaded."
+            case .documentLocked:
+                "Unlock the PDF document before exporting a signed copy."
+            case let .cannotReadPage(index):
+                "Could not read PDF page \(index + 1)."
+            case let .invalidPlacementPage(index):
+                "A signature refers to missing PDF page \(index + 1)."
+            case let .cannotDecodeSignature(id):
+                "Could not decode the signature image (\(id))."
+            case .cannotPreservePageGeometry:
+                "Could not preserve the PDF page coordinate system."
+            case .cannotPreserveNavigation:
+                "Could not preserve the PDF's links or bookmarks."
+            case .invalidExportedDocument:
+                "The exported PDF could not be validated. The destination was not changed."
             case .invalidDestinationURL:
-                return "The destination must be a local file URL."
+                "The destination must be a local file URL."
             case .cannotEncodeDocumentData:
-                return "The PDF data could not be encoded."
+                "The PDF data could not be encoded."
             case .cannotCreatePDFContext:
-                return "Could not create a PDF writing context."
-            case .writeFailed(let description):
-                return "Failed to write the signed copy: \(description)"
+                "Could not create a PDF writing context."
+            case let .writeFailed(description):
+                "Failed to write the signed copy: \(description)"
             }
         }
     }
@@ -109,78 +130,15 @@ struct PDFViewerDocument: FileDocument {
         return signaturePlacements.remove(at: index)
     }
 
-    /// Writes a flattened visual signature export to disk.
+    /// Writes the live document with form values and visual signatures flattened into page content.
+    @MainActor
     func writeSignedCopy(to destinationURL: URL) throws {
         guard destinationURL.isFileURL else {
             throw ExportError.invalidDestinationURL
         }
-
-        guard let baselineDocument = baselineDocumentForExport() else {
+        guard let pdfDocument else {
             throw ExportError.missingDocument
         }
-
-        // Fast path: no placements in this session, so preserve baseline serialization.
-        if signaturePlacements.isEmpty {
-            let data = try baselineDataForExport()
-            do {
-                try data.write(to: destinationURL, options: [.atomic])
-            } catch {
-                throw ExportError.writeFailed(description: error.localizedDescription)
-            }
-            return
-        }
-
-        guard let context = CGContext(destinationURL as CFURL, mediaBox: nil, nil) else {
-            throw ExportError.cannotCreatePDFContext
-        }
-
-        for index in 0..<baselineDocument.pageCount {
-            guard let page = baselineDocument.page(at: index) else {
-                continue
-            }
-
-            let mediaBox = page.bounds(for: .cropBox)
-            context.beginPDFPage([kCGPDFContextMediaBox as String: mediaBox] as CFDictionary)
-            page.draw(with: .cropBox, to: context)
-
-            let placements = signaturePlacements.filter { $0.pageIndex == index }
-            for placement in placements {
-                guard let image = NSImage(data: placement.signaturePNGData),
-                      let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
-                else {
-                    continue
-                }
-
-                let clampedRect = CGRect(
-                    x: max(mediaBox.minX, min(placement.bounds.origin.x, mediaBox.maxX - placement.bounds.width)),
-                    y: max(mediaBox.minY, min(placement.bounds.origin.y, mediaBox.maxY - placement.bounds.height)),
-                    width: min(placement.bounds.width, mediaBox.width),
-                    height: min(placement.bounds.height, mediaBox.height)
-                )
-                context.draw(cgImage, in: clampedRect)
-            }
-
-            context.endPDFPage()
-        }
-
-        context.closePDF()
-    }
-
-    private func baselineDocumentForExport() -> PDFDocument? {
-        if let originalPDFData, let originalDocument = PDFDocument(data: originalPDFData) {
-            return originalDocument
-        }
-        return pdfDocument
-    }
-
-    private func baselineDataForExport() throws -> Data {
-        if let originalPDFData {
-            return originalPDFData
-        }
-
-        guard let encoded = pdfDocument?.dataRepresentation() else {
-            throw ExportError.cannotEncodeDocumentData
-        }
-        return encoded
+        try SignedPDFExporter.write(pdfDocument, placements: signaturePlacements, to: destinationURL)
     }
 }

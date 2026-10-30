@@ -1,9 +1,10 @@
-import Testing
 import AppKit
-@preconcurrency import Quartz
 @testable import PDFViewApp
+import Quartz
+import Testing
 
-@Test func placementAddAndRemoveRoundTrip() {
+@Test
+func placementAddAndRemoveRoundTrip() {
     var document = PDFViewerDocument()
     let placement = PDFViewerDocument.SignaturePlacement(
         pageIndex: 0,
@@ -20,7 +21,9 @@ import AppKit
     #expect(document.signaturePlacements.isEmpty)
 }
 
-@Test func signedCopyFailsForNonFileDestination() {
+@MainActor
+@Test
+func signedCopyFailsForNonFileDestination() throws {
     let pdfData = makeSamplePDFData()
     let pdf = PDFDocument(data: pdfData)
     var document = PDFViewerDocument(pdfDocument: pdf, originalPDFData: pdfData)
@@ -34,7 +37,7 @@ import AppKit
     )
 
     do {
-        try document.writeSignedCopy(to: URL(string: "https://example.com/out.pdf")!)
+        try document.writeSignedCopy(to: #require(URL(string: "https://example.com/out.pdf")))
         Issue.record("Expected invalidDestinationURL error")
     } catch let error as PDFViewerDocument.ExportError {
         #expect(error == .invalidDestinationURL)
@@ -43,23 +46,9 @@ import AppKit
     }
 }
 
-@Test func noPlacementExportUsesBaselineDataVerbatim() throws {
-    let baselineData = makeSamplePDFData()
-    let pdf = PDFDocument(data: baselineData)
-    let document = PDFViewerDocument(pdfDocument: pdf, originalPDFData: baselineData)
-
-    let outputURL = URL(fileURLWithPath: NSTemporaryDirectory())
-        .appendingPathComponent("pdfview-tests")
-        .appendingPathComponent(UUID().uuidString)
-        .appendingPathExtension("pdf")
-    try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-
-    try document.writeSignedCopy(to: outputURL)
-    let exportedData = try Data(contentsOf: outputURL)
-    #expect(exportedData == baselineData)
-}
-
-@Test func signedCopyDoesNotMutateSourceDocumentAnnotations() throws {
+@MainActor
+@Test
+func signedCopyDoesNotMutateSourceDocumentAnnotations() throws {
     let baselineData = makeSamplePDFData()
     guard let sourceDocument = PDFDocument(data: baselineData) else {
         Issue.record("Could not create PDFDocument from baseline data")
@@ -80,7 +69,10 @@ import AppKit
         .appendingPathComponent("pdfview-tests")
         .appendingPathComponent(UUID().uuidString)
         .appendingPathExtension("pdf")
-    try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(
+        at: outputURL.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
 
     let annotationCountBefore = sourceDocument.page(at: 0)?.annotations.count ?? 0
     try document.writeSignedCopy(to: outputURL)
