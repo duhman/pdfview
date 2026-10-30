@@ -116,7 +116,7 @@ final class PDFViewerProxy {
         coordinator?.location(of: bounds, onPageAt: pageIndex)
     }
 
-    /// Go > Next/Previous Form Field; nil when the document has no form fields.
+    /// Go > Next/Previous Form Field; nil when the document has no editable form fields.
     func moveToFormField(forward: Bool) -> String? {
         coordinator?.moveToFormField(forward: forward)
     }
@@ -397,7 +397,7 @@ extension PDFKitView {
         // MARK: Form field navigation
 
         /// Reveals the next (or previous) editable widget and starts editing it when it is a text field.
-        /// Returns what VoiceOver should say, or nil when the document has no form fields.
+        /// Returns what VoiceOver should say, or nil when the document has no editable form fields.
         func moveToFormField(forward: Bool) -> String? {
             guard let pdfView, let document = pdfView.document, let widgets = formScan?.widgets else { return nil }
             let located = widgets.compactMap { widget -> (PDFAnnotation, PDFPage, Int)? in
@@ -410,7 +410,8 @@ extension PDFKitView {
                     pageIndex: pageIndex,
                     bounds: widget.bounds,
                     name: FormFieldNavigation.name(of: widget),
-                    kind: FormFieldNavigation.kind(of: widget)
+                    kind: FormFieldNavigation.kind(of: widget),
+                    isReadOnly: widget.isReadOnly
                 )
             }
             let order = FormFieldNavigation.readingOrder(fields)
@@ -426,12 +427,16 @@ extension PDFKitView {
             lastFormFieldID = ObjectIdentifier(widget)
             pdfView.go(to: widget.bounds.insetBy(dx: -40, dy: -40), on: page)
             // A text field gets the keyboard itself; any other field takes Space and Return from here.
-            acceptsFormFieldKeys = field.kind != .text || widget.isReadOnly
-            if field.kind == .text, !widget.isReadOnly {
+            acceptsFormFieldKeys = field.kind != .text
+            if field.kind == .text {
                 // Once it has scrolled into view.
                 DispatchQueue.main.async { [weak pdfView] in
                     pdfView?.clickWidget(widget, on: page)
                 }
+            } else if pdfView.window?.firstResponder !== pdfView {
+                // Ends any text edit (committing it) so Space and Return reach `handleFormFieldKey`
+                // instead of typing into the text field the user just left.
+                pdfView.window?.makeFirstResponder(pdfView)
             }
             return FormFieldNavigation.announcement(for: field, state: FormFieldNavigation.spokenState(of: widget))
         }

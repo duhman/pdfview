@@ -33,12 +33,22 @@ enum ExportPurpose {
 
     func feedback(for error: Error) -> Feedback {
         guard !(error is CancellationError) else {
-            return .notice(self == .print ? "Printing cancelled." : "Save cancelled.")
+            return .notice(Self.cancelledNotice(self))
         }
         return .alert(ErrorAlert(
             title: self == .print ? "Couldn’t Print PDF" : "Couldn’t Save Signed Copy",
             error: error
         ))
+    }
+
+    /// Cancelling Save Signed Copy's panel is a cancelled save too, so the banner says so the same way;
+    /// nil once a destination is chosen.
+    static func savePanelNotice(for response: NSApplication.ModalResponse) -> String? {
+        response == .OK ? nil : cancelledNotice(.signedCopy)
+    }
+
+    private static func cancelledNotice(_ purpose: Self) -> String {
+        purpose == .print ? "Printing cancelled." : "Save cancelled."
     }
 
     var cancelHelp: String {

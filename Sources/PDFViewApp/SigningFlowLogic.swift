@@ -117,6 +117,12 @@ enum SigningFlowLogic {
         anywhere || !hasSignatureFields ? .freePlacement : .fieldPlacement
     }
 
+    /// Sign > Anywhere switches between Fields and Anywhere while signing. While idle it would have to
+    /// start signing to take effect, so it is disabled rather than doing that as a side effect.
+    static func anywhereIsEnabled(mode: SigningMode, canSign: Bool, hasSignatureFields: Bool) -> Bool {
+        mode != .idle && canSign && hasSignatureFields
+    }
+
     /// Keeps the mode valid when the detected fields change (unlock, document swap).
     static func refreshed(_ mode: SigningMode, hasSignatureFields: Bool) -> SigningMode {
         mode == .fieldPlacement && !hasSignatureFields ? .freePlacement : mode
@@ -150,6 +156,34 @@ enum SigningFlowLogic {
         }
     }
 
+    /// Why a Sign command cannot run right now. The commands stay enabled and show this instead, because
+    /// a disabled menu item's shortcut only beeps.
+    static func signingUnavailableReason(hasPages: Bool, isLocked: Bool, isBusy: Bool) -> String {
+        if isLocked {
+            "Unlock this PDF to sign it."
+        } else if isBusy {
+            "Wait for the current save or print to finish."
+        } else if !hasPages {
+            "This PDF has no pages to sign."
+        } else {
+            "This PDF is still opening. Try again in a moment."
+        }
+    }
+
+    /// The first initials on a multi-page PDF: the other pages probably need them too, and Place
+    /// Initials on Every Page does that in one step.
+    static func offersInitialsOnEveryPage(
+        placed: PDFViewerDocument.SignaturePlacement,
+        pageCount: Int,
+        placements: [PDFViewerDocument.SignaturePlacement]
+    ) -> Bool {
+        placed.kind == .initials && pageCount > 1
+            && !placements.contains { $0.kind == .initials && $0.pageIndex != placed.pageIndex }
+    }
+
+    /// Select Next/Previous Stamp before anything has been placed.
+    static let noStampsNotice = "There are no stamps to select. Place a signature, initials or a date first."
+
     static func enteredAnnouncement(mode: SigningMode, kind: StampKind = .signature) -> String {
         "Placing \(kind.title.lowercased()). \(statusText(mode: mode, kind: kind)) Press Escape to stop."
     }
@@ -182,13 +216,37 @@ enum SigningFlowLogic {
     }
 
     /// The saved banner names the folder too, so the copy can be found after the banner is closed.
-    static func savedText(for url: URL) -> String {
-        "Saved “\(url.lastPathComponent)” to \(url.deletingLastPathComponent().lastPathComponent)"
+    static func savedText(for url: URL, home: URL = userHome) -> String {
+        "Saved “\(url.lastPathComponent)” to \(folderDisplayName(of: url, home: home))"
     }
 
-    static func savedAnnouncement(for url: URL) -> String {
-        "Saved \(url.lastPathComponent) to \(url.deletingLastPathComponent().lastPathComponent)"
+    static func savedAnnouncement(for url: URL, home: URL = userHome) -> String {
+        "Saved \(url.lastPathComponent) to \(folderDisplayName(of: url, home: home))"
     }
+
+    /// The folder holding `url` as Finder users know it: "~/Documents/Contracts", "iCloud Drive/Leases",
+    /// or the full path elsewhere. Two folders called Documents can no longer be confused.
+    static func folderDisplayName(of url: URL, home: URL = userHome) -> String {
+        let folder = url.deletingLastPathComponent().standardizedFileURL.pathComponents
+        let homeComponents = home.standardizedFileURL.pathComponents
+        let iCloud = homeComponents + ["Library", "Mobile Documents", "com~apple~CloudDocs"]
+        if folder.starts(with: iCloud) {
+            return (["iCloud Drive"] + folder.dropFirst(iCloud.count)).joined(separator: "/")
+        }
+        if folder.starts(with: homeComponents) {
+            return (["~"] + folder.dropFirst(homeComponents.count)).joined(separator: "/")
+        }
+        return url.deletingLastPathComponent().standardizedFileURL.path
+    }
+
+    /// The user's home folder. In the sandbox `NSHomeDirectory()` is the app's container, which is not
+    /// where a saved copy lands, so the account's home comes from the user database.
+    static let userHome: URL = {
+        if let directory = getpwuid(getuid())?.pointee.pw_dir {
+            return URL(fileURLWithPath: String(cString: directory), isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+    }()
 
     /// Select Next/Previous Stamp: reading order (page, then top to bottom, then left to right), wrapping.
     static func adjacentPlacement(
@@ -255,6 +313,20 @@ enum SigningFlowLogic {
     ) -> Bool {
         !placements.isEmpty || (formValues != nil && formValues != originalFormValues)
             || (exported != nil && exported?.matches(placements: placements, formValues: formValues) == false)
+    }
+
+    /// Why Save Signed Copy is disabled, for the toolbar button's help tag and VoiceOver hint; nil when
+    /// it can be used.
+    static func saveSignedCopyUnavailableReason(canSave: Bool, isLocked: Bool, isBusy: Bool) -> String? {
+        if canSave {
+            nil
+        } else if isLocked {
+            "Unlock this PDF first."
+        } else if isBusy {
+            "Wait for the current save or print to finish."
+        } else {
+            "Place a signature or fill a field first."
+        }
     }
 
     static func signedFileName(for sourceURL: URL?) -> String {

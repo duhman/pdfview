@@ -120,12 +120,13 @@ private func scannedCoordinator(
 }
 
 @MainActor
-@Test func aReadOnlyFieldSaysWhyItDidNotChange() async throws {
+@Test func nextFormFieldSkipsAReadOnlyField() async throws {
     let document = try makeChoicesForm()
     let (coordinator, pdfView) = try await scannedCoordinator(for: document, recorder: StateRecorder())
     defer { withExtendedLifetime(pdfView) {} }
-    _ = coordinator.moveToFormField(forward: false)
-    #expect(coordinator.activateFormField() == .unavailable("Locked can’t be changed."))
+    // "Locked" is last in reading order but read-only, so Previous Form Field lands on Department.
+    #expect(coordinator.moveToFormField(forward: false) == "Department, pop-up menu, Sales, page 1")
+    #expect(FormFieldNavigation.unavailableMessage(name: "Locked", kind: .checkbox) == "Locked can’t be changed.")
 }
 
 @MainActor

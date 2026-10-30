@@ -15,11 +15,15 @@ final class TransientNotice {
         self.duration = duration
     }
 
-    func show(_ text: String) {
+    /// Long enough to read a two-sentence instruction, e.g. how to adjust a stamp just placed.
+    static let instructionDuration: Duration = .seconds(8)
+
+    /// Shows `text` for `duration`, or for the notice's default when nil.
+    func show(_ text: String, for duration: Duration? = nil) {
         generation += 1
         let shown = generation
         self.text = text
-        Task { [weak self, duration] in
+        Task { [weak self, duration = duration ?? self.duration] in
             try? await Task.sleep(for: duration)
             guard let self, generation == shown else { return }
             self.text = nil

@@ -13,6 +13,11 @@ struct UnlockDocumentSheet: View {
     /// VoiceOver lands on the password field, so the sheet says what it is for as it opens.
     static let openingAnnouncement = "\(title). \(instruction)"
 
+    /// Read once the sheet has closed, so VoiceOver users know the password worked and how long the PDF is.
+    static func unlockedAnnouncement(pageCount: Int) -> String {
+        "Unlocked, \(pageCount) \(pageCount == 1 ? "page" : "pages")"
+    }
+
     /// Nil when the password opened the document; otherwise the message to show and announce.
     static func attempt(_ password: String, with protection: DocumentProtection) -> String? {
         protection.unlock(withPassword: password) ? nil : "Incorrect password. Try again."

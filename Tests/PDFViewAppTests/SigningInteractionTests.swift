@@ -4,8 +4,9 @@ import Testing
 
 @Test func savedMessageNamesTheFolder() {
     let url = URL(fileURLWithPath: "/Users/a/Documents/lease-signed.pdf")
-    #expect(SigningFlowLogic.savedText(for: url) == "Saved “lease-signed.pdf” to Documents")
-    #expect(SigningFlowLogic.savedAnnouncement(for: url) == "Saved lease-signed.pdf to Documents")
+    let home = URL(fileURLWithPath: "/Users/a", isDirectory: true)
+    #expect(SigningFlowLogic.savedText(for: url, home: home) == "Saved “lease-signed.pdf” to ~/Documents")
+    #expect(SigningFlowLogic.savedAnnouncement(for: url, home: home) == "Saved lease-signed.pdf to ~/Documents")
 }
 
 @Test func bannerTextOffersTheKeyboardPath() {

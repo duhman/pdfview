@@ -7,9 +7,18 @@ A full native Mac PDF reader with private, offline visual signing.
 - Save a flattened signed copy that keeps page sizes, links, and bookmarks.
 - Private: no network access, cloud services, or telemetry; your saved signature stays only on this Mac.
 
+## Why PDFView instead of Preview
+
+- Initial every page in one step: Sign > Place Initials on Every Page (⌥⌘I), undone as a single change.
+- Stamp today’s date, formatted for your locale, beside your signature.
+- The PDF’s signature fields are detected, and Place Signature in Next Field (⌥⌘N) fills them in order.
+- A PDF you unlock with its password stays protected: by default the signed copy keeps that password and the PDF’s print and copy restrictions.
+- The original file is never overwritten; signing always produces a separate signed copy.
+- Full keyboard and VoiceOver support for reading, signing and filling in forms.
+
 ## Install
 
-Requires **macOS 14.2 or later**. Download the universal ZIP for Apple silicon and Intel from the [latest release](https://github.com/duhman/pdfview/releases/latest), unzip it, and move `PDFView.app` to Applications. The features below are in version 0.2.0 and later.
+Requires **macOS 14.2 or later**. Download the universal ZIP for Apple silicon and Intel from the [latest release](https://github.com/duhman/pdfview/releases/latest), unzip it, and move `PDFView.app` to Applications. The features below are in version 0.2.1 and later.
 
 The downloadable build is ad-hoc signed and not notarized. For the first launch:
 

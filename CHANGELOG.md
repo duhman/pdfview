@@ -7,8 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+### Changed
+- Next / Previous Form Field skips read-only fields; a form with nothing editable says "This document has no form fields you can fill in."
+- Landing on a checkbox, radio button, pop-up, list or button with Next / Previous Form Field gives the document keyboard focus and ends any text edit, so Space and Return act on that field instead of typing into the text field just left
+- Sign > Anywhere is available only while signing; choosing it no longer starts signing
+- Place Signature in Next Field (⌥⌘N), Select Next / Previous Stamp (⌥⌘] / ⌥⌘[) and Next / Previous Form Field (⌥⌘→ / ⌥⌘←) stay enabled while a document is open and say why in the banner when they can't act (locked, still opening, saving, no stamps, no editable fields) instead of beeping
+- The saved banner and its announcement name the folder as an abbreviated path: "~/Documents/Contracts", "iCloud Drive/Leases", or the full path on another volume
+- Activate Form Field on a push button says it can't be pressed from the keyboard, instead of asking for a click
 
+### Added
+- After a stamp is placed, the banner says how to select it and move it with the arrow keys, matching the VoiceOver announcement; after the first initials on a multi-page PDF whose other pages have none, both also point to Place Initials on Every Page (⌥⌘I)
+- VoiceOver announces a successful unlock with the page count ("Unlocked, 12 pages")
+- The disabled Save Signed Copy toolbar button's help tag and VoiceOver hint say what is missing ("Place a signature or fill a field first.", or that the PDF is locked or a save is running)
+- README: a short "Why PDFView instead of Preview" section before Install
+
+### Fixed
+- Cancelling the Save Signed Copy panel now shows and announces "Save cancelled.", as the 0.2.1 notes describe; before, only a save cancelled after it started did
 - Freeze page content and annotation values together at save, then prepare annotations in the background to keep widget-heavy exports responsive.
 - Let Save write the current state after every saved stamp is deleted or saved form edits are reverted; compare unlocked forms with their baseline before the reader scan finishes.
 - Offer an unprotected copy for protected PDFs with offset page origins, and suggest Print only when printing is allowed.

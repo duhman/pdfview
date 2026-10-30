@@ -13,7 +13,6 @@ struct SigningCommandActions {
     var placeOnCurrentPage: () -> Void
     var placeInitialsOnEveryPage: () -> Void
     var setAnywhere: (Bool) -> Void
-    var hasPlacements: Bool
     var selectNextStamp: () -> Void
     var selectPreviousStamp: () -> Void
     var saveSignedCopy: () -> Void
@@ -220,12 +219,13 @@ struct SigningCommandMenu: Commands {
                 .disabled(!canSign)
 
             // Keys mirror SigningShortcut, which the signing banner shows. Fields take signatures only.
+            // Enabled whenever a document is open: when it can't place, it says why instead of beeping.
             let nextFieldReason = SigningFlowLogic.nextFieldUnavailableReason(kind: kind, hasSignatureFields: hasFields)
             Button(StampWorkflow.placeInNextFieldTitle(kind: .signature)) {
                 actions?.placeInNextField()
             }
             .keyboardShortcut(MenuShortcuts.placeInNextField)
-            .disabled(!canSign || nextFieldReason != nil)
+            .disabled(actions == nil)
             if hasFields, let nextFieldReason {
                 Text(nextFieldReason)
             }
@@ -244,17 +244,18 @@ struct SigningCommandMenu: Commands {
 
             Divider()
 
+            // Enabled with no stamps too, so the shortcut explains itself instead of beeping.
             Button(SignMenuTitles.selectNextStamp) {
                 actions?.selectNextStamp()
             }
             .keyboardShortcut(MenuShortcuts.selectNextStamp)
-            .disabled(!(actions?.hasPlacements ?? false))
+            .disabled(actions == nil)
 
             Button(SignMenuTitles.selectPreviousStamp) {
                 actions?.selectPreviousStamp()
             }
             .keyboardShortcut(MenuShortcuts.selectPreviousStamp)
-            .disabled(!(actions?.hasPlacements ?? false))
+            .disabled(actions == nil)
 
             Divider()
 
@@ -262,7 +263,7 @@ struct SigningCommandMenu: Commands {
                 get: { actions?.signingMode == .freePlacement },
                 set: { actions?.setAnywhere($0) }
             ))
-            .disabled(!(canSign && hasFields))
+            .disabled(!SigningFlowLogic.anywhereIsEnabled(mode: mode, canSign: canSign, hasSignatureFields: hasFields))
 
             Divider()
 

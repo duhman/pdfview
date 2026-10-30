@@ -116,6 +116,11 @@ struct PDFContentView: View {
                             protectionSession.refresh()
                             reader.refresh()
                             viewer.focusDocumentWhenShown()
+                            let pageCount = protection.document.pageCount
+                            // On the next turn, after the sheet has closed and focus is back in the document.
+                            DispatchQueue.main.async {
+                                announce(UnlockDocumentSheet.unlockedAnnouncement(pageCount: pageCount))
+                            }
                         },
                         onCancel: { protectionSession.showsUnlock = false }
                     )
@@ -285,8 +290,10 @@ extension PDFContentView {
                 Label("Save Signed Copy…", systemImage: "square.and.arrow.down")
             }
             .disabled(!canSaveSignedCopy)
-            .help("Save Signed Copy…")
-            .accessibilityHint("Saves a copy of the PDF with your signature stamps flattened in.")
+            .help(saveSignedCopyUnavailableReason ?? "Save Signed Copy…")
+            .accessibilityHint(
+                saveSignedCopyUnavailableReason ?? "Saves a copy of the PDF with your signature stamps flattened in."
+            )
         }
     }
 
@@ -456,6 +463,14 @@ extension PDFContentView {
         return !pdf.isLocked && documentState?.isLocked == false && !export.isBusy
     }
 
+    private var signingUnavailableReason: String {
+        SigningFlowLogic.signingUnavailableReason(
+            hasPages: (document.pdfDocument?.pageCount ?? 0) > 0,
+            isLocked: isLocked,
+            isBusy: export.isBusy
+        )
+    }
+
     private var canSaveSignedCopy: Bool {
         document.pdfDocument?.isLocked == false && protectionSession.protection != nil
             && !export.isBusy && SigningFlowLogic.hasSignedCopyContent(
@@ -464,6 +479,14 @@ extension PDFContentView {
                 originalFormValues: originalFormValues,
                 exported: exportedState
             )
+    }
+
+    private var saveSignedCopyUnavailableReason: String? {
+        SigningFlowLogic.saveSignedCopyUnavailableReason(
+            canSave: canSaveSignedCopy,
+            isLocked: isLocked,
+            isBusy: export.isBusy
+        )
     }
 
     private var unsavedWork: UnsavedWork {
@@ -500,7 +523,6 @@ extension PDFContentView {
             placeOnCurrentPage: placeOnCurrentPage,
             placeInitialsOnEveryPage: placeInitialsOnEveryPage,
             setAnywhere: setAnywhere,
-            hasPlacements: !document.signaturePlacements.isEmpty,
             selectNextStamp: { selectAdjacentStamp(forward: true) },
             selectPreviousStamp: { selectAdjacentStamp(forward: false) },
             saveSignedCopy: { saveSignedCopy() },
@@ -634,19 +656,19 @@ extension PDFContentView {
         viewer.focusDocument()
     }
 
+    /// Fields or Anywhere while signing; Sign > Anywhere is disabled while idle.
     private func setAnywhere(_ anywhere: Bool) {
+        guard signingMode != .idle else { return }
         placementChoices.remember(anywhere: anywhere, for: stampKind)
-        let mode = SigningFlowLogic.mode(anywhere: anywhere, hasSignatureFields: hasSignatureFields)
-        if signingMode == .idle {
-            startSigning(mode)
-        } else {
-            signingMode = mode
-        }
+        signingMode = SigningFlowLogic.mode(anywhere: anywhere, hasSignatureFields: hasSignatureFields)
     }
 
     /// Keyboard path to field signing: each use fills the next detected signature field.
     private func placeInNextField() {
-        guard canSign else { return }
+        guard canSign else {
+            showNotice(signingUnavailableReason)
+            return
+        }
         if let reason = SigningFlowLogic.nextFieldUnavailableReason(
             kind: stampKind,
             hasSignatureFields: hasSignatureFields
@@ -743,13 +765,33 @@ extension PDFContentView {
         signingMode = SigningFlowLogic.afterPlacement(signingMode)
         viewer.select(placementID: placement.id)
         let location = viewer.location(of: bounds, onPageAt: pageIndex) ?? ""
-        announce(StampAccessibility.placedAnnouncement(pageIndex: pageIndex, location: location, kind: artwork.kind))
+        let offersEveryPage = SigningFlowLogic.offersInitialsOnEveryPage(
+            placed: placement,
+            pageCount: document.pdfDocument?.pageCount ?? 0,
+            placements: document.signaturePlacements
+        )
+        // The banner and VoiceOver say the same: how to adjust the stamp, and for the first initials on a
+        // multi-page PDF, how to initial the other pages. Shown without `showNotice`, which would announce twice.
+        notice.show(
+            StampAccessibility.placedNotice(kind: artwork.kind, offersEveryPage: offersEveryPage),
+            for: TransientNotice.instructionDuration
+        )
+        announce(StampAccessibility.placedAnnouncement(
+            pageIndex: pageIndex,
+            location: location,
+            kind: artwork.kind,
+            offersEveryPage: offersEveryPage
+        ))
         stampKind = StampWorkflow.kindAfterPlacementOrExit(artwork.kind)
     }
 
     /// Select Next/Previous Stamp: reveals the stamp, gives it keyboard focus and reads its label.
     private func selectAdjacentStamp(forward: Bool) {
         let placements = document.signaturePlacements
+        guard !placements.isEmpty else {
+            showNotice(SigningFlowLogic.noStampsNotice)
+            return
+        }
         guard let id = SigningFlowLogic.stampToSelect(
             after: viewer.selectedPlacementID,
             ownsArrowKeys: viewer.stampOwnsArrowKeys,
@@ -813,13 +855,11 @@ extension PDFContentView {
             completion(false)
             return
         }
-        let panel = NSSavePanel()
-        export.configure(panel, originalURL: fileURL, protection: protection)
-        panel.canCreateDirectories = true
-        panel.allowedContentTypes = [.pdf]
-        panel.nameFieldStringValue = SigningFlowLogic.signedFileName(for: fileURL)
-        panel.directoryURL = fileURL?.deletingLastPathComponent()
+        let panel = savePanel(protection: protection)
         panel.beginSheetModal(for: window) { response in
+            if let message = ExportPurpose.savePanelNotice(for: response) {
+                showNotice(message)
+            }
             guard response == .OK, let url = panel.url, document.pdfDocument === source else {
                 export.release()
                 completion(false)
@@ -844,6 +884,16 @@ extension PDFContentView {
                 }
             }
         }
+    }
+
+    private func savePanel(protection: DocumentProtection) -> NSSavePanel {
+        let panel = NSSavePanel()
+        export.configure(panel, originalURL: fileURL, protection: protection)
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = SigningFlowLogic.signedFileName(for: fileURL)
+        panel.directoryURL = fileURL?.deletingLastPathComponent()
+        return panel
     }
 
     private func reportExportEnd(_ error: Error, purpose: ExportPurpose) {
@@ -909,7 +959,10 @@ extension PDFContentView {
 
     private func moveToFormField(forward: Bool) {
         guard let message = viewer.moveToFormField(forward: forward) else {
-            showNotice(FormFieldNavigation.noFieldsAnnouncement)
+            showNotice(FormFieldNavigation.unavailableNotice(
+                isLocked: isLocked,
+                isScanned: documentState?.formValues != nil
+            ))
             return
         }
         announce(message)
