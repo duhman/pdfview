@@ -68,7 +68,7 @@ import Testing
     #expect(SigningFlowLogic.hasUnexportedPlacements([placement], exported: nil))
     #expect(!SigningFlowLogic.hasUnexportedPlacements([placement], exported: [placement]))
     #expect(SigningFlowLogic.hasUnexportedPlacements([moved], exported: [placement]))
-    #expect(!SigningFlowLogic.hasUnexportedPlacements([], exported: [placement]))
+    #expect(SigningFlowLogic.hasUnexportedPlacements([], exported: [placement]))
 }
 
 @Test func signedFileNameComesFromTheDocumentsOwnURL() {

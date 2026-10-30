@@ -3,8 +3,12 @@ import AppKit
 /// Asks about unsaved signatures and form entries before the app quits.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    static func documentGuards(in windows: [NSWindow]) -> [DocumentCloseGuard] {
+        windows.compactMap(DocumentCloseGuard.installed(on:))
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        let windows = sender.orderedWindows.compactMap(DocumentCloseGuard.installed(on:))
+        let windows = Self.documentGuards(in: sender.windows)
         guard windows.contains(where: \.hasUnsavedWork) else { return .terminateNow }
         // Reply on a later turn: AppKit expects the answer after this method has returned.
         DispatchQueue.main.async {

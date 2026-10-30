@@ -11,7 +11,7 @@ final class PDFPrinting {
         source: PDFDocument,
         placements: [PDFViewerDocument.SignaturePlacement],
         password: String? = nil,
-        progress: (ExportProgress) -> Void
+        progress: @escaping @MainActor @Sendable (ExportProgress) -> Void
     ) async throws {
         guard !source.isLocked, source.allowsPrinting else { throw CocoaError(.fileReadNoPermission) }
         if placements.isEmpty {

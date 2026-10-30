@@ -55,7 +55,7 @@ struct SignedPDFAsyncExportTests {
             }
         }
         do {
-            try await task.value
+            _ = try await task.value
             Issue.record("Expected cancellation")
         } catch is CancellationError {
             #expect(!FileManager.default.fileExists(atPath: url.path))
@@ -102,7 +102,7 @@ struct SignedPDFAsyncExportTests {
             }
         }
         do {
-            try await task.value
+            _ = try await task.value
             Issue.record("Expected cancellation")
         } catch is CancellationError {
             #expect(try Data(contentsOf: url) == sentinel)

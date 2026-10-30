@@ -167,7 +167,7 @@ struct Round2IntegrationTests {
         let result = await withCheckedContinuation { continuation in
             operation.write(source, placements: [], to: url) { continuation.resume(returning: $0) }
         }
-        try result.get()
+        _ = try result.get()
         let saved = try #require(PDFDocument(url: url))
         #expect(saved.isEncrypted == (choice == 0))
         if saved.isLocked {
@@ -177,7 +177,7 @@ struct Round2IntegrationTests {
     }
 
     @Test(arguments: [StampKind.initials, .date])
-    func stampEditingUndoAndExportPreserveArtwork(kind: StampKind) throws {
+    func stampEditingUndoAndExportPreserveArtwork(kind: StampKind) async throws {
         let artwork = try #require(StampArtwork.make(
             kind: kind, signature: nil, initials: profile(text: "JD")
         ))
@@ -204,12 +204,12 @@ struct Round2IntegrationTests {
         #expect(SigningFlowLogic.adjacentPlacement(after: nil, in: [placement], forward: true) == placement.id)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
         defer { try? FileManager.default.removeItem(at: url) }
-        try model.writeSignedCopy(to: url)
+        try await model.writeSignedCopy(to: url)
         let output = try #require(PDFDocument(url: url))
         let saved = try #require(output.page(at: 0))
         let stamped = saved.thumbnail(of: CGSize(width: 400, height: 600), for: .mediaBox).tiffRepresentation
         model.signaturePlacements = []
-        try model.writeSignedCopy(to: url)
+        try await model.writeSignedCopy(to: url)
         let baseline = try #require(PDFDocument(url: url))
         let blank = try #require(baseline.page(at: 0))
         #expect(stamped != blank.thumbnail(of: CGSize(width: 400, height: 600), for: .mediaBox).tiffRepresentation)

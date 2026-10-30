@@ -30,7 +30,7 @@ struct PDFContentView: View {
     @State private var documentState: PDFKitView.DocumentState?
     @State private var lastFieldIndex: Int?
     @State private var exportedPlacements: [PDFViewerDocument.SignaturePlacement]?
-    /// Form widget values now, as opened, and as last saved; nil until the form scan finishes.
+    /// Live, initial and last-exported form values; the baseline is captured before editing.
     @State private var formValues: [FormFieldValue]?
     @State private var originalFormValues: [FormFieldValue]?
     @State private var savedFormValues: [FormFieldValue]?
@@ -435,10 +435,10 @@ extension PDFContentView {
         protectionSession.refresh()
         reader.refresh()
         documentState = state
-        formValues = state.formValues
+        formValues = protectionSession.protection?.formBaseline?.values() ?? state.formValues
         if originalFormValues == nil {
-            originalFormValues = state.formValues
-            savedFormValues = state.formValues
+            originalFormValues = protectionSession.protection?.initialFormValues
+            savedFormValues = originalFormValues
         }
         lastFieldIndex = nil
         signingMode = state.isLocked ? .idle :
@@ -447,16 +447,18 @@ extension PDFContentView {
 
     private func synchronizeDocument() {
         guard protectionSession.protection?.document !== document.pdfDocument else { return }
-        protectionSession.attach(document.pdfDocument)
+        protectionSession.attach(
+            document.pdfDocument, formBaseline: document.formBaseline, initialFormValues: document.initialFormValues
+        )
         documentState = nil
         signingMode = .idle
         pendingAfterSetup = nil
         showSignatureSetupSheet = false
         lastFieldIndex = nil
         exportedPlacements = nil
-        formValues = nil
-        originalFormValues = nil
-        savedFormValues = nil
+        formValues = protectionSession.protection?.formBaseline?.values()
+        originalFormValues = protectionSession.protection?.initialFormValues
+        savedFormValues = originalFormValues
         lastSavedURL = nil
         showsSavedBanner = false
     }
@@ -660,23 +662,30 @@ extension PDFContentView {
                 return
             }
             let placements = document.signaturePlacements
-            let values = viewer.currentFormValues()
             export.write(source, placements: placements, to: url) { result in
                 switch result {
-                case .success:
-                    exportedPlacements = placements
-                    savedFormValues = values
+                case let .success(state):
+                    exportedPlacements = state.placements
+                    savedFormValues = state.formValues
                     lastSavedURL = url
                     showsSavedBanner = true
                     announce(SigningFlowLogic.savedAnnouncement(for: url))
-                    completion(document.signaturePlacements == placements)
+                    formValues = FormScan.capture(source)?.values()
+                    closeGuard.isEdited = document.pdfDocument !== source || !state.matches(
+                        placements: document.signaturePlacements, formValues: formValues
+                    )
+                    completion(!closeGuard.isEdited)
                 case let .failure(error):
-                    if !(error is CancellationError) {
-                        errorAlert = ErrorAlert(title: "Couldn’t Save Signed Copy", error: error)
-                    }
+                    reportSaveFailure(error)
                     completion(false)
                 }
             }
+        }
+    }
+
+    private func reportSaveFailure(_ error: Error) {
+        if !(error is CancellationError) {
+            errorAlert = ErrorAlert(title: "Couldn’t Save Signed Copy", error: error)
         }
     }
 
@@ -739,7 +748,9 @@ extension PDFContentView {
     private func attachCloseGuard(to window: NSWindow) {
         closeGuard.documentName = fileURL?.lastPathComponent ?? "this document"
         closeGuard.saveSignedCopy = { completion in saveSignedCopy(completion: completion) }
-        closeGuard.unsavedWork = { unsavedWork(formValues: viewer.currentFormValues() ?? formValues) }
+        closeGuard.unsavedWork = {
+            unsavedWork(formValues: protectionSession.protection?.formBaseline?.values())
+        }
         closeGuard.install(on: window)
         closeGuard.isEdited = !unsavedWork.isEmpty
     }

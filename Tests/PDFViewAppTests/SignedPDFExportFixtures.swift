@@ -67,6 +67,13 @@ enum ExportFixture {
         try body(directory)
     }
 
+    static func withDirectoryAsync(_ body: (URL) async throws -> Void) async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try await body(directory)
+    }
+
     static func textField(on page: PDFPage) -> PDFAnnotation {
         let field = PDFAnnotation(
             bounds: CGRect(x: 40, y: 350, width: 300, height: 40), forType: .widget, withProperties: nil

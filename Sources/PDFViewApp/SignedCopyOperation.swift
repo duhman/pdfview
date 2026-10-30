@@ -43,7 +43,7 @@ final class SignedCopyOperation {
             NSHostingView(rootView: SignedCopyProtectionAccessory(protection: protection)) : nil
     }
 
-    static func validateDestination(_ destination: URL, originalURL: URL?) throws {
+    nonisolated static func validateDestination(_ destination: URL, originalURL: URL?) throws {
         guard destination.isFileURL else { throw PDFViewerDocument.ExportError.invalidDestinationURL }
         guard let originalURL else { return }
         let source = originalURL.standardizedFileURL.resolvingSymlinksInPath()
@@ -67,7 +67,7 @@ final class SignedCopyOperation {
         _ source: PDFDocument,
         placements: [PDFViewerDocument.SignaturePlacement],
         to url: URL,
-        completion: @escaping (Result<Void, Error>) -> Void
+        completion: @escaping (Result<ExportedState, Error>) -> Void
     ) {
         task = Task { [self] in
             let access = url.startAccessingSecurityScopedResource()
@@ -81,10 +81,10 @@ final class SignedCopyOperation {
                 let original = originalURL ?? source.documentURL
                 try Self.validateDestination(url, originalURL: original)
                 let password = protection?.exportPassword
-                try await SignedPDFExporter.writeAsync(
+                let state = try await SignedPDFExporter.writeAsync(
                     source, placements: placements, to: url, password: password, originalURL: original
-                ) { progress = $0 }
-                completion(.success(()))
+                ) { self.progress = $0 }
+                completion(.success(state))
             } catch {
                 completion(.failure(error))
             }

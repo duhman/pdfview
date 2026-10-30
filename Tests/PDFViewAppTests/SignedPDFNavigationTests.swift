@@ -6,7 +6,7 @@ import Testing
 @MainActor
 struct SignedPDFNavigationTests {
     @Test(arguments: [false, true], [CGPoint.zero, CGPoint(x: 20, y: 30), CGPoint(x: -20, y: -30)])
-    func preservesURLAndGoToLinks(signed: Bool, origin: CGPoint) throws {
+    func preservesURLAndGoToLinks(signed: Bool, origin: CGPoint) async throws {
         let fixture = try navigationDocument(origin: origin)
         let source = fixture.document
         defer { withExtendedLifetime(fixture.pages) {} }
@@ -16,9 +16,9 @@ struct SignedPDFNavigationTests {
         #expect(source.outlineRoot?.numberOfChildren == 1)
         #expect(source.outlineRoot?.child(at: 0)?.destination?.page === source.page(at: 1))
         let model = try ExportFixture.model(source, signed: signed)
-        try ExportFixture.withDirectory { directory in
+        try await ExportFixture.withDirectoryAsync { directory in
             let url = directory.appendingPathComponent("signed.pdf")
-            try model.writeSignedCopy(to: url)
+            try await model.writeSignedCopy(to: url)
             let output = try #require(PDFDocument(url: url))
             let outputPages = (0 ..< output.pageCount).compactMap { output.page(at: $0) }
             defer { withExtendedLifetime(outputPages) {} }
@@ -44,16 +44,16 @@ struct SignedPDFNavigationTests {
     }
 
     @Test(arguments: [false, true], [CGPoint.zero, CGPoint(x: 20, y: 30), CGPoint(x: -20, y: -30)])
-    func preservesNestedOutline(signed: Bool, origin: CGPoint) throws {
+    func preservesNestedOutline(signed: Bool, origin: CGPoint) async throws {
         let fixture = try navigationDocument(origin: origin)
         let source = fixture.document
         defer { withExtendedLifetime(fixture.pages) {} }
         #expect(source.outlineRoot?.numberOfChildren == 1)
         #expect(source.outlineRoot?.child(at: 0)?.destination?.page === source.page(at: 1))
         let model = try ExportFixture.model(source, signed: signed)
-        try ExportFixture.withDirectory { directory in
+        try await ExportFixture.withDirectoryAsync { directory in
             let url = directory.appendingPathComponent("signed.pdf")
-            try model.writeSignedCopy(to: url)
+            try await model.writeSignedCopy(to: url)
             let output = try #require(PDFDocument(url: url))
             let outputPages = (0 ..< output.pageCount).compactMap { output.page(at: $0) }
             defer { withExtendedLifetime(outputPages) {} }
@@ -100,7 +100,7 @@ struct SignedPDFNavigationTests {
     }
 
     @Test(arguments: [false, true])
-    func preservesDocumentAttributes(signed: Bool) throws {
+    func preservesDocumentAttributes(signed: Bool) async throws {
         let source = try ExportFixture.document()
         source.documentAttributes = [
             PDFDocumentAttribute.titleAttribute: "Signed agreement",
@@ -109,9 +109,9 @@ struct SignedPDFNavigationTests {
             PDFDocumentAttribute.keywordsAttribute: ["offline", "signing"],
         ]
         let model = try ExportFixture.model(source, signed: signed)
-        try ExportFixture.withDirectory { directory in
+        try await ExportFixture.withDirectoryAsync { directory in
             let url = directory.appendingPathComponent("signed.pdf")
-            try model.writeSignedCopy(to: url)
+            try await model.writeSignedCopy(to: url)
             let output = try #require(PDFDocument(url: url))
             let outputPages = (0 ..< output.pageCount).compactMap { output.page(at: $0) }
             defer { withExtendedLifetime(outputPages) {} }

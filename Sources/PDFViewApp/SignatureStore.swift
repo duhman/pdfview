@@ -43,11 +43,8 @@ final class SignatureStore: ObservableObject {
 
     enum SignatureError: LocalizedError {
         case cannotEncodeProfile
-        case cannotCreateStorageDirectory(underlying: Error)
         case cannotWriteProfile(underlying: Error)
-        case cannotReadProfile(underlying: Error)
         case invalidProfileData
-        case storageCorrupted
         case insufficientDiskSpace
         case permissionDenied(path: String)
 
@@ -55,16 +52,10 @@ final class SignatureStore: ObservableObject {
             switch self {
             case .cannotEncodeProfile:
                 "Cannot encode the signature profile."
-            case let .cannotCreateStorageDirectory(underlying):
-                "Cannot create signature storage directory: \(underlying.localizedDescription)"
             case let .cannotWriteProfile(underlying):
                 "Cannot save signature profile: \(underlying.localizedDescription)"
-            case let .cannotReadProfile(underlying):
-                "Cannot load signature profile: \(underlying.localizedDescription)"
             case .invalidProfileData:
                 "The signature profile data is invalid or corrupted."
-            case .storageCorrupted:
-                "Signature storage is corrupted."
             case .insufficientDiskSpace:
                 "Insufficient disk space to save signature profile."
             case let .permissionDenied(path):
@@ -74,14 +65,12 @@ final class SignatureStore: ObservableObject {
 
         var recoverySuggestion: String? {
             switch self {
-            case .cannotEncodeProfile, .invalidProfileData, .storageCorrupted:
+            case .cannotEncodeProfile, .invalidProfileData:
                 "Delete the corrupted signature and create a new one."
-            case .cannotCreateStorageDirectory, .permissionDenied:
+            case .permissionDenied:
                 "Check that the app has permission to access its container directory."
             case .cannotWriteProfile, .insufficientDiskSpace:
                 "Free up disk space and try again."
-            case .cannotReadProfile:
-                "Try restarting the app. If the problem persists, recreate your signature."
             }
         }
     }
