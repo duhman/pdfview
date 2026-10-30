@@ -6,16 +6,22 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
 
 jobs:
+  lint:
+    name: Code Quality
+    uses: ./.github/workflows/quality.yml
+
   release:
     name: Build and attach app bundle
+    needs: lint
     runs-on: macos-15
-
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,41 +35,52 @@ jobs:
         id: version
         run: echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
+      - name: Build debug app (stock Bash)
+        run: /bin/bash ./build_app.sh debug
+
       - name: Test
         run: swift test --parallel
 
       - name: Build universal app bundle
         env:
           VERSION: ${{ steps.version.outputs.value }}
-        run: |
-          swift build -c release --arch arm64 --scratch-path .build-arm
-          swift build -c release --arch x86_64 --scratch-path .build-x86
-          ./build_app.sh release
-          lipo -create \
-            .build-arm/out/Products/Release/PDFView \
-            .build-x86/out/Products/Release/PDFView \
-            -output PDFView.app/Contents/MacOS/PDFView
-          codesign --force --sign - --entitlements Resources/PDFView.entitlements PDFView.app
+          ARCHES: arm64 x86_64
+        run: /bin/bash ./build_app.sh release
 
       - name: Verify app bundle
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
         run: |
-          test -d PDFView.app/Contents
           test -x PDFView.app/Contents/MacOS/PDFView
-          lipo -info PDFView.app/Contents/MacOS/PDFView | grep -q arm64
-          lipo -info PDFView.app/Contents/MacOS/PDFView | grep -q x86_64
-          /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' PDFView.app/Contents/Info.plist | grep -q '14.2'
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' PDFView.app/Contents/Info.plist | grep -q "${{ steps.version.outputs.value }}"
+          test -s PDFView.app/Contents/Resources/AppIcon.icns
+          lipo -verify_arch arm64 PDFView.app/Contents/MacOS/PDFView
+          lipo -verify_arch x86_64 PDFView.app/Contents/MacOS/PDFView
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' PDFView.app/Contents/Info.plist)" = AppIcon
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' PDFView.app/Contents/Info.plist)" = 14.2
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' PDFView.app/Contents/Info.plist)" = "$VERSION"
           codesign --verify --strict PDFView.app
 
       - name: Zip app bundle
-        run: ditto -c -k --keepParent PDFView.app "PDFView-${{ steps.version.outputs.value }}-universal.zip"
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+        run: ditto -c -k --keepParent PDFView.app "PDFView-${VERSION}-universal.zip"
 
       - name: Create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
+          cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
+          Universal macOS build (Apple silicon and Intel, macOS 14.2 or later).
+
+          Unzip the download and move PDFView.app to Applications. This build is ad-hoc signed and not notarized.
+
+          - macOS 14: right-click PDFView.app in Finder, choose Open, then confirm Open.
+          - macOS 15 or later: try opening the app once and dismiss the alert. Open System Settings > Privacy & Security, choose Open Anyway for PDFView, authenticate if asked, and confirm Open. The right-click override is no longer available.
+
+          See [CHANGELOG.md](https://github.com/duhman/pdfview/blob/main/CHANGELOG.md) for details.
+          NOTES
           gh release create "v${VERSION}" \
             "PDFView-${VERSION}-universal.zip" \
             --title "PDFView ${VERSION}" \
-            --notes "Universal macOS build (Apple silicon and Intel, macOS 14.2 or later). Ad-hoc signed, not notarized: on first launch, right-click PDFView.app, choose Open, then confirm. See CHANGELOG.md for details."
+            --notes-file "$RUNNER_TEMP/release-notes.md"

@@ -2,7 +2,11 @@
 # Package PDFView SwiftPM macOS app into a .app bundle with PDF file association
 set -euo pipefail
 
-CONFIG="${1:-release}"
+CONFIG="$(printf '%s' "${1:-release}" | tr '[:upper:]' '[:lower:]')"
+case "$CONFIG" in
+    debug|release) ;;
+    *) echo "ERROR: Unsupported build configuration: $CONFIG" >&2; exit 1 ;;
+esac
 
 # Configuration
 APP_NAME="PDFView"
@@ -24,7 +28,7 @@ ENTITLEMENTS="${ENTITLEMENTS:-Resources/PDFView.entitlements}"
 INFO_PLIST_SOURCE="${INFO_PLIST_SOURCE:-Resources/Info.plist}"
 
 products_configuration_name() {
-    case "${1,,}" in
+    case "$1" in
         release) echo "Release" ;;
         debug) echo "Debug" ;;
         *)
@@ -80,14 +84,23 @@ if [[ ! -f "$ENTITLEMENTS" ]]; then
 fi
 
 # Build for each architecture with optimization
-SWIFT_BUILD_FLAGS=()
+PACKAGE_TEMP="$(mktemp -d "${TMPDIR:-/tmp}/pdfview-package.XXXXXX")"
+trap 'rm -rf "$PACKAGE_TEMP"' EXIT
+LIPO_INPUTS=()
+SWIFT_BUILD_FLAGS=(-c "$CONFIG")
 if [[ "$CONFIG" == "release" ]]; then
-    SWIFT_BUILD_FLAGS=(-Xswiftc -O -Xswiftc -whole-module-optimization)
+    SWIFT_BUILD_FLAGS+=(-Xswiftc -O -Xswiftc -whole-module-optimization)
 fi
 
 for arch in $ARCHES; do
-    echo "==> swift build --arch $arch -c $CONFIG ${SWIFT_BUILD_FLAGS[*]:-}"
-    swift build --arch "$arch" -c "$CONFIG" "${SWIFT_BUILD_FLAGS[@]}"
+    echo "==> swift build --arch $arch ${SWIFT_BUILD_FLAGS[*]}"
+    swift build --arch "$arch" "${SWIFT_BUILD_FLAGS[@]}"
+    BINARY_PATH="$(resolve_binary_path "$arch" "$CONFIG")"
+    echo "==> Using binary ($arch): $BINARY_PATH"
+    # Some SwiftPM toolchains share one Products directory across architectures.
+    # Preserve this executable before the next build can overwrite it.
+    cp "$BINARY_PATH" "$PACKAGE_TEMP/$APP_NAME-$arch"
+    LIPO_INPUTS+=("$PACKAGE_TEMP/$APP_NAME-$arch")
 done
 
 # Clean and create bundle structure
@@ -95,18 +108,9 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR"
 
 # Find and copy binary
-read -r -a ARCH_ARRAY <<< "$ARCHES"
-if [[ ${#ARCH_ARRAY[@]} -eq 1 ]]; then
-    BINARY_PATH="$(resolve_binary_path "${ARCH_ARRAY[0]}" "$CONFIG")"
-    echo "==> Using binary: $BINARY_PATH"
-    cp "$BINARY_PATH" "$MACOS_DIR/$APP_NAME"
+if [[ ${#LIPO_INPUTS[@]} -eq 1 ]]; then
+    cp "${LIPO_INPUTS[0]}" "$MACOS_DIR/$APP_NAME"
 else
-    LIPO_INPUTS=()
-    for arch in $ARCHES; do
-        arch_binary="$(resolve_binary_path "$arch" "$CONFIG")"
-        echo "==> Using binary ($arch): $arch_binary"
-        LIPO_INPUTS+=("$arch_binary")
-    done
     echo "==> Creating universal binary"
     lipo -create "${LIPO_INPUTS[@]}" -output "$MACOS_DIR/$APP_NAME"
 fi
@@ -121,6 +125,7 @@ lipo -info "$MACOS_DIR/$APP_NAME"
 if [[ -d "Sources/$APP_NAME/Resources" ]]; then
     cp -R "Sources/$APP_NAME/Resources/"* "$RESOURCES_DIR/" 2>/dev/null || true
 fi
+cp Resources/AppIcon.icns "$RESOURCES_DIR/AppIcon.icns"
 
 # Get git commit for build metadata
 GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -138,6 +143,7 @@ fi
 /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $APP_NAME" "$CONTENTS/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$CONTENTS/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$CONTENTS/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleIconFile AppIcon" "$CONTENTS/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$CONTENTS/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$CONTENTS/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :LSMinimumSystemVersion $MACOS_MIN_VERSION" "$CONTENTS/Info.plist"
@@ -198,10 +204,23 @@ if [[ "$NOTARIZE" == "true" ]]; then
         echo "ERROR: NOTARY_PROFILE is required when NOTARIZE=true"
         exit 1
     fi
+    NOTARY_TEMP="$PACKAGE_TEMP/notarization"
+    mkdir -p "$NOTARY_TEMP"
+    echo "==> Creating notarization archive"
+    ditto -c -k --keepParent "$APP_BUNDLE" "$NOTARY_TEMP/$APP_NAME.zip"
     echo "==> Submitting for notarization"
-    xcrun notarytool submit "$APP_BUNDLE" --keychain-profile "$NOTARY_PROFILE" --wait
+    xcrun notarytool submit "$NOTARY_TEMP/$APP_NAME.zip" \
+        --keychain-profile "$NOTARY_PROFILE" --wait --output-format plist > "$NOTARY_TEMP/result.plist"
+    NOTARY_STATUS="$(/usr/libexec/PlistBuddy -c 'Print :status' "$NOTARY_TEMP/result.plist")"
+    if [[ "$NOTARY_STATUS" != "Accepted" ]]; then
+        echo "ERROR: Notarization was not accepted (status: $NOTARY_STATUS)" >&2
+        exit 1
+    fi
     echo "==> Stapling notarization ticket"
     xcrun stapler staple "$APP_BUNDLE"
+    xcrun stapler validate "$APP_BUNDLE"
+    echo "==> Creating distribution archive with stapled ticket"
+    ditto -c -k --keepParent "$APP_BUNDLE" "$APP_NAME.zip"
 fi
 
 echo "==> Verifying signature integrity"

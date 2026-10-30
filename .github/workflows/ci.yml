@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 env:
   DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
 
@@ -13,7 +16,6 @@ jobs:
   build-and-test:
     name: Build and Test
     runs-on: macos-15
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,73 +33,48 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-swift-
 
-      - name: Build (debug)
-        run: swift build --configuration debug
+      - name: Build debug app (stock Bash)
+        run: /bin/bash ./build_app.sh debug
 
       - name: Test
         run: swift test --parallel
 
-      - name: Build (release)
-        run: swift build --configuration release
-
-      - name: Build app bundle
-        run: ./build_app.sh release
+      - name: Build release app (stock Bash)
+        run: /bin/bash ./build_app.sh release
 
       - name: Verify app bundle
         run: |
-          test -d PDFView.app/Contents
           test -x PDFView.app/Contents/MacOS/PDFView
-          /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' PDFView.app/Contents/Info.plist | grep -q '14.2'
+          test -s PDFView.app/Contents/Resources/AppIcon.icns
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' PDFView.app/Contents/Info.plist)" = AppIcon
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' PDFView.app/Contents/Info.plist)" = 14.2
           codesign --verify --strict PDFView.app
+          ditto -c -k --keepParent PDFView.app PDFView.zip
 
       - name: Upload app bundle
         uses: actions/upload-artifact@v4
         with:
           name: PDFView-${{ github.sha }}
-          path: PDFView.app/
+          path: PDFView.zip
           retention-days: 14
 
   lint:
     name: Code Quality
-    runs-on: macos-15
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install SwiftLint
-        run: |
-          mkdir -p .tools/swiftlint
-          curl -fsSL https://github.com/realm/SwiftLint/releases/latest/download/portable_swiftlint.zip -o .tools/swiftlint.zip
-          unzip -oq .tools/swiftlint.zip -d .tools/swiftlint
-
-      - name: Run SwiftLint
-        run: .tools/swiftlint/swiftlint lint --reporter github-actions-logging
-
-      - name: Install SwiftFormat
-        run: |
-          mkdir -p .tools/swiftformat
-          curl -fsSL https://github.com/nicklockwood/SwiftFormat/releases/latest/download/swiftformat.zip -o .tools/swiftformat.zip
-          unzip -oq .tools/swiftformat.zip -d .tools/swiftformat
-
-      - name: Apply SwiftFormat
-        run: .tools/swiftformat/swiftformat Sources Tests
-
-      - name: Check SwiftFormat
-        run: .tools/swiftformat/swiftformat Sources Tests --lint
+    uses: ./.github/workflows/quality.yml
 
   docs:
     name: Documentation sanity
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate README structure
+      - name: Validate documentation and resources
         run: |
-          grep -q "## Quick Start" README.md
+          grep -q "## Install" README.md
           grep -q "## Development" README.md
           grep -q "duhman/pdfview" README.md
           test -f Resources/PDFView.entitlements
+          test -s Resources/AppIcon.icns
+          test -f scripts/make-icon.swift
           test -f Tests/PDFViewAppTests/PDFViewerDocumentTests.swift
