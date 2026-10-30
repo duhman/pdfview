@@ -23,7 +23,23 @@ enum StampAccessibility {
         }
     }
 
-    /// "in field Buyer" when the stamp sits in a detected signature field, otherwise "at top right".
+    /// Field names come from the PDF: control characters and runs of whitespace are flattened and the
+    /// name is cut to 40 characters, so a crafted name cannot add lines or long text to announcements.
+    static func fieldDisplayName(_ name: String?, limit: Int = 40) -> String? {
+        guard let name else { return nil }
+        let words = name.unicodeScalars
+            .map {
+                CharacterSet.controlCharacters.contains($0) || CharacterSet.whitespacesAndNewlines
+                    .contains($0) ? " " : Character($0)
+            }
+            .split(separator: " ")
+            .map { String($0) }
+        let flat = words.joined(separator: " ")
+        guard !flat.isEmpty else { return nil }
+        return flat.count > limit ? String(flat.prefix(limit)) + "…" : flat
+    }
+
+    /// "in field “Buyer”" when the stamp sits in a detected signature field, otherwise "at top right".
     static func location(
         of bounds: CGRect,
         pageIndex: Int,
@@ -33,8 +49,8 @@ enum StampAccessibility {
     ) -> String {
         let center = CGPoint(x: bounds.midX, y: bounds.midY)
         if let field = fields.first(where: { $0.pageIndex == pageIndex && $0.bounds.contains(center) }) {
-            if let name = field.name, !name.isEmpty {
-                return "in field \(name)"
+            if let name = fieldDisplayName(field.name) {
+                return "in field “\(name)”"
             }
             return "in a signature field"
         }

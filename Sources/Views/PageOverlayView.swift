@@ -78,7 +78,15 @@ final class PageOverlayView: NSView {
     }
 
     /// Handle edge length in screen points.
-    static let handleSize: CGFloat = 7
+    static let handleSize: CGFloat = 11
+    /// Selection outline width in screen points, drawn over a white halo so it shows on dark ink too.
+    static let selectionLineWidth: CGFloat = 2.5
+
+    /// PDF pages are white in light and dark mode, so the field outline is darkened from the accent
+    /// colour until it keeps 3:1 non-text contrast even with a light accent such as yellow.
+    private static var fieldStrokeColor: NSColor {
+        NSColor.controlAccentColor.blended(withFraction: 0.35, of: .black) ?? .controlAccentColor
+    }
 
     private(set) weak var page: PDFPage?
     weak var delegate: PageOverlayViewDelegate?
@@ -172,9 +180,9 @@ final class PageOverlayView: NSView {
         let point = onePoint
 
         for field in content.fields {
-            context.setFillColor(NSColor.controlAccentColor.withAlphaComponent(0.1).cgColor)
+            context.setFillColor(NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor)
             context.fill(field)
-            context.setStrokeColor(NSColor.controlAccentColor.cgColor)
+            context.setStrokeColor(Self.fieldStrokeColor.cgColor)
             context.setLineWidth(2 * point)
             context.stroke(field.insetBy(dx: point, dy: point))
         }
@@ -197,17 +205,23 @@ final class PageOverlayView: NSView {
     }
 
     private func drawSelection(around rect: CGRect, in context: CGContext, onePoint point: CGFloat) {
-        context.setStrokeColor(NSColor.controlAccentColor.cgColor)
-        context.setLineWidth(point)
+        let accent = Self.fieldStrokeColor.cgColor
+        context.setStrokeColor(NSColor.white.cgColor)
+        context.setLineWidth((Self.selectionLineWidth + 2) * point)
+        context.stroke(rect)
+        context.setStrokeColor(accent)
+        context.setLineWidth(Self.selectionLineWidth * point)
         context.stroke(rect)
 
         let handle = Self.handleSize * point
+        context.setLineWidth(1.5 * point)
         for corner in PlacementGeometry.Corner.allCases {
             let center = corner.point(in: rect)
             let square = CGRect(x: center.x - handle / 2, y: center.y - handle / 2, width: handle, height: handle)
             context.setFillColor(NSColor.white.cgColor)
             context.fill(square)
-            context.stroke(square)
+            context.setStrokeColor(accent)
+            context.stroke(square.insetBy(dx: 0.75 * point, dy: 0.75 * point))
         }
     }
 
@@ -350,24 +364,6 @@ final class PageOverlayView: NSView {
         }
     }
 
-    func screenFrame(ofStamp id: UUID) -> NSRect {
-        guard let stamp = content.stamps.first(where: { $0.id == id }), let window else { return .zero }
-        let local = currentBounds(of: stamp).applying(pageToLocal)
-        return window.convertToScreen(convert(local, to: nil))
-    }
-
-    func selectStampFromAccessibility(_ id: UUID) {
-        delegate?.overlay(self, didSelect: id)
-    }
-
-    func removeStampFromAccessibility(_ id: UUID) {
-        delegate?.overlay(self, didDelete: id)
-    }
-
-    func moveStampFromAccessibility(_ id: UUID) {
-        delegate?.overlay(self, didRequestMove: id)
-    }
-
     // MARK: Hover
 
     override func updateTrackingAreas() {
@@ -401,5 +397,26 @@ final class PageOverlayView: NSView {
         } else {
             super.cursorUpdate(with: event)
         }
+    }
+}
+
+/// Actions VoiceOver performs on a stamp element, routed to the same delegate as the mouse.
+extension PageOverlayView {
+    func screenFrame(ofStamp id: UUID) -> NSRect {
+        guard let stamp = content.stamps.first(where: { $0.id == id }), let window else { return .zero }
+        let local = currentBounds(of: stamp).applying(pageToLocal)
+        return window.convertToScreen(convert(local, to: nil))
+    }
+
+    func selectStampFromAccessibility(_ id: UUID) {
+        delegate?.overlay(self, didSelect: id)
+    }
+
+    func removeStampFromAccessibility(_ id: UUID) {
+        delegate?.overlay(self, didDelete: id)
+    }
+
+    func moveStampFromAccessibility(_ id: UUID) {
+        delegate?.overlay(self, didRequestMove: id)
     }
 }

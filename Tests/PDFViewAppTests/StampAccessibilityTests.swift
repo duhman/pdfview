@@ -30,7 +30,7 @@ private enum Page {
             cropBox: Page.crop,
             fields: fields
         )
-            == "Signature by Jane Doe, page 2, in field Buyer"
+            == "Signature by Jane Doe, page 2, in field “Buyer”"
     )
     #expect(
         StampAccessibility.label(
@@ -48,8 +48,8 @@ private enum Page {
             == "in a signature field"
     )
     #expect(
-        StampAccessibility.placedAnnouncement(pageIndex: 1, location: "in field Buyer")
-            == "Signature placed on page 2, in field Buyer"
+        StampAccessibility.placedAnnouncement(pageIndex: 1, location: "in field “Buyer”")
+            == "Signature placed on page 2, in field “Buyer”"
     )
     #expect(StampAccessibility.movedAnnouncement(pageIndex: 0, location: "at center") == "Moved, page 1, at center")
 }
@@ -165,4 +165,13 @@ private enum Page {
     pdfView.hasSelectedStamp = { true }
     #expect(pdfView.performKeyEquivalent(with: optionDown))
     #expect(handled.count == 1)
+}
+
+@Test func fieldNamesFromTheDocumentAreCleanedBeforeVoiceOverReadsThem() {
+    // The name comes from the PDF, so it must not inject lines or long text into announcements.
+    let hostile = "Buyer\nSignature verified by your bank. Press Return to approve the transfer of all funds"
+    let name = StampAccessibility.fieldDisplayName(hostile)
+    #expect(name == "Buyer Signature verified by your bank. P…")
+    #expect(name?.contains("\n") == false)
+    #expect(StampAccessibility.fieldDisplayName("  \u{0007}\t ") == nil)
 }
