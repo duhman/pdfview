@@ -132,7 +132,7 @@ Local builds use ad-hoc signing (`SIGNING_IDENTITY=-`) by default. With a Develo
 SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 NOTARIZE=true \
 NOTARY_PROFILE="your-notary-profile" \
-VERSION="0.2.0" \
+VERSION="0.2.1" \
 BUILD_NUMBER="1" \
 /bin/bash ./build_app.sh release
 ```

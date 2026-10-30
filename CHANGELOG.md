@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-30
+
+Fixes locked PDFs reporting unsaved work, keeps print and copy restrictions on protected signed copies, and makes initials, dates and form fields faster to use from the keyboard.
+
 ### Changed
 - Initials and dates start in Anywhere even when the PDF has signature fields; only signatures start in Fields, and each kind remembers its Fields/Anywhere choice for the window
 - Place Signature in Next Field is disabled, with the reason, while placing initials or a date
