@@ -57,10 +57,14 @@ extension FormFieldNavigation {
         [name ?? "Unnamed field", kind.spokenName, state].compactMap(\.self).joined(separator: ", ")
     }
 
+    /// A push button is never pressed from the keyboard (see `activation`), so the message says that
+    /// rather than asking for a click a keyboard or VoiceOver user may not be able to make.
     static func unavailableMessage(name: String?, kind: Kind) -> String {
-        kind == .button
-            ? "\(name ?? "This button") is a button. Click it to use it."
-            : "\(name ?? "This field") can’t be changed."
+        switch (kind, name) {
+        case let (.button, name?): "\(name) is a button and can’t be pressed from the keyboard."
+        case (.button, nil): "This button can’t be pressed from the keyboard."
+        default: "\(name ?? "This field") can’t be changed."
+        }
     }
 
     static let noFieldChosenNotice = "Choose Go > Next Form Field first, then activate the field."
