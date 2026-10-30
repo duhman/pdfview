@@ -42,6 +42,30 @@ struct UnsavedWork: Equatable {
     }
 }
 
+/// What Escape does in the document, most recent activity first. The Find field handles its own
+/// Escape (it closes Find) because that is where the user's attention is.
+enum EscapeAction: Equatable {
+    case cancelExport
+    case stopSigning
+    case closeFind
+    case deselect
+    case none
+}
+
+/// What to do once the signature setup sheet saves, when signing was asked for before a signature existed.
+enum PendingSigningAction: Equatable {
+    case enter(SigningMode)
+    case placeInNextField
+    case placeOnCurrentPage
+}
+
+/// Key equivalents for the Sign menu, shown in the banner so the keyboard path is discoverable.
+/// Chosen to avoid the standard File, Edit (including Find), View, Window and Go menu chords.
+enum SigningShortcut {
+    static let placeInNextField = "⌥⌘N"
+    static let placeOnCurrentPage = "⌥⌘P"
+}
+
 enum SigningFlowLogic {
     static func entryMode(hasSignatureFields: Bool) -> SigningMode {
         hasSignatureFields ? .fieldPlacement : .freePlacement
@@ -73,12 +97,39 @@ enum SigningFlowLogic {
 
     static func statusText(mode: SigningMode) -> String {
         mode == .fieldPlacement
-            ? "Click a signature field to sign, or choose Anywhere."
-            : "Click where you want to sign."
+            ? "Click a signature field, choose Anywhere, or use Sign > Place in Next Field "
+            + "(\(SigningShortcut.placeInNextField))."
+            : "Click where you want to sign, or use Sign > Place on Current Page "
+            + "(\(SigningShortcut.placeOnCurrentPage))."
     }
 
     static func enteredAnnouncement(mode: SigningMode) -> String {
         "Signing. \(statusText(mode: mode)) Press Escape to stop."
+    }
+
+    static let exitedAnnouncement = "Stopped signing."
+
+    static func signatureMenuTitle(hasProfile: Bool) -> String {
+        hasProfile ? "Edit Signature…" : "Create Signature…"
+    }
+
+    static func escapeAction(
+        isExporting: Bool,
+        isSigning: Bool,
+        isFindVisible: Bool,
+        hasSelection: Bool
+    ) -> EscapeAction {
+        if isExporting {
+            .cancelExport
+        } else if isSigning {
+            .stopSigning
+        } else if isFindVisible {
+            .closeFind
+        } else if hasSelection {
+            .deselect
+        } else {
+            .none
+        }
     }
 
     static func placedAnnouncement(pageIndex: Int) -> String {

@@ -78,14 +78,17 @@ struct SigningCommandMenu: Commands {
             .keyboardShortcut("s", modifiers: [.command, .option])
             .disabled(!canSign)
 
+            // Keys mirror SigningShortcut, which the signing banner shows.
             Button("Place in Next Field") {
                 actions?.placeInNextField()
             }
+            .keyboardShortcut("n", modifiers: [.command, .option])
             .disabled(!(canSign && hasFields))
 
             Button("Place on Current Page") {
                 actions?.placeOnCurrentPage()
             }
+            .keyboardShortcut("p", modifiers: [.command, .option])
             .disabled(!canSign)
 
             Toggle("Anywhere", isOn: Binding(
@@ -106,12 +109,12 @@ struct SigningCommandMenu: Commands {
 
             Divider()
 
-            Button("Edit Signature…") {
+            Button(SigningFlowLogic.signatureMenuTitle(hasProfile: signatureStore.profile != nil)) {
                 actions?.editSignature()
             }
-            .disabled(actions == nil || signatureStore.profile == nil)
+            .disabled(actions == nil)
 
-            Button("Delete Signature…") {
+            Button("Delete Saved Signature…") {
                 actions?.deleteSignature()
             }
             .disabled(actions == nil || signatureStore.profile == nil)

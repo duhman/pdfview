@@ -7,6 +7,35 @@ protocol PageOverlayViewDelegate: AnyObject {
     func overlay(_ overlay: PageOverlayView, didSelect id: UUID?)
     func overlay(_ overlay: PageOverlayView, didChange id: UUID, to bounds: CGRect, actionName: String)
     func overlay(_ overlay: PageOverlayView, didDelete id: UUID)
+    func overlayDidRequestStopSigning(_ overlay: PageOverlayView)
+}
+
+/// The one-item context menu shown on the document while signing.
+@MainActor
+enum StopSigningMenu {
+    private final class Target: NSObject {
+        let action: () -> Void
+
+        init(_ action: @escaping () -> Void) {
+            self.action = action
+        }
+
+        @objc
+        func run(_: Any?) {
+            action()
+        }
+    }
+
+    static func make(_ action: @escaping () -> Void) -> NSMenu {
+        let menu = NSMenu()
+        let target = Target(action)
+        let item = NSMenuItem(title: "Stop Signing", action: #selector(Target.run(_:)), keyEquivalent: "")
+        item.target = target
+        // NSMenuItem holds its target weakly; the represented object keeps it alive with the menu.
+        item.representedObject = target
+        menu.addItem(item)
+        return menu
+    }
 }
 
 /// Draws one page's signature stamps, detected signature fields and the hover ghost, and handles
@@ -270,13 +299,23 @@ final class PageOverlayView: NSView {
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        guard content.signingMode == .idle, let stamp = target(at: pagePoint(for: event))?.stamp else {
+        if content.signingMode != .idle {
+            return StopSigningMenu.make { [weak self] in
+                guard let self else { return }
+                delegate?.overlayDidRequestStopSigning(self)
+            }
+        }
+        guard let stamp = target(at: pagePoint(for: event))?.stamp else {
             return nil
         }
         delegate?.overlay(self, didSelect: stamp.id)
 
         let menu = NSMenu()
-        let item = NSMenuItem(title: "Delete Signature", action: #selector(deleteFromMenu(_:)), keyEquivalent: "")
+        let item = NSMenuItem(
+            title: "Remove Signature from Page",
+            action: #selector(deleteFromMenu(_:)),
+            keyEquivalent: ""
+        )
         item.target = self
         item.representedObject = stamp.id
         menu.addItem(item)

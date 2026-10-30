@@ -26,6 +26,7 @@ func makeRepresentable(
         reader: ReaderController(),
         fileURL: nil,
         onEscape: {},
+        onStopSigning: {},
         isExporting: false,
         onWindow: { _ in },
         onPlaceSignature: { _, _ in },

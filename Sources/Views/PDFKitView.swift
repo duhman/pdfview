@@ -118,6 +118,8 @@ struct PDFKitView: NSViewRepresentable {
     var reader: ReaderController
     var fileURL: URL?
     var onEscape: () -> Void
+    /// Stop Signing from the page's context menu.
+    var onStopSigning: () -> Void
     var isExporting: Bool
 
     /// The window hosting the PDF view, reported whenever it is (re)attached.
@@ -215,6 +217,7 @@ extension PDFKitView {
             pdfView.keyHandler = { [weak self] event in self?.handleKey(event) ?? false }
             pdfView.onWindowChange = { [weak self] window in self?.parent.onWindow(window) }
             pdfView.onUserInteraction = { [weak self] in self?.scheduleFormValueCheck() }
+            pdfView.onStopSigning = { [weak self] in self?.parent.onStopSigning() }
 
             let center = NotificationCenter.default
             center.addObserver(
@@ -425,21 +428,23 @@ extension PDFKitView {
 
         // MARK: Keyboard
 
-        private var isHandlingEscape: Bool {
-            parent.isExporting || parent.signingMode != .idle || parent.reader.find.isVisible
-        }
-
         private func handleKey(_ event: NSEvent) -> Bool {
             if event.keyCode == 53 {
-                if isHandlingEscape {
+                let action = SigningFlowLogic.escapeAction(
+                    isExporting: parent.isExporting,
+                    isSigning: parent.signingMode != .idle,
+                    isFindVisible: parent.reader.find.isVisible,
+                    hasSelection: selectedPlacementID != nil
+                )
+                switch action {
+                case .cancelExport, .stopSigning, .closeFind:
                     parent.onEscape()
-                    return true
-                }
-                if selectedPlacementID != nil {
+                case .deselect:
                     selectedPlacementID = nil
-                    return true
+                case .none:
+                    return false
                 }
-                return false
+                return true
             }
 
             guard let selectedID = selectedPlacementID,
@@ -552,6 +557,10 @@ extension PDFKitView.Coordinator: PageOverlayViewDelegate {
         selectedPlacementID = nil
         parent.onDeletePlacement(id)
     }
+
+    func overlayDidRequestStopSigning(_: PageOverlayView) {
+        parent.onStopSigning()
+    }
 }
 
 @MainActor
@@ -562,6 +571,13 @@ final class SigningPDFView: PDFView {
     var onWindowChange: ((NSWindow) -> Void)?
     /// A click or key press PDFKit handled, which may have changed a form widget.
     var onUserInteraction: (() -> Void)?
+    var onStopSigning: (() -> Void)?
+
+    /// While signing, a right-click offers Stop Signing instead of PDFKit's reading menu.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard isSigning() else { return super.menu(for: event) }
+        return StopSigningMenu.make { [weak self] in self?.onStopSigning?() }
+    }
 
     /// Clicks that reach the PDF view itself (outside any page overlay) are consumed while signing
     /// and passed to PDFKit untouched otherwise.

@@ -37,7 +37,7 @@ struct PDFContentView: View {
 
     @State private var showSignatureSetupSheet = false
     @State private var isEditingSignature = false
-    @State private var modeAfterSetup: SigningMode?
+    @State private var pendingAfterSetup: PendingSigningAction?
     @State private var showDeleteSignatureAlert = false
     @State private var errorAlert: ErrorAlert?
 
@@ -56,6 +56,11 @@ struct PDFContentView: View {
             }
             .onChange(of: unsavedWork) { _, work in
                 closeGuard.isEdited = !work.isEmpty
+            }
+            .onChange(of: reader.find.isVisible) { _, isVisible in
+                if !isVisible {
+                    viewer.focusDocument()
+                }
             }
             .focusedSceneValue(\.signingActions, signingActions)
             .focusedSceneValue(\.zoomActions, zoomActions)
@@ -96,7 +101,7 @@ struct PDFContentView: View {
             }
 
             if reader.find.isVisible {
-                FindBar(find: reader.find, onEscape: handleEscape)
+                FindBar(find: reader.find, onEscape: closeFind)
             }
             if let reason = reader.printDisabledReason {
                 Text(reason).font(.caption).foregroundStyle(.secondary).padding(4)
@@ -121,6 +126,7 @@ struct PDFContentView: View {
             reader: reader,
             fileURL: fileURL,
             onEscape: handleEscape,
+            onStopSigning: exitSigning,
             isExporting: export.progress != nil,
             onWindow: attachCloseGuard,
             onPlaceSignature: placeSignature,
@@ -261,16 +267,20 @@ extension PDFContentView {
             existingProfile: isEditingSignature ? signatureStore.profile : nil,
             onCancel: {
                 showSignatureSetupSheet = false
-                modeAfterSetup = nil
+                pendingAfterSetup = nil
             },
             onSave: { profile in
                 do {
                     try signatureStore.saveProfile(profile)
                     showSignatureSetupSheet = false
-                    if let modeAfterSetup {
-                        enterSigning(modeAfterSetup)
+                    let pending = pendingAfterSetup
+                    pendingAfterSetup = nil
+                    switch pending {
+                    case let .enter(mode)?: enterSigning(mode)
+                    case .placeInNextField?: placeInNextField()
+                    case .placeOnCurrentPage?: placeOnCurrentPage()
+                    case nil: break
                     }
-                    modeAfterSetup = nil
                 } catch {
                     errorAlert = ErrorAlert(title: "Couldn’t Save Signature", error: error)
                 }
@@ -420,12 +430,17 @@ extension PDFContentView {
     private func startSigning(_ mode: SigningMode) {
         guard canSign else { return }
         guard signatureStore.profile != nil else {
-            isEditingSignature = false
-            modeAfterSetup = mode
-            showSignatureSetupSheet = true
+            requestSignatureSetup(then: .enter(mode))
             return
         }
         enterSigning(mode)
+    }
+
+    /// Asks for a signature first; the requested action runs once the sheet saves.
+    private func requestSignatureSetup(then action: PendingSigningAction) {
+        isEditingSignature = false
+        pendingAfterSetup = action
+        showSignatureSetupSheet = true
     }
 
     private func enterSigning(_ mode: SigningMode) {
@@ -435,7 +450,11 @@ extension PDFContentView {
     }
 
     private func exitSigning() {
+        guard signingMode != .idle else { return }
         signingMode = SigningFlowLogic.exited(signingMode)
+        announce(SigningFlowLogic.exitedAnnouncement)
+        // The Done button that may have had focus is gone; give focus back to the document.
+        viewer.focusDocument()
     }
 
     private func setAnywhere(_ anywhere: Bool) {
@@ -451,7 +470,7 @@ extension PDFContentView {
     private func placeInNextField() {
         guard canSign else { return }
         guard let imageSize = signatureImageSize else {
-            startSigning(.fieldPlacement)
+            requestSignatureSetup(then: .placeInNextField)
             return
         }
         guard let index = SigningFlowLogic.nextFieldIndex(after: lastFieldIndex, count: signatureFields.count),
@@ -475,7 +494,7 @@ extension PDFContentView {
     private func placeOnCurrentPage() {
         guard canSign else { return }
         guard let imageSize = signatureImageSize else {
-            startSigning(.freePlacement)
+            requestSignatureSetup(then: .placeOnCurrentPage)
             return
         }
         let pageIndex = viewer.currentPageIndex ?? 0
@@ -487,6 +506,7 @@ extension PDFContentView {
             imageSize: imageSize,
             pageBounds: cropBox
         )
+        viewer.reveal(bounds, onPageAt: pageIndex)
         placeSignature(pageIndex: pageIndex, bounds: bounds)
     }
 
@@ -511,9 +531,10 @@ extension PDFContentView {
         return editor
     }
 
+    /// Edits the saved signature, or creates one when there is none yet.
     private func editSignature() {
-        isEditingSignature = true
-        modeAfterSetup = nil
+        isEditingSignature = signatureStore.profile != nil
+        pendingAfterSetup = nil
         showSignatureSetupSheet = true
     }
 
@@ -598,13 +619,23 @@ extension PDFContentView {
     }
 
     private func handleEscape() {
-        if export.progress != nil {
-            cancelExport()
-        } else if signingMode != .idle {
-            exitSigning()
-        } else if reader.find.isVisible {
-            reader.find.close()
+        let action = SigningFlowLogic.escapeAction(
+            isExporting: export.progress != nil,
+            isSigning: signingMode != .idle,
+            isFindVisible: reader.find.isVisible,
+            hasSelection: false
+        )
+        switch action {
+        case .cancelExport: cancelExport()
+        case .stopSigning: exitSigning()
+        case .closeFind: closeFind()
+        case .deselect, .none: break
         }
+    }
+
+    private func closeFind() {
+        reader.find.close()
+        viewer.focusDocument()
     }
 
     private func attachCloseGuard(to window: NSWindow) {
@@ -636,7 +667,7 @@ final class SignaturePlacementEditor {
     }
 
     func delete(id: UUID) {
-        remove(id: id, actionName: "Delete Signature")
+        remove(id: id, actionName: "Remove Signature from Page")
     }
 
     func setBounds(id: UUID, to bounds: CGRect, actionName: String) {

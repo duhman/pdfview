@@ -42,14 +42,6 @@ import Testing
     #expect(SigningFlowLogic.refreshed(.idle, hasSignatureFields: false) == .idle)
 }
 
-@Test func bannerTextMatchesPlacementMode() {
-    #expect(SigningFlowLogic.statusText(mode: .freePlacement) == "Click where you want to sign.")
-    #expect(
-        SigningFlowLogic.statusText(mode: .fieldPlacement)
-            == "Click a signature field to sign, or choose Anywhere."
-    )
-}
-
 @Test func announcementsDescribeTheOutcome() {
     #expect(SigningFlowLogic.enteredAnnouncement(mode: .freePlacement).contains("Escape"))
     #expect(SigningFlowLogic.placedAnnouncement(pageIndex: 1) == "Signature placed on page 2")

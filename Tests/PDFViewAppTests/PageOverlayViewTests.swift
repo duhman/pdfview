@@ -131,6 +131,7 @@ private func color(of overlay: PageOverlayView, atPagePoint point: CGPoint) thro
         reader: ReaderController(),
         fileURL: nil,
         onEscape: {},
+        onStopSigning: {},
         isExporting: false,
         onWindow: { _ in },
         onPlaceSignature: { _, _ in },
