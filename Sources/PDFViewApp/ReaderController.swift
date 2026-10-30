@@ -24,6 +24,9 @@ final class ReaderController: NSObject {
     private(set) weak var view: PDFView?
     let find = FindController()
 
+    private(set) weak var observedClipView: NSClipView?
+    private var outlineByPage: [Int: ObjectIdentifier] = [:]
+    private var resolvedOutlinePages: Set<Int> = []
     private weak var attachedDocument: PDFDocument?
     private var fileURL: URL?
     private var restored = false
@@ -72,13 +75,9 @@ final class ReaderController: NSObject {
             center.addObserver(self, selector: #selector(viewChanged), name: name, object: view)
         }
         center.addObserver(self, selector: #selector(unlocked), name: .PDFDocumentDidUnlock, object: view.document)
-        center.addObserver(
-            self,
-            selector: #selector(scrolled(_:)),
-            name: NSView.boundsDidChangeNotification,
-            object: nil
-        )
+        observeScrollView()
         DispatchQueue.main.async { [weak self] in
+            self?.observeScrollView()
             self?.restoreIfNeeded()
             self?.refresh()
         }
@@ -94,6 +93,9 @@ final class ReaderController: NSObject {
         for name in names {
             NotificationCenter.default.removeObserver(self, name: name, object: nil)
         }
+        observedClipView = nil
+        outlineByPage.removeAll()
+        resolvedOutlinePages.removeAll()
         view = nil
         attachedDocument = nil
     }
@@ -111,8 +113,7 @@ final class ReaderController: NSObject {
     }
 
     @objc private func scrolled(_ notification: Notification) {
-        guard let clip = notification.object as? NSClipView,
-              clip.documentView === view?.documentView else { return }
+        guard let clip = notification.object as? NSClipView, clip === observedClipView else { return }
         schedulePersistence()
     }
 
@@ -120,6 +121,8 @@ final class ReaderController: NSObject {
         guard let document = attachedDocument else { return }
         pageCount = document.pageCount
         outline = ReaderOutlineNode.children(of: document.outlineRoot) ?? []
+        outlineByPage.removeAll()
+        resolvedOutlinePages.removeAll()
         printDisabledReason = document.isLocked ? "Unlock this PDF to print." :
             (document.allowsPrinting ? nil : "Printing is not allowed by this PDF’s permissions.")
         refreshPage()
@@ -130,9 +133,51 @@ final class ReaderController: NSObject {
         let index = document.index(for: page)
         pageIndex = index == NSNotFound ? nil : index
         pageLabel = page.label
-        currentOutlineID = page.selection(for: page.bounds(for: .cropBox))
-            .flatMap { document.outlineItem(for: $0) }
-            .map(ObjectIdentifier.init)
+        if resolvedOutlinePages.insert(index).inserted {
+            outlineByPage[index] = page.selection(for: page.bounds(for: .cropBox))
+                .flatMap { document.outlineItem(for: $0) }
+                .map(ObjectIdentifier.init)
+        }
+        currentOutlineID = outlineByPage[index]
+    }
+
+    private func observeScrollView() {
+        guard let clip = view?.documentView?.enclosingScrollView?.contentView,
+              clip !== observedClipView else { return }
+        if let observedClipView {
+            NotificationCenter.default.removeObserver(
+                self, name: NSView.boundsDidChangeNotification, object: observedClipView
+            )
+        }
+        observedClipView = clip
+        clip.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(scrolled(_:)), name: NSView.boundsDidChangeNotification, object: clip
+        )
+    }
+
+    /// Integrator: cancel the task on document replacement/unlock and discard canceled partial results.
+    static func scanSignatureFields(
+        in document: PDFDocument, batchSize: Int = 16, batch: ([SignatureField]) -> Void = { _ in }
+    ) async throws -> [SignatureField] {
+        guard !document.isLocked else { return [] }
+        var fields: [SignatureField] = []
+        let stride = max(1, batchSize)
+        for start in Swift.stride(from: 0, to: document.pageCount, by: stride) {
+            try Task.checkCancellation()
+            var found: [SignatureField] = []
+            for index in start ..< min(start + stride, document.pageCount) {
+                guard let page = document.page(at: index) else { continue }
+                found += page.annotations.filter(SigningFlowLogic.isSignatureField).map {
+                    SignatureField(pageIndex: index, bounds: $0.bounds)
+                }
+            }
+            fields += found
+            batch(found)
+            await Task.yield()
+        }
+        try Task.checkCancellation()
+        return fields
     }
 
     func go(to index: Int) {

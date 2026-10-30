@@ -57,10 +57,9 @@ struct SignedPDFAtomicExportTests {
     @Test
     func noPlacementExportUsesLivePageChanges() throws {
         let source = try ExportFixture.document()
-        let baseline = try #require(source.dataRepresentation())
         let additional = try ExportFixture.document()
         try source.insert(#require(additional.page(at: 0)), at: 1)
-        let model = try ExportFixture.model(source, baseline: baseline, signed: false)
+        let model = try ExportFixture.model(source, signed: false)
         try ExportFixture.withDirectory { directory in
             let url = directory.appendingPathComponent("signed.pdf")
             try model.writeSignedCopy(to: url)

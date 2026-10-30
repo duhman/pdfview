@@ -6,7 +6,7 @@ This document describes the current source. Interactive behavior still requires 
 
 ## Document model and export
 
-`PDFViewerDocument` owns the document's live PDFKit document and signature placements in PDF page coordinates. The live, unlocked document is the export source so edits to forms survive. The viewing document lifecycle keeps opening and reading separate from the explicit Save Signed Copy action.
+`PDFViewerDocument` owns the document's live PDFKit document and signature placements in PDF page coordinates. Export captures the live, unlocked document so edits to forms survive; the async path takes an independent PDFKit document copy before its first suspension and rebuilds navigation on that snapshot. Later form, annotation and page edits cannot mix states across exported pages. The viewing document lifecycle keeps opening and reading separate from the explicit Save Signed Copy action.
 
 `SignedPDFExporter` renders page content and visual signature stamps into a flattened copy. It preserves media/crop boxes and rotation, restores link annotations and the outline by page index, and copies document attributes. Signature images fit within their placement bounds without changing aspect ratio. Export stages output on the destination volume, validates the result, then replaces the destination atomically. An image-rendering or write failure must not silently produce an incomplete copy.
 
@@ -36,7 +36,20 @@ The reader provides a page indicator, Go to Page, thumbnails and outline sidebar
 
 `ReadingPositionStore` is a Codable value with SHA-256 keys derived from standardized file paths. UserDefaults retains at most 200 entries in least-recently-used order. Values contain the page index, destination point and fit/manual zoom; paths and security bookmarks are not persisted. Invalid, corrupt or out-of-range positions are ignored.
 
-`SignedCopyOperation` reserves the window's save slot before opening a save panel and prevents duplicate saves/printing while busy. The async exporter renders on the main actor, yields after each page, reports determinate progress and checks cancellation before atomic replacement. PDFKit objects never move to a worker thread. Final PDFKit serialization and validation are synchronous stages, so cancellation takes effect at the surrounding boundaries. Placements are captured at the start; later placement edits remain unexported. `PDFPrinting` checks source print permissions, prepares a temporary signed PDF when needed, retains it through the native print operation with auto-rotation, and removes it after completion, cancellation or error.
+`SignedCopyOperation` reserves the window's save slot before opening a save panel and prevents duplicate saves/printing while busy. It rejects the original by resolved path or file/volume resource identity, including symlinks and hard links. The exporter rechecks identity before committing. PDFKit rendering, serialization and validation stay on the main actor, with cancellation/yield boundaries between rendering, writing, geometry restoration and validation. Page boxes cross to a detached task as immutable `Sendable` values; the byte-level geometry repair uses no PDFKit objects. PDFKit serialization itself remains synchronous. Placements are captured at the start; later placement edits remain unexported. `PDFPrinting` checks source print permissions, prepares a temporary signed PDF when needed, retains it through the native print operation with auto-rotation, and removes it after completion, cancellation or error.
+
+`DocumentProtection` owns an in-memory password for one open document and calls PDFKit's unlock API. `UnlockDocumentSheet` provides secure entry, wrong-password feedback and Cancel. The save accessory defaults to keeping protection when the password is known, exposes an explicit opt-out, and explains that an unknown password means an unprotected copy. Export writes both user and owner password options and validates the protected file by unlocking it before replacement. Encrypted output needing nonzero-origin geometry repair fails safely: appending plaintext streams would corrupt the encrypted file. The error advises making a normalized PDF using Print, reopening it and placing signatures again.
+
+### Round 2 integration hooks
+
+The view-layer slice owns wiring these components into `PDFContentView` and `PDFKitView`; those files are untouched here:
+
+- Retain `DocumentProtection(document:)` per document identity; present `UnlockDocumentSheet`, dismiss it through `onUnlock`/`onCancel`, and call `refresh()` after a native PDFKit unlock.
+- Call `SignedCopyOperation.configure(_:originalURL:protection:)` before presenting the save panel. The explicit original URL is required for SwiftUI documents parsed from bytes, where PDFKit's `documentURL` is nil. Configuration installs the accessory and carries its selected password into `write`.
+- Replace the synchronous signature-field scan with `try await ReaderController.scanSignatureFields(in:batchSize:batch:)`. It yields between batches and checks cancellation. Cancel/discard stale scan tasks on document replacement or unlock.
+
+`ReaderController` scopes bounds notifications to the PDF view's clip view and caches outline lookups, including missing entries, per page until document refresh.
+
 
 ## Privacy and file access
 

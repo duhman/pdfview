@@ -91,6 +91,8 @@ To build a release bundle:
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the pinned SwiftLint and SwiftFormat setup, quality checks, icon generation, and manual verification. There is no hosted CI: run `/bin/bash scripts/ci-local.sh` before pushing. It builds both bundle configurations with `/bin/bash`, runs the tests, checks the bundle, and lints the unmodified checkout.
 
+Signed exports capture a stable start state and reject replacing the original file. The source also includes document-scoped password protection and unlock/save-accessory components; their window integration is described in [Architecture](ARCHITECTURE.md#round-2-integration-hooks). Protected export with nonzero page origins fails with recovery advice instead of risking an invalid copy.
+
 ### Signing and notarization
 
 Local builds use ad-hoc signing (`SIGNING_IDENTITY=-`) by default. With a Developer ID identity and an existing `notarytool` keychain profile:

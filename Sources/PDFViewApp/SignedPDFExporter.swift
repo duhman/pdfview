@@ -13,11 +13,19 @@ enum SignedPDFExporter {
         let image: CGImage
     }
 
+    private struct PreparedPDF {
+        let document: PDFDocument
+        let rendered: PDFDocument
+        let pages: [PDFPage]
+    }
+
     static func write(
         _ source: PDFDocument,
         placements: [PDFViewerDocument.SignaturePlacement],
-        to destination: URL
+        to destination: URL,
+        password: String? = nil
     ) throws {
+        try SignedCopyOperation.validateDestination(destination, originalURL: source.documentURL)
         guard !source.isLocked else { throw ExportError.documentLocked }
         let sourcePages = try pages(in: source)
         // PDFDestination.page is weak. Keep every destination page alive through serialization.
@@ -36,14 +44,16 @@ enum SignedPDFExporter {
             )
             defer { try? fileManager.removeItem(at: staging) }
             let completed = staging.appendingPathComponent("completed.pdf")
-            if placements.isEmpty, !source.isEncrypted, !requiresPageRebuild {
+            if placements.isEmpty, !source.isEncrypted, password == nil, !requiresPageRebuild {
                 guard source.write(to: completed) else { throw ExportError.cannotEncodeDocumentData }
             } else {
                 let rendered = staging.appendingPathComponent("rendered.pdf")
                 try render(source, stamps: stamps, to: rendered)
-                try finalize(rendered, from: source, to: completed)
+                let output = try structuredDocument(rendered, from: source)
+                try write(output, to: completed, password: password)
+                try PDFExportGeometry.restore(at: completed, pages: geometry(of: sourcePages))
             }
-            _ = try validatedDocument(at: completed, pageCount: source.pageCount)
+            _ = try validatedDocument(at: completed, pageCount: source.pageCount, password: password)
             if fileManager.fileExists(atPath: destination.path) {
                 _ = try fileManager.replaceItemAt(destination, withItemAt: completed)
             } else {
@@ -61,11 +71,15 @@ enum SignedPDFExporter {
         _ source: PDFDocument,
         placements: [PDFViewerDocument.SignaturePlacement],
         to destination: URL,
+        password: String? = nil,
+        originalURL: URL? = nil,
         progress: (ExportProgress) -> Void
     ) async throws {
-        guard destination.isFileURL else { throw ExportError.invalidDestinationURL }
+        let originalURL = originalURL ?? source.documentURL
+        try SignedCopyOperation.validateDestination(destination, originalURL: originalURL)
         guard !source.isLocked else { throw ExportError.documentLocked }
         try Task.checkCancellation()
+        let source = try snapshot(of: source)
         let sourcePages = try pages(in: source)
         defer { withExtendedLifetime(sourcePages) {} }
         let stamps = try decode(placements, pageCount: source.pageCount)
@@ -77,14 +91,8 @@ enum SignedPDFExporter {
         let rendered = staging.appendingPathComponent("rendered.pdf")
         let completed = staging.appendingPathComponent("completed.pdf")
         try await renderAsync(sourcePages, stamps: stamps, to: rendered, progress: progress)
-        try Task.checkCancellation()
-        try finalize(rendered, from: source, to: completed)
-        // Allow an Escape queued during final serialization to cancel before committing the file.
-        await Task.yield()
-        try Task.checkCancellation()
-        _ = try validatedDocument(at: completed, pageCount: sourcePages.count)
-        await Task.yield()
-        try Task.checkCancellation()
+        try await finalizeAsync(rendered, from: source, to: completed, password: password, progress: progress)
+        try SignedCopyOperation.validateDestination(destination, originalURL: originalURL)
         if manager.fileExists(atPath: destination.path) {
             _ = try manager.replaceItemAt(destination, withItemAt: completed)
         } else {
@@ -131,7 +139,7 @@ enum SignedPDFExporter {
         }
     }
 
-    private static func finalize(_ rendered: URL, from source: PDFDocument, to completed: URL) throws {
+    private static func structuredDocument(_ rendered: URL, from source: PDFDocument) throws -> PreparedPDF {
         let renderedDocument = try validatedDocument(at: rendered, pageCount: source.pageCount)
         let outputPages = try pages(in: renderedDocument)
         let output = PDFDocument()
@@ -141,9 +149,64 @@ enum SignedPDFExporter {
             output.insert(page, at: index)
         }
         try restoreStructure(from: source, to: output)
-        guard output.write(to: completed) else { throw ExportError.cannotEncodeDocumentData }
-        try PDFExportGeometry.restore(at: completed, pages: pages(in: source))
-        withExtendedLifetime((renderedDocument, outputPages)) {}
+        return PreparedPDF(document: output, rendered: renderedDocument, pages: outputPages)
+    }
+
+    private static func snapshot(of source: PDFDocument) throws -> PDFDocument {
+        let originalPages = try pages(in: source)
+        defer { withExtendedLifetime(originalPages) {} }
+        guard let copy = source.copy() as? PDFDocument, !copy.isLocked else {
+            throw ExportError.cannotEncodeDocumentData
+        }
+        // NSCopying freezes page/annotation state, including unlocked encrypted pages, but loses GoTo targets.
+        for page in try pages(in: copy) {
+            for link in page.annotations where link.type == "Link" {
+                page.removeAnnotation(link)
+            }
+        }
+        try restoreStructure(from: source, to: copy)
+        return copy
+    }
+
+    private static func geometry(of pages: [PDFPage]) -> [PDFExportPageGeometry] {
+        pages.map { PDFExportPageGeometry(media: $0.bounds(for: .mediaBox), crop: $0.bounds(for: .cropBox)) }
+    }
+
+    private static func write(_ output: PreparedPDF, to url: URL, password: String?) throws {
+        // PDFKit destinations hold weak page references; retain every page through serialization.
+        defer { withExtendedLifetime(output) {} }
+        let options: [PDFDocumentWriteOption: Any] = password.map {
+            [.userPasswordOption: $0, .ownerPasswordOption: $0]
+        } ?? [:]
+        guard output.document.write(to: url, withOptions: options) else { throw ExportError.cannotEncodeDocumentData }
+    }
+
+    private static func finalizeAsync(
+        _ rendered: URL,
+        from source: PDFDocument,
+        to completed: URL,
+        password: String?,
+        progress: (ExportProgress) -> Void
+    ) async throws {
+        let boxes = try geometry(of: pages(in: source))
+        let count = source.pageCount
+        let output = try structuredDocument(rendered, from: source)
+        progress(ExportProgress(completedPages: count, totalPages: count, stage: .writing))
+        await Task.yield()
+        try Task.checkCancellation()
+        try write(output, to: completed, password: password)
+        progress(ExportProgress(completedPages: count, totalPages: count, stage: .restoringGeometry))
+        await Task.yield()
+        try Task.checkCancellation()
+        try await Task.detached(priority: .userInitiated) {
+            try PDFExportGeometry.restore(at: completed, pages: boxes)
+        }.value
+        progress(ExportProgress(completedPages: count, totalPages: count, stage: .validating))
+        await Task.yield()
+        try Task.checkCancellation()
+        _ = try validatedDocument(at: completed, pageCount: count, password: password)
+        await Task.yield()
+        try Task.checkCancellation()
     }
 
     private static func decode(_ placements: [Placement], pageCount: Int) throws -> [Int: [Stamp]] {
@@ -200,8 +263,14 @@ enum SignedPDFExporter {
         return Data(bytes: &box, count: MemoryLayout<CGRect>.size)
     }
 
-    private static func validatedDocument(at url: URL, pageCount: Int) throws -> PDFDocument {
-        guard let document = PDFDocument(url: url), !document.isLocked, document.pageCount == pageCount else {
+    private static func validatedDocument(at url: URL, pageCount: Int, password: String? = nil) throws -> PDFDocument {
+        guard let document = PDFDocument(url: url) else { throw ExportError.invalidExportedDocument }
+        if let password {
+            guard document.isEncrypted, document.unlock(withPassword: password) else {
+                throw ExportError.invalidExportedDocument
+            }
+        }
+        guard !document.isLocked, document.pageCount == pageCount else {
             throw ExportError.invalidExportedDocument
         }
         for index in 0 ..< pageCount where document.page(at: index)?.pageRef == nil {
@@ -209,7 +278,9 @@ enum SignedPDFExporter {
         }
         return document
     }
+}
 
+extension SignedPDFExporter {
     private static func restoreStructure(from source: PDFDocument, to output: PDFDocument) throws {
         for index in 0 ..< source.pageCount {
             guard let page = source.page(at: index), let result = output.page(at: index) else {
@@ -269,8 +340,12 @@ enum SignedPDFExporter {
 
 /// Repairs only our freshly generated PDFKit file. PDFKit's full writer normalizes media origins;
 /// an incremental update restores the boxes and page-space content without rewriting image/font streams.
-@MainActor
-private struct PDFExportGeometry {
+struct PDFExportPageGeometry: Sendable {
+    let media: CGRect
+    let crop: CGRect
+}
+
+struct PDFExportGeometry {
     private typealias ExportError = PDFViewerDocument.ExportError
 
     let data: Data
@@ -285,7 +360,7 @@ private struct PDFExportGeometry {
             throw ExportError.cannotPreservePageGeometry
         }
         previousXref = try Self.integer("startxref\\s+(\\d+)\\s+%%EOF\\s*$", in: tail)
-        guard previousXref < data.count,
+        guard (0 ..< data.count).contains(previousXref),
               let table = String(data: data[previousXref...], encoding: .ascii)
         else { throw ExportError.cannotPreservePageGeometry }
         let lines = table.components(separatedBy: .newlines)
@@ -315,9 +390,11 @@ private struct PDFExportGeometry {
         }
     }
 
-    static func restore(at url: URL, pages: [PDFPage]) throws {
-        guard pages.contains(where: { $0.bounds(for: .mediaBox).origin != .zero }) else { return }
+    static func restore(at url: URL, pages: [PDFExportPageGeometry]) throws {
+        guard pages.contains(where: { $0.media.origin != .zero }) else { return }
         let file = try PDFExportGeometry(url: url)
+        // Adding plaintext content streams to encrypted output would corrupt its appearance.
+        guard !file.trailer.contains("/Encrypt") else { throw ExportError.cannotPreservePageGeometry }
         let root = try integer("/Root\\s+(\\d+)\\s+0\\s+R", in: file.trailer)
         let pageRoot = try integer("/Pages\\s+(\\d+)\\s+0\\s+R", in: file.body(root))
         var visited: Set<Int> = []
@@ -326,7 +403,7 @@ private struct PDFExportGeometry {
         var updates: [Int: String] = [:]
         var nextID = file.offsets.count
         for (index, page) in pages.enumerated() {
-            let media = page.bounds(for: .mediaBox)
+            let media = page.media
             guard media.origin != .zero else { continue }
             let pageID = pageIDs[index]
             let body = try file.body(pageID)
@@ -336,7 +413,7 @@ private struct PDFExportGeometry {
             updates[nextID + 1] = stream("Q\n")
             var corrected = set("Contents", to: "[\(nextID) 0 R \(references) \(nextID + 1) 0 R]", in: body)
             corrected = set("MediaBox", to: rect(media), in: corrected)
-            updates[pageID] = set("CropBox", to: rect(page.bounds(for: .cropBox)), in: corrected)
+            updates[pageID] = set("CropBox", to: rect(page.crop), in: corrected)
             nextID += 2
             try file.restoreLinkRects(in: body, origin: media.origin, updates: &updates)
         }
@@ -480,14 +557,24 @@ private struct PDFExportGeometry {
     }
 }
 
-struct ExportProgress: Equatable {
+struct ExportProgress: Equatable, Sendable {
+    enum Stage: Hashable, Sendable {
+        case rendering, writing, restoringGeometry, validating
+    }
+
     var completedPages: Int
     var totalPages: Int
+    var stage: Stage = .rendering
     var fraction: Double {
         totalPages > 0 ? Double(completedPages) / Double(totalPages) : 0
     }
 
     var text: String {
-        "Saving signed copy… \(completedPages) of \(totalPages) pages"
+        switch stage {
+        case .rendering: "Saving signed copy… \(completedPages) of \(totalPages) pages"
+        case .writing: "Writing signed copy…"
+        case .restoringGeometry: "Preserving page geometry…"
+        case .validating: "Checking signed copy…"
+        }
     }
 }
