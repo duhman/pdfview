@@ -1,0 +1,35 @@
+name: Swift quality gates
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Swift lint and format
+    runs-on: macos-15
+    env:
+      SWIFTLINT_VERSION: 0.65.1
+      SWIFTFORMAT_VERSION: 0.64.4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pinned tools
+        run: |
+          mkdir -p "$RUNNER_TEMP/swiftlint" "$RUNNER_TEMP/swiftformat"
+          curl -fsSL "https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/portable_swiftlint.zip" -o "$RUNNER_TEMP/swiftlint.zip"
+          unzip -oq "$RUNNER_TEMP/swiftlint.zip" -d "$RUNNER_TEMP/swiftlint"
+          curl -fsSL "https://github.com/nicklockwood/SwiftFormat/releases/download/${SWIFTFORMAT_VERSION}/swiftformat.zip" -o "$RUNNER_TEMP/swiftformat.zip"
+          unzip -oq "$RUNNER_TEMP/swiftformat.zip" -d "$RUNNER_TEMP/swiftformat"
+          test "$("$RUNNER_TEMP/swiftlint/swiftlint" version)" = "$SWIFTLINT_VERSION"
+          test "$("$RUNNER_TEMP/swiftformat/swiftformat" --version)" = "$SWIFTFORMAT_VERSION"
+
+      - name: SwiftLint
+        run: '"$RUNNER_TEMP/swiftlint/swiftlint" lint --strict --reporter github-actions-logging Sources Tests scripts'
+
+      - name: SwiftFormat (untouched checkout)
+        if: ${{ !cancelled() }}
+        run: '"$RUNNER_TEMP/swiftformat/swiftformat" Sources Tests scripts --lint'

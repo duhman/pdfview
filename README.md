@@ -1,121 +1,112 @@
 # PDFView
 
-A native macOS PDF reader and visual signature stamp app built with Swift 6, SwiftUI, and PDFKit.
+A full native Mac PDF reader with private, offline visual signing.
 
-macOS 14.2 or later. Swift 6, SwiftUI and PDFKit. MIT licensed.
+- Native and fast, built with SwiftUI and Apple's PDFKit.
+- Sign into the PDF's own signature fields or anywhere on a page, then move and resize your signature.
+- Save a flattened signed copy that keeps page sizes, links, and bookmarks.
+- Private: no network access, cloud services, or telemetry; your saved signature stays only on this Mac.
 
-## Features
+## Install
 
-### Native PDF reading
+Requires **macOS 14.2 or later**. Download the universal ZIP for Apple silicon and Intel from the [latest release](https://github.com/duhman/pdfview/releases/latest), unzip it, and move `PDFView.app` to Applications. The feature list below is the target for this release; older downloads may not include all of it.
 
-- Fast PDF rendering via PDFKit
-- Continuous scrolling and zoom
-- PDF document type association (`com.adobe.pdf`)
-- DocumentGroup-based window and recents integration
+The downloadable build is ad-hoc signed and not notarized. For the first launch:
 
-### Visual signatures (not certificate signatures)
+| macOS version | Open PDFView |
+| --- | --- |
+| macOS 14 | In Finder, right-click `PDFView.app`, choose **Open**, then confirm **Open**. |
+| macOS 15 or later | Try opening the app once and dismiss the alert. Open **System Settings > Privacy & Security > Open Anyway** for PDFView, authenticate if asked, and confirm **Open**. The right-click override is no longer available. |
 
-- Draw, type, or import a signature image
-- Place stamps on pages or on detected signature widget fields
-- Undo and redo for placements in the current session
-- Export a flattened signed copy to a user-chosen path
-- Signature profile stored locally under Application Support (no network)
+### Set as your default PDF reader
 
-### Security and privacy
+In Finder, select a PDF and choose **Get Info > Open with > PDFView > Change All**.
 
-- App Sandbox with user-selected read/write file access
-- Security-scoped resource access for import and export URLs chosen in sheets/panels
-- No cloud services or telemetry
-
-## Quick Start
-
-### Download the app (macOS 14.2 or later)
-
-Download `PDFView-0.1.0-universal.zip` from the [latest release](https://github.com/duhman/pdfview/releases/latest), unzip it, and drag `PDFView.app` to Applications.
-
-The build is ad-hoc signed, not notarized, so Gatekeeper blocks the first launch. To open it anyway: right-click `PDFView.app`, choose Open, then confirm Open in the dialog. On macOS 15 and later you can also allow it once under System Settings > Privacy & Security > Open Anyway.
-
-Requires macOS 14.2 or later. The release is a universal binary for Apple silicon and Intel Macs.
-
-### Build from source (macOS)
-
-```bash
-git clone https://github.com/duhman/pdfview.git
-cd pdfview
-swift build -c release
-./build_app.sh release
-cp -R PDFView.app /Applications/
-```
-
-### Set as default PDF reader
+If you have `duti` installed, you can also run:
 
 ```bash
 duti -s com.bigmac.pdfview com.adobe.pdf all
 ```
 
-Or use Finder: Get Info on a PDF, Open with PDFView, Change All.
+## Features — target for this release
 
-## Requirements
+These are the release targets being integrated and verified, not a claim about every existing download.
 
-- macOS 14.2 or later
-- Xcode 16+ (or a Swift 6 toolchain that ships AppKit/SwiftUI/PDFKit SDKs)
+### Read
+
+- Page indicator and Go to Page.
+- Thumbnails and document outline (bookmarks) in the sidebar.
+- Find text and Print.
+- Remember your place when reopening a document.
+- Single-page and two-page layouts, continuous scrolling, and full screen.
+- Actual Size, Zoom to Fit, and manual zoom.
+
+### Sign offline
+
+- Create a signature by drawing, typing, or importing an image; edit your saved signature.
+- Place it in the PDF's own signature fields or anywhere on a page.
+- Select, move, resize, delete, undo, and redo signature placements.
+- Save a flattened signed copy while keeping page sizes, links, and bookmarks; the original stays separate.
+- Keep the signature profile locally in the app's sandbox, shared across document windows.
+
+Signatures are **visual stamps, not certificate-based digital signatures**. They do not provide certificate identity verification or cryptographic tamper detection. Flattening puts the visible signature into the page content; it does not make the PDF tamper-proof.
+
+### Keyboard shortcuts — release target
+
+| Shortcut | Action |
+| --- | --- |
+| ⌥⌘S | Start/Stop Signing |
+| ⌥⇧⌘S | Save Signed Copy… |
+| Esc | Finish signing |
+| ⌘F | Find |
+| ⌘P | Print |
+| ⌘0 | Actual Size |
+| ⌘9 | Zoom to Fit |
+| ⌘+ / ⌘− | Zoom in / out |
 
 ## Development
 
+Use a Mac with Xcode 16+ or a Swift 6 toolchain with the macOS SDK. No Homebrew Bash is needed.
+
 ```bash
+git clone https://github.com/duhman/pdfview.git
+cd pdfview
 swift build
 swift test
-swiftlint
-swiftformat --lint .
-./build_app.sh debug
+/bin/bash ./build_app.sh debug
+open PDFView.app
 ```
 
-CI runs on `macos-15` GitHub-hosted runners with the Xcode toolchain (`DEVELOPER_DIR`).
+To build a release bundle:
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow details.
+```bash
+/bin/bash ./build_app.sh release
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the pinned SwiftLint and SwiftFormat setup, quality checks, icon generation, and manual verification. CI checks the unmodified checkout and builds both bundle configurations with `/bin/bash`.
+
+### Signing and notarization
+
+Local builds use ad-hoc signing (`SIGNING_IDENTITY=-`) by default. With a Developer ID identity and an existing `notarytool` keychain profile:
+
+```bash
+SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
+NOTARIZE=true \
+NOTARY_PROFILE="your-notary-profile" \
+VERSION="0.1.0" \
+BUILD_NUMBER="1" \
+/bin/bash ./build_app.sh release
+```
+
+The script submits a ZIP, requires an Accepted result, staples and validates the app's ticket, and creates `PDFView.zip` containing the stapled app. Set `ARCHES="arm64 x86_64"` to build a universal bundle. Developer ID credentials are not needed for local ad-hoc builds.
 
 ## Documentation
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) - design and data flow
-- [CONTRIBUTING.md](CONTRIBUTING.md) - contributor setup
-- [CHANGELOG.md](CHANGELOG.md) - release notes
-- [Security policy](.github/SECURITY.md) - vulnerability reporting
+- [Architecture](ARCHITECTURE.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+- [Security policy](.github/SECURITY.md)
 
-## Project structure
+Report bugs through [GitHub Issues](https://github.com/duhman/pdfview/issues) and vulnerabilities through a [private security advisory](https://github.com/duhman/pdfview/security/advisories/new).
 
-```
-pdfview/
-├── Sources/
-│   ├── PDFViewApp/     # App entry, document model, signing logic
-│   └── Views/          # SwiftUI and PDFKit bridge
-├── Tests/PDFViewAppTests/
-├── Resources/          # Info.plist template and entitlements
-├── Package.swift
-└── build_app.sh        # .app packaging and codesign
-```
-
-## Build configuration
-
-```bash
-export SIGNING_IDENTITY="Developer ID Application: Your Name"
-export NOTARIZE="true"
-export NOTARY_PROFILE="your-notary-profile"
-export VERSION="0.1.0"
-export BUILD_NUMBER="1"
-./build_app.sh release
-```
-
-Ad-hoc signing uses `SIGNING_IDENTITY=-` (default).
-
-## Contributing
-
-Contributions are welcome. Please run `swift test` and lint/format checks before opening a PR. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Bug reports and security
-
-- Bugs and features: GitHub Issues with the provided templates
-- Security issues: [private advisory](https://github.com/duhman/pdfview/security/advisories/new) (see [SECURITY.md](.github/SECURITY.md))
-
-## License
-
-MIT - see [LICENSE](LICENSE).
+MIT licensed — see [LICENSE](LICENSE).
