@@ -699,6 +699,10 @@ final class DocumentCloseGuard: NSObject, NSWindowDelegate {
     private nonisolated(unsafe) weak var originalDelegate: NSWindowDelegate?
     private var isCloseConfirmed = false
 
+    static func installed(on window: NSWindow) -> DocumentCloseGuard? {
+        objc_getAssociatedObject(window, &associationKey) as? DocumentCloseGuard
+    }
+
     func install(on window: NSWindow) {
         self.window = window
         window.isDocumentEdited = isEdited
@@ -727,8 +731,22 @@ final class DocumentCloseGuard: NSObject, NSWindowDelegate {
     }
 
     private func confirmClose(of window: NSWindow, work: UnsavedWork) {
+        askToSave(in: window, work: work, before: "closing") { [weak self, weak window] proceed in
+            if proceed {
+                self?.close(window)
+            }
+        }
+    }
+
+    /// Save Signed Copy… reports whether the save finished; Don’t Save proceeds; Cancel stops.
+    private func askToSave(
+        in window: NSWindow,
+        work: UnsavedWork,
+        before action: String,
+        then done: @escaping (Bool) -> Void
+    ) {
         let alert = NSAlert()
-        alert.messageText = "Save a signed copy of “\(documentName)” before closing?"
+        alert.messageText = "Save a signed copy of “\(documentName)” before \(action)?"
         alert.informativeText = work.lossWarning
         alert.addButton(withTitle: "Save Signed Copy…")
         let dontSave = alert.addButton(withTitle: "Don’t Save")
@@ -736,19 +754,19 @@ final class DocumentCloseGuard: NSObject, NSWindowDelegate {
         dontSave.keyEquivalentModifierMask = .command
         alert.addButton(withTitle: "Cancel")
 
-        alert.beginSheetModal(for: window) { [weak self, weak window] response in
+        alert.beginSheetModal(for: window) { [weak self] response in
             MainActor.assumeIsolated {
                 switch response {
                 case .alertFirstButtonReturn:
-                    self?.saveSignedCopy { saved in
-                        if saved {
-                            self?.close(window)
-                        }
+                    if let save = self?.saveSignedCopy {
+                        save(done)
+                    } else {
+                        done(false)
                     }
                 case .alertSecondButtonReturn:
-                    self?.close(window)
+                    done(true)
                 default:
-                    break
+                    done(false)
                 }
             }
         }
@@ -757,5 +775,17 @@ final class DocumentCloseGuard: NSObject, NSWindowDelegate {
     private func close(_ window: NSWindow?) {
         isCloseConfirmed = true
         window?.performClose(nil)
+    }
+}
+
+extension DocumentCloseGuard: QuitReviewable {
+    var hasUnsavedWork: Bool {
+        !unsavedWork().isEmpty
+    }
+
+    func reviewBeforeQuitting(then done: @escaping (Bool) -> Void) {
+        guard let window else { return done(true) }
+        window.makeKeyAndOrderFront(nil)
+        askToSave(in: window, work: unsavedWork(), before: "quitting", then: done)
     }
 }
