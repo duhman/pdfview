@@ -182,13 +182,37 @@ enum SigningFlowLogic {
     }
 
     /// The saved banner names the folder too, so the copy can be found after the banner is closed.
-    static func savedText(for url: URL) -> String {
-        "Saved “\(url.lastPathComponent)” to \(url.deletingLastPathComponent().lastPathComponent)"
+    static func savedText(for url: URL, home: URL = userHome) -> String {
+        "Saved “\(url.lastPathComponent)” to \(folderDisplayName(of: url, home: home))"
     }
 
-    static func savedAnnouncement(for url: URL) -> String {
-        "Saved \(url.lastPathComponent) to \(url.deletingLastPathComponent().lastPathComponent)"
+    static func savedAnnouncement(for url: URL, home: URL = userHome) -> String {
+        "Saved \(url.lastPathComponent) to \(folderDisplayName(of: url, home: home))"
     }
+
+    /// The folder holding `url` as Finder users know it: "~/Documents/Contracts", "iCloud Drive/Leases",
+    /// or the full path elsewhere. Two folders called Documents can no longer be confused.
+    static func folderDisplayName(of url: URL, home: URL = userHome) -> String {
+        let folder = url.deletingLastPathComponent().standardizedFileURL.pathComponents
+        let homeComponents = home.standardizedFileURL.pathComponents
+        let iCloud = homeComponents + ["Library", "Mobile Documents", "com~apple~CloudDocs"]
+        if folder.starts(with: iCloud) {
+            return (["iCloud Drive"] + folder.dropFirst(iCloud.count)).joined(separator: "/")
+        }
+        if folder.starts(with: homeComponents) {
+            return (["~"] + folder.dropFirst(homeComponents.count)).joined(separator: "/")
+        }
+        return url.deletingLastPathComponent().standardizedFileURL.path
+    }
+
+    /// The user's home folder. In the sandbox `NSHomeDirectory()` is the app's container, which is not
+    /// where a saved copy lands, so the account's home comes from the user database.
+    static let userHome: URL = {
+        if let directory = getpwuid(getuid())?.pointee.pw_dir {
+            return URL(fileURLWithPath: String(cString: directory), isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+    }()
 
     /// Select Next/Previous Stamp: reading order (page, then top to bottom, then left to right), wrapping.
     static func adjacentPlacement(
