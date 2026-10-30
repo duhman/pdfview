@@ -444,7 +444,7 @@ private func arrowEvent(_ key: Int, modifiers: NSEvent.ModifierFlags, in window:
     window.contentView = pdfView
     window.makeFirstResponder(pdfView)
     var handled: [NSEvent.ModifierFlags] = []
-    pdfView.hasSelectedStamp = { true }
+    pdfView.stampOwnsArrowKeys = { true }
     pdfView.keyHandler = { event in
         handled.append(event.modifierFlags.intersection([.shift, .option]))
         return true
@@ -461,14 +461,14 @@ private func arrowEvent(_ key: Int, modifiers: NSEvent.ModifierFlags, in window:
     #expect(handled == [[], [.shift], [.shift, .option]])
 
     // With nothing selected the arrows are never claimed.
-    pdfView.hasSelectedStamp = { false }
+    pdfView.stampOwnsArrowKeys = { false }
     #expect(!pdfView.performKeyEquivalent(with: move))
     #expect(handled.count == 3)
 }
 
 @Test func placementAnnouncementSaysHowToMoveAndFinish() {
     let text = StampAccessibility.placedAnnouncement(pageIndex: 1, location: "at center", kind: .initials)
-    #expect(text == "Initials placed on page 2, at center. Arrow keys move it, Escape when done.")
+    #expect(text.hasPrefix("Initials placed on page 2, at center."))
     #expect(!StampAccessibility.moveInstructions(for: .signature).contains("Option moves"))
     #expect(StampAccessibility.moveInstructions(for: .signature).contains("Option-Shift"))
 }

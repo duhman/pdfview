@@ -72,10 +72,14 @@ enum StampAccessibility {
         return "\(subject), page \(pageIndex + 1), \(place)"
     }
 
-    /// The new stamp is selected, so the announcement says how to adjust it and how to finish.
+    /// The new stamp is selected but leaves plain arrows to scrolling, so the announcement says how
+    /// to take it for moving.
     static func placedAnnouncement(pageIndex: Int, location: String, kind: StampKind = .signature) -> String {
-        "\(kind.title) placed on page \(pageIndex + 1), \(location). Arrow keys move it, Escape when done."
+        "\(kind.title) placed on page \(pageIndex + 1), \(location). To move it, choose Sign > "
+            + "\(SignMenuTitles.selectNextStamp) (\(SigningShortcut.selectNextStamp)), then use the arrow keys."
     }
+
+    static let deselectedAnnouncement = "Stamp deselected."
 
     static func movedAnnouncement(pageIndex: Int, location: String) -> String {
         "Moved, page \(pageIndex + 1), \(location)"

@@ -19,6 +19,7 @@ extension PDFKitView.Coordinator {
             parent.onDeletePlacement(selectedID)
             return true
         case let key? where [.leftArrow, .rightArrow, .upArrow, .downArrow].contains(key):
+            guard stampOwnsArrowKeys else { return false }
             let flags = event.modifierFlags
             switch PlacementGeometry.arrowAction(shift: flags.contains(.shift), option: flags.contains(.option)) {
             case let .move(distance)?:
@@ -47,6 +48,7 @@ extension PDFKitView.Coordinator {
             parent.onEscape()
         case .deselect:
             selectedPlacementID = nil
+            StampAccessibility.announce(StampAccessibility.deselectedAnnouncement, in: pdfView?.window)
         case .none:
             return false
         }

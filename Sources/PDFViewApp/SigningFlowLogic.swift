@@ -85,6 +85,7 @@ struct SetupRequest: Equatable {
 enum SigningShortcut {
     static let placeInNextField = "⌥⌘N"
     static let placeOnCurrentPage = "⌥⌘P"
+    static let selectNextStamp = "⌥⌘]"
 }
 
 /// The Fields/Anywhere choice per stamp kind, remembered for one window. Signatures default to the
@@ -201,6 +202,20 @@ enum SigningFlowLogic {
         }
         let next = (index + (forward ? 1 : -1) + ordered.count) % ordered.count
         return ordered[next].id
+    }
+
+    /// Select Next/Previous Stamp. A stamp that is selected but does not own the arrow keys yet (it was
+    /// just placed) is taken first, so the command never skips the stamp the user is looking at.
+    static func stampToSelect(
+        after currentID: UUID?,
+        ownsArrowKeys: Bool,
+        in placements: [PDFViewerDocument.SignaturePlacement],
+        forward: Bool
+    ) -> UUID? {
+        if let currentID, !ownsArrowKeys, placements.contains(where: { $0.id == currentID }) {
+            return currentID
+        }
+        return adjacentPlacement(after: currentID, in: placements, forward: forward)
     }
 
     /// True while the window holds placements that differ from the last saved signed copy.

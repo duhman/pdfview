@@ -757,13 +757,14 @@ extension PDFContentView {
     /// Select Next/Previous Stamp: reveals the stamp, gives it keyboard focus and reads its label.
     private func selectAdjacentStamp(forward: Bool) {
         let placements = document.signaturePlacements
-        guard let id = SigningFlowLogic.adjacentPlacement(
+        guard let id = SigningFlowLogic.stampToSelect(
             after: viewer.selectedPlacementID,
+            ownsArrowKeys: viewer.stampOwnsArrowKeys,
             in: placements,
             forward: forward
         ), let placement = placements.first(where: { $0.id == id }) else { return }
         viewer.reveal(placement.bounds, onPageAt: placement.pageIndex)
-        viewer.select(placementID: id)
+        viewer.select(placementID: id, ownsArrowKeys: true)
         if let label = viewer.label(for: placement) {
             announce(label)
         }
@@ -906,7 +907,9 @@ extension PDFContentView {
         case .cancelExport: cancelExport()
         case .stopSigning: exitSigning()
         case .closeFind: closeFind()
-        case .deselect: viewer.select(placementID: nil)
+        case .deselect:
+            viewer.select(placementID: nil)
+            announce(StampAccessibility.deselectedAnnouncement)
         case .closeSavedBanner: dismissSavedBanner()
         case .none: break
         }

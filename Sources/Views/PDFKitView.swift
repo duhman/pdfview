@@ -104,9 +104,12 @@ final class PDFViewerProxy {
         NSSharingServicePicker(items: [url]).show(relativeTo: anchor, of: pdfView, preferredEdge: .minY)
     }
 
-    /// Selects a stamp and gives the PDF view keyboard focus so arrow keys nudge it.
     var selectedPlacementID: UUID? {
         coordinator?.selectedPlacementID
+    }
+
+    var stampOwnsArrowKeys: Bool {
+        coordinator?.stampOwnsArrowKeys == true
     }
 
     /// The VoiceOver label of a placement as it is now, e.g. for Select Next Stamp.
@@ -123,8 +126,9 @@ final class PDFViewerProxy {
         coordinator?.moveToFormField(forward: forward)
     }
 
-    func select(placementID: UUID?) {
-        coordinator?.selectedPlacementID = placementID
+    /// Selects a stamp and gives the PDF view keyboard focus; with `ownsArrowKeys` plain arrows nudge it.
+    func select(placementID: UUID?, ownsArrowKeys: Bool = false) {
+        coordinator?.select(placementID, ownsArrowKeys: ownsArrowKeys)
         if let pdfView, placementID != nil {
             pdfView.window?.makeFirstResponder(pdfView)
         }
@@ -250,9 +254,19 @@ extension PDFKitView {
         var selectedPlacementID: UUID? {
             didSet {
                 if selectedPlacementID != oldValue {
+                    stampOwnsArrowKeys = false
                     refreshOverlays()
                 }
             }
+        }
+
+        /// Plain arrows move the selected stamp only once the user chose it (a click, Select Next Stamp,
+        /// VoiceOver's Move); a stamp that was just placed leaves them to scrolling.
+        private(set) var stampOwnsArrowKeys = false
+
+        func select(_ id: UUID?, ownsArrowKeys: Bool) {
+            selectedPlacementID = id
+            stampOwnsArrowKeys = id != nil && ownsArrowKeys
         }
 
         init(_ parent: PDFKitView) {
@@ -271,7 +285,7 @@ extension PDFKitView {
             }
             pdfView.onUserInteraction = { [weak self] in self?.scheduleFormValueCheck() }
             pdfView.onStopSigning = { [weak self] in self?.parent.onStopSigning() }
-            pdfView.hasSelectedStamp = { [weak self] in self?.selectedPlacementID != nil }
+            pdfView.stampOwnsArrowKeys = { [weak self] in self?.stampOwnsArrowKeys == true }
 
             let center = NotificationCenter.default
             center.addObserver(
@@ -614,7 +628,7 @@ extension PDFKitView.Coordinator: PageOverlayViewDelegate {
     }
 
     func overlay(_: PageOverlayView, didSelect id: UUID?) {
-        selectedPlacementID = id
+        select(id, ownsArrowKeys: true)
         if let pdfView {
             pdfView.window?.makeFirstResponder(pdfView)
         }
@@ -650,7 +664,7 @@ final class SigningPDFView: PDFView {
     var onUserInteraction: (() -> Void)?
     var onStopSigning: (() -> Void)?
 
-    var hasSelectedStamp: () -> Bool = { false }
+    var stampOwnsArrowKeys: () -> Bool = { false }
 
     /// Menu key equivalents are matched before keyDown, so the arrow chords that move or resize a
     /// selected stamp are claimed here first. Option alone is left to the Go menu's page commands.
@@ -659,7 +673,7 @@ final class SigningPDFView: PDFView {
         let flags = event.modifierFlags
         let isStampArrow = event.specialKey.map(arrows.contains) == true && !flags.contains(.command)
             && PlacementGeometry.arrowAction(shift: flags.contains(.shift), option: flags.contains(.option)) != nil
-        if isStampArrow, window?.firstResponder === self, hasSelectedStamp(), keyHandler?(event) == true {
+        if isStampArrow, window?.firstResponder === self, stampOwnsArrowKeys(), keyHandler?(event) == true {
             return true
         }
         return super.performKeyEquivalent(with: event)
