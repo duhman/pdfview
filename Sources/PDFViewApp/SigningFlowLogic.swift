@@ -117,6 +117,12 @@ enum SigningFlowLogic {
         anywhere || !hasSignatureFields ? .freePlacement : .fieldPlacement
     }
 
+    /// Sign > Anywhere switches between Fields and Anywhere while signing. While idle it would have to
+    /// start signing to take effect, so it is disabled rather than doing that as a side effect.
+    static func anywhereIsEnabled(mode: SigningMode, canSign: Bool, hasSignatureFields: Bool) -> Bool {
+        mode != .idle && canSign && hasSignatureFields
+    }
+
     /// Keeps the mode valid when the detected fields change (unlock, document swap).
     static func refreshed(_ mode: SigningMode, hasSignatureFields: Bool) -> SigningMode {
         mode == .fieldPlacement && !hasSignatureFields ? .freePlacement : mode

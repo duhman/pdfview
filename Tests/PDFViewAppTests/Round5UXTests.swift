@@ -58,3 +58,14 @@ import Testing
     #expect(SigningFlowLogic.saveSignedCopyUnavailableReason(canSave: false, isLocked: false, isBusy: true)
         == "Wait for the current save or print to finish.")
 }
+
+// MARK: Sign > Anywhere
+
+@Test func anywhereIsAvailableOnlyWhileSigningAPDFWithSignatureFields() {
+    // While idle, choosing Anywhere would start signing as a side effect, so it is disabled.
+    #expect(!SigningFlowLogic.anywhereIsEnabled(mode: .idle, canSign: true, hasSignatureFields: true))
+    #expect(SigningFlowLogic.anywhereIsEnabled(mode: .fieldPlacement, canSign: true, hasSignatureFields: true))
+    #expect(SigningFlowLogic.anywhereIsEnabled(mode: .freePlacement, canSign: true, hasSignatureFields: true))
+    #expect(!SigningFlowLogic.anywhereIsEnabled(mode: .freePlacement, canSign: true, hasSignatureFields: false))
+    #expect(!SigningFlowLogic.anywhereIsEnabled(mode: .fieldPlacement, canSign: false, hasSignatureFields: true))
+}

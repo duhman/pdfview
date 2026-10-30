@@ -658,14 +658,11 @@ extension PDFContentView {
         viewer.focusDocument()
     }
 
+    /// Fields or Anywhere while signing; Sign > Anywhere is disabled while idle.
     private func setAnywhere(_ anywhere: Bool) {
+        guard signingMode != .idle else { return }
         placementChoices.remember(anywhere: anywhere, for: stampKind)
-        let mode = SigningFlowLogic.mode(anywhere: anywhere, hasSignatureFields: hasSignatureFields)
-        if signingMode == .idle {
-            startSigning(mode)
-        } else {
-            signingMode = mode
-        }
+        signingMode = SigningFlowLogic.mode(anywhere: anywhere, hasSignatureFields: hasSignatureFields)
     }
 
     /// Keyboard path to field signing: each use fills the next detected signature field.

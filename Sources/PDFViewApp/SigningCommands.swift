@@ -262,7 +262,7 @@ struct SigningCommandMenu: Commands {
                 get: { actions?.signingMode == .freePlacement },
                 set: { actions?.setAnywhere($0) }
             ))
-            .disabled(!(canSign && hasFields))
+            .disabled(!SigningFlowLogic.anywhereIsEnabled(mode: mode, canSign: canSign, hasSignatureFields: hasFields))
 
             Divider()
 
