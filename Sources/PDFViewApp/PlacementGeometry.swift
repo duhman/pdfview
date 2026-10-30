@@ -28,7 +28,7 @@ enum PlacementGeometry {
         }
     }
 
-    /// Width of a stamp placed by clicking or with "Place on Current Page".
+    /// Width of a signature placed by clicking or with "Place on Current Page"; see `StampKind.defaultWidth`.
     static let defaultWidth: CGFloat = 180
     /// Gap kept between a signature field's border and the stamp inside it.
     static let fieldInset: CGFloat = 2
@@ -54,11 +54,21 @@ enum PlacementGeometry {
         )
     }
 
-    static func defaultRect(centeredAt point: CGPoint, imageSize: CGSize, pageBounds: CGRect) -> CGRect {
-        let aspect = max(0.2, min(8.0, imageSize.width / max(imageSize.height, 1)))
-        let size = CGSize(width: defaultWidth, height: defaultWidth / aspect)
+    static func defaultRect(
+        centeredAt point: CGPoint,
+        imageSize: CGSize,
+        pageBounds: CGRect,
+        width: CGFloat = defaultWidth
+    ) -> CGRect {
+        let size = defaultSize(imageSize: imageSize, width: width)
         let origin = CGPoint(x: point.x - size.width / 2, y: point.y - size.height / 2)
         return clamped(CGRect(origin: origin, size: size), to: pageBounds)
+    }
+
+    /// A stamp `width` wide with the image's aspect ratio, kept within sane limits for odd images.
+    static func defaultSize(imageSize: CGSize, width: CGFloat) -> CGSize {
+        let aspect = max(0.2, min(8.0, imageSize.width / max(imageSize.height, 1)))
+        return CGSize(width: width, height: width / aspect)
     }
 
     static func clamped(_ rect: CGRect, to bounds: CGRect) -> CGRect {

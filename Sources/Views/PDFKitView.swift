@@ -119,6 +119,7 @@ struct PDFKitView: NSViewRepresentable {
         var placements: [PDFViewerDocument.SignaturePlacement]
         var signingMode: SigningMode
         var profilePNGData: Data?
+        var stampWidth: CGFloat
         var fields: [SignatureField]
     }
 
@@ -127,6 +128,8 @@ struct PDFKitView: NSViewRepresentable {
     @Binding var zoom: ZoomState
     var signingMode: SigningMode
     var stampPNGData: Data?
+    /// Width of a stamp placed by clicking anywhere on the page, for the active stamp kind.
+    var stampWidth: CGFloat = PlacementGeometry.defaultWidth
     var viewer: PDFViewerProxy
     var reader: ReaderController
     var fileURL: URL?
@@ -371,6 +374,7 @@ extension PDFKitView {
                 placements: parent.signaturePlacements,
                 signingMode: parent.signingMode,
                 profilePNGData: parent.stampPNGData,
+                stampWidth: parent.stampWidth,
                 fields: signatureFields
             )
             guard inputs != overlayInputs else { return }
@@ -407,7 +411,8 @@ extension PDFKitView {
                 selectedID: selectedPlacementID,
                 signingMode: parent.signingMode,
                 fields: isSigning ? signatureFields.filter { $0.pageIndex == pageIndex }.map(\.bounds) : [],
-                ghostImage: isSigning ? profileImage() : nil
+                ghostImage: isSigning ? profileImage() : nil,
+                ghostWidth: parent.stampWidth
             )
         }
 
@@ -516,7 +521,12 @@ extension PDFKitView.Coordinator: PageOverlayViewDelegate {
                 in: PlacementGeometry.clamped(field.bounds, to: cropBox)
             )
         } else if parent.signingMode == .freePlacement {
-            bounds = PlacementGeometry.defaultRect(centeredAt: point, imageSize: imageSize, pageBounds: cropBox)
+            bounds = PlacementGeometry.defaultRect(
+                centeredAt: point,
+                imageSize: imageSize,
+                pageBounds: cropBox,
+                width: parent.stampWidth
+            )
         } else {
             NSSound.beep()
             return

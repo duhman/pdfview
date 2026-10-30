@@ -13,6 +13,8 @@ struct PDFContentView: View {
     @Environment(\.undoManager)
     private var undoManager
     @EnvironmentObject private var signatureStore: SignatureStore
+    @Environment(StampSizeMemory.self)
+    private var stampSizes
 
     @State private var reader = ReaderController()
     @State private var export = SignedCopyOperation()
@@ -151,6 +153,7 @@ struct PDFContentView: View {
             zoom: $zoom,
             signingMode: signingMode,
             stampPNGData: signingMode == .idle ? nil : activeArtwork?.pngData,
+            stampWidth: stampSizes.width(for: stampKind),
             viewer: viewer,
             reader: reader,
             fileURL: fileURL,
@@ -159,9 +162,7 @@ struct PDFContentView: View {
             isExporting: export.progress != nil,
             onWindow: attachCloseGuard,
             onPlaceSignature: placeSignature,
-            onUpdatePlacementBounds: { id, bounds, actionName in
-                configuredEditor().setBounds(id: id, to: bounds, actionName: actionName)
-            },
+            onUpdatePlacementBounds: updatePlacementBounds,
             onDeletePlacement: { configuredEditor().delete(id: $0) },
             onDocumentStateChange: applyDocumentState,
             onFormValuesChange: applyFormValues
@@ -576,7 +577,8 @@ extension PDFContentView {
         let bounds = PlacementGeometry.defaultRect(
             centeredAt: CGPoint(x: cropBox.midX, y: cropBox.midY),
             imageSize: imageSize,
-            pageBounds: cropBox
+            pageBounds: cropBox,
+            width: stampSizes.width(for: stampKind)
         )
         viewer.reveal(bounds, onPageAt: pageIndex)
         placeSignature(pageIndex: pageIndex, bounds: bounds)
@@ -605,6 +607,15 @@ extension PDFContentView {
         if let label = viewer.label(for: placement) {
             announce(label)
         }
+    }
+
+    /// A resize also sets the size the next stamp of that kind is placed at.
+    private func updatePlacementBounds(id: UUID, to bounds: CGRect, actionName: String) {
+        let placement = document.signaturePlacements.first { $0.id == id }
+        if let placement, placement.bounds.width != bounds.width {
+            stampSizes.remember(width: bounds.width, for: placement.kind)
+        }
+        configuredEditor().setBounds(id: id, to: bounds, actionName: actionName)
     }
 
     private func configuredEditor() -> SignaturePlacementEditor {

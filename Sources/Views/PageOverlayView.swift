@@ -64,6 +64,7 @@ final class PageOverlayView: NSView {
         /// Signature fields to outline; empty unless signing.
         var fields: [CGRect] = []
         var ghostImage: CGImage?
+        var ghostWidth = PlacementGeometry.defaultWidth
     }
 
     private enum DragTarget {
@@ -168,7 +169,12 @@ final class PageOverlayView: NSView {
             )
         }
         guard content.signingMode == .freePlacement else { return nil }
-        return PlacementGeometry.defaultRect(centeredAt: point, imageSize: imageSize, pageBounds: content.cropBox)
+        return PlacementGeometry.defaultRect(
+            centeredAt: point,
+            imageSize: imageSize,
+            pageBounds: content.cropBox,
+            width: content.ghostWidth
+        )
     }
 
     // MARK: Drawing
