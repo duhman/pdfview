@@ -146,20 +146,31 @@ enum SignatureRenderer {
 
     /// Measures the glyph ink first and shrinks the font until the name fits, so long names never clip.
     static func renderText(_ text: String, fontName: String) -> Rendering? {
+        renderText(text) { size in
+            NSFont(name: fontName, size: size)
+                ?? NSFontManager.shared.convert(.systemFont(ofSize: size), toHaveTrait: .italicFontMask)
+        }
+    }
+
+    static func renderText(_ text: String, font: (CGFloat) -> NSFont) -> Rendering? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return nil
         }
 
-        var line = typedLine(trimmed, fontName: fontName, size: typedFontSize)
+        var size = typedFontSize
+        var line = typedLine(trimmed, font: font(size))
         var inkBounds = CTLineGetImageBounds(line, nil)
-        let fit = min(
-            1,
-            (maximumSize.width - 2 * padding) / max(inkBounds.width, 1),
-            (maximumSize.height - 2 * padding) / max(inkBounds.height, 1)
-        )
-        if fit < 1 {
-            line = typedLine(trimmed, fontName: fontName, size: typedFontSize * fit)
+        // Optically sized fonts (the system font) get wider as they shrink, so one pass can still overflow.
+        for _ in 0 ..< 4 {
+            let fit = min(
+                (maximumSize.width - 2 * padding) / max(inkBounds.width, 1),
+                (maximumSize.height - 2 * padding) / max(inkBounds.height, 1)
+            )
+            // The first pass alone fits a script face, so its rendering is unchanged by the extra passes.
+            guard fit < (size == typedFontSize ? 1 : 0.999) else { break }
+            size *= fit
+            line = typedLine(trimmed, font: font(size))
             inkBounds = CTLineGetImageBounds(line, nil)
         }
         guard inkBounds.width > 0, inkBounds.height > 0 else {
@@ -174,9 +185,7 @@ enum SignatureRenderer {
         }
     }
 
-    private static func typedLine(_ text: String, fontName: String, size: CGFloat) -> CTLine {
-        let font = NSFont(name: fontName, size: size)
-            ?? NSFontManager.shared.convert(.systemFont(ofSize: size), toHaveTrait: .italicFontMask)
+    private static func typedLine(_ text: String, font: NSFont) -> CTLine {
         let inkFromContext = NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String)
         let attributes: [NSAttributedString.Key: Any] = [.font: font, inkFromContext: true]
         return CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
@@ -202,15 +211,22 @@ enum SignatureRenderer {
         return formatter.string(from: date)
     }
 
+    /// A date is read rather than signed, so it is set in the system font instead of a script face.
+    static func dateFont(size: CGFloat) -> NSFont {
+        .systemFont(ofSize: size, weight: .medium)
+    }
+
     /// Uses the same fixed black ink, transparent backing and fit rules as typed signatures.
     static func renderDate(
         _ date: Date = Date(),
         locale: Locale = .current,
         timeZone: TimeZone = .current,
-        customFormat: String? = nil,
-        fontName: String = "SnellRoundhand"
+        customFormat: String? = nil
     ) -> Rendering? {
-        renderText(dateText(date, locale: locale, timeZone: timeZone, customFormat: customFormat), fontName: fontName)
+        renderText(
+            dateText(date, locale: locale, timeZone: timeZone, customFormat: customFormat),
+            font: dateFont(size:)
+        )
     }
 
     // MARK: Imported

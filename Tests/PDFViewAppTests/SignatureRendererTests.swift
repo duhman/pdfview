@@ -347,7 +347,7 @@ func dateStampSharesTypedInkSizingAndTransparency() throws {
     let locale = Locale(identifier: "en_US")
     let stamp = try #require(SignatureRenderer.renderDate(date, locale: locale))
     let text = SignatureRenderer.dateText(date, locale: locale)
-    let typed = try #require(SignatureRenderer.renderText(text, fontName: "SnellRoundhand"))
+    let typed = try #require(SignatureRenderer.renderText(text, font: SignatureRenderer.dateFont(size:)))
     #expect(stamp.pngData == typed.pngData)
     #expect(stamp.pointSize.width <= SignatureRenderer.maximumSize.width + 1)
     #expect(stamp.pointSize.height <= SignatureRenderer.maximumSize.height + 1)
@@ -360,6 +360,25 @@ func dateStampSharesTypedInkSizingAndTransparency() throws {
         customFormat: String(repeating: "EEEE MMMM ", count: 10)
     ))
     #expect(long.pointSize.width <= SignatureRenderer.maximumSize.width + 1)
+}
+
+/// A date is read, not signed: it uses the system font at medium weight, not a script face.
+@MainActor
+@Test
+func dateStampUsesTheSystemFontAtMediumWeight() throws {
+    let font = SignatureRenderer.dateFont(size: 64)
+    #expect(font.familyName == NSFont.systemFont(ofSize: 64).familyName)
+    let traits = try #require(font.fontDescriptor.object(forKey: .traits) as? [NSFontDescriptor.TraitKey: Any])
+    let weight = try #require(traits[.weight] as? CGFloat)
+    #expect(abs(weight - NSFont.Weight.medium.rawValue) < 0.01)
+    #expect(!font.fontDescriptor.symbolicTraits.contains(.italic))
+
+    let date = Date(timeIntervalSince1970: 1_767_355_200)
+    let script = try #require(SignatureRenderer.renderText(
+        SignatureRenderer.dateText(date),
+        fontName: "SnellRoundhand"
+    ))
+    #expect(SignatureRenderer.renderDate(date)?.pngData != script.pngData)
 }
 
 @MainActor
