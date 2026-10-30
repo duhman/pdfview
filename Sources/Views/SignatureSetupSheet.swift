@@ -13,7 +13,7 @@ struct SignatureSetupSheet: View {
     @State private var typedText: String
     @State private var typedTextEdited: Bool
     @State private var fontName: String
-    @State private var drawStrokes: [[CGPoint]] = []
+    @StateObject private var drawing: SignatureDrawingState
     @State private var importedImage: CGImage?
     @State private var importedFileName: String?
     @State private var importRendering: SignatureRenderer.Rendering?
@@ -30,6 +30,7 @@ struct SignatureSetupSheet: View {
         case typedText
     }
 
+    let kind: SignatureKind
     let existingProfile: SignatureProfile?
     let onCancel: () -> Void
     let onSave: (SignatureProfile) -> Void
@@ -37,30 +38,36 @@ struct SignatureSetupSheet: View {
 
     init(
         existingProfile: SignatureProfile?,
+        kind: SignatureKind = .signature,
+        fullName: String = "",
         onCancel: @escaping () -> Void,
         onSave: @escaping (SignatureProfile) -> Void
     ) {
+        self.kind = kind
         self.existingProfile = existingProfile
         self.onCancel = onCancel
         self.onSave = onSave
 
-        let existingName = existingProfile?.fullName ?? ""
-        let typedText = existingProfile?.typedText ?? existingName
+        let existingName = existingProfile?.fullName ?? fullName
+        let defaultText = kind.defaultText(for: existingName)
+        let typedText = existingProfile?.typedText ?? defaultText
         let fonts = SignatureRenderer.availableScriptFonts
         existingArtwork = existingProfile?.signaturePNGData.flatMap(NSImage.init(data:))
         _fullName = State(initialValue: existingName)
         _typedText = State(initialValue: typedText)
-        _typedTextEdited = State(initialValue: typedText != existingName)
+        _typedTextEdited = State(initialValue: typedText != defaultText)
         _fontName = State(initialValue: existingProfile?.fontName.flatMap { fonts.contains($0) ? $0 : nil }
             ?? fonts.first ?? SignatureRenderer.scriptFontNames[0])
         // Typing is the keyboard-accessible default for a new signature.
         _selectedMode = State(initialValue: existingProfile.map { Mode($0.sourceKind) } ?? .type)
         _keepsExistingArtwork = State(initialValue: existingArtwork != nil)
+        let hasExistingArtwork = existingArtwork != nil
+        _drawing = StateObject(wrappedValue: SignatureDrawingState(keepsExistingArtwork: hasExistingArtwork))
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(existingProfile == nil ? "Create Signature" : "Edit Signature")
+            Text("\(existingProfile == nil ? "Create" : "Edit") \(kind.title)")
                 .font(.title2)
                 .fontWeight(.semibold)
 
@@ -99,12 +106,11 @@ struct SignatureSetupSheet: View {
         }
         .onChange(of: fullName) { _, newName in
             if !typedTextEdited {
-                typedText = newName
+                typedText = kind.defaultText(for: newName)
             }
         }
         .onChange(of: typedText) { replaceExistingArtwork(for: .type) }
         .onChange(of: fontName) { replaceExistingArtwork(for: .type) }
-        .onChange(of: drawStrokes) { replaceExistingArtwork(for: .draw) }
         .onChange(of: removesWhiteBackground) { updateImportRendering() }
     }
 
@@ -122,7 +128,7 @@ struct SignatureSetupSheet: View {
         switch selectedMode {
         case .draw:
             DrawSignatureCanvas(
-                strokes: $drawStrokes,
+                drawing: drawing,
                 underlay: showsExistingArtwork ? existingArtwork : nil
             )
         case .type, .import:
@@ -135,16 +141,14 @@ struct SignatureSetupSheet: View {
         case .draw:
             HStack {
                 Button("Undo Stroke") {
-                    drawStrokes.removeLast()
+                    drawing.undoManager?.undo()
                 }
-                .keyboardShortcut("z", modifiers: .command)
-                .disabled(drawStrokes.isEmpty)
+                .disabled(drawing.undoManager?.canUndo != true)
 
                 Button("Clear") {
-                    drawStrokes = []
-                    keepsExistingArtwork = false
+                    drawing.clear()
                 }
-                .disabled(drawStrokes.isEmpty && !showsExistingArtwork)
+                .disabled(drawing.strokes.isEmpty && !showsExistingArtwork)
             }
         case .type:
             typeControls
@@ -155,11 +159,15 @@ struct SignatureSetupSheet: View {
 
     private var typeControls: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text("Signature:")
-            TextField("Signature text", text: typedTextBinding, prompt: Text("Your name"))
-                .textFieldStyle(.roundedBorder)
-                .labelsHidden()
-                .focused($focusedField, equals: .typedText)
+            Text("\(kind.title):")
+            TextField(
+                "\(kind.title) text",
+                text: typedTextBinding,
+                prompt: Text(kind == .initials ? "Your initials" : "Your name")
+            )
+            .textFieldStyle(.roundedBorder)
+            .labelsHidden()
+            .focused($focusedField, equals: .typedText)
 
             Picker("Style", selection: $fontName) {
                 ForEach(SignatureRenderer.availableScriptFonts, id: \.self) { name in
@@ -212,7 +220,7 @@ struct SignatureSetupSheet: View {
             Spacer()
             Button("Cancel", action: onCancel)
                 .keyboardShortcut(.cancelAction)
-            Button("Save Signature", action: save)
+            Button("Save \(kind.title)", action: save)
                 .keyboardShortcut(.defaultAction)
                 .disabled(saveHint != nil)
         }
@@ -230,7 +238,8 @@ struct SignatureSetupSheet: View {
     }
 
     private var showsExistingArtwork: Bool {
-        keepsExistingArtwork && existingProfile.map { Mode($0.sourceKind) } == selectedMode
+        (selectedMode == .draw ? drawing.keepsExistingArtwork : keepsExistingArtwork)
+            && existingProfile.map { Mode($0.sourceKind) } == selectedMode
     }
 
     private var previewImage: NSImage? {
@@ -244,7 +253,7 @@ struct SignatureSetupSheet: View {
     }
 
     private var previewPlaceholder: String {
-        selectedMode == .type ? "Type your signature below" : "Choose an image of your signature"
+        selectedMode == .type ? "Type your \(kind.rawValue) below" : "Choose an image of your \(kind.rawValue)"
     }
 
     /// Why Save is disabled, or nil when the signature can be saved.
@@ -257,12 +266,12 @@ struct SignatureSetupSheet: View {
         }
         switch selectedMode {
         case .draw:
-            return drawStrokes.isEmpty ? "Draw your signature in the box to save." : nil
+            return drawing.strokes.isEmpty ? "Draw your \(kind.rawValue) in the box to save." : nil
         case .type:
             return typedText.trimmingCharacters(in: .whitespacesAndNewlines)
-                .isEmpty ? "Type your signature to save." : nil
+                .isEmpty ? "Type your \(kind.rawValue) to save." : nil
         case .import:
-            return importRendering == nil ? "Choose an image of your signature to save." : nil
+            return importRendering == nil ? "Choose an image of your \(kind.rawValue) to save." : nil
         }
     }
 }
@@ -362,7 +371,7 @@ private extension SignatureSetupSheet {
 
         let isTyped = selectedMode == .type
         let rendering = switch selectedMode {
-        case .draw: SignatureRenderer.renderDrawing(strokes: drawStrokes, canvasSize: Self.canvasSize)
+        case .draw: SignatureRenderer.renderDrawing(strokes: drawing.strokes, canvasSize: Self.canvasSize)
         case .type: SignatureRenderer.renderText(typedText, fontName: fontName)
         case .import: importRendering
         }
@@ -455,59 +464,152 @@ private struct InlineError: View {
     }
 }
 
-/// Draws exactly what `SignatureRenderer.renderDrawing` will export: the same smoothed curves, dots and pen width.
-private struct DrawSignatureCanvas: View {
-    @Binding var strokes: [[CGPoint]]
-    /// Saved artwork shown until the first new stroke.
-    let underlay: NSImage?
-    @State private var currentStroke: [CGPoint] = []
+/// Registers complete drawing edits with the sheet window, including restoring saved artwork on undo.
+@MainActor
+final class SignatureDrawingState: ObservableObject {
+    @Published private(set) var strokes: [[CGPoint]] = []
+    @Published private(set) var keepsExistingArtwork: Bool
+    weak var undoManager: UndoManager?
 
-    private let size = SignatureSetupSheet.canvasSize
-    private let lineWidth = SignatureRenderer.inkWidth(forCanvasHeight: SignatureSetupSheet.canvasSize.height)
-
-    var body: some View {
-        ZStack {
-            if let underlay {
-                SignaturePreview(image: underlay, placeholder: "")
-            }
-            Canvas { context, _ in
-                for stroke in strokes + [currentStroke] {
-                    draw(stroke, in: &context)
-                }
-            }
-        }
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { value in
-                    currentStroke.append(CGPoint(
-                        x: min(max(value.location.x, 0), size.width),
-                        y: min(max(value.location.y, 0), size.height)
-                    ))
-                }
-                .onEnded { _ in
-                    if !currentStroke.isEmpty {
-                        strokes.append(currentStroke)
-                    }
-                    currentStroke = []
-                }
-        )
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Signature drawing area")
-        .accessibilityHint("To sign without drawing, choose Type")
-        .accessibilityValue(strokes.isEmpty && underlay == nil ? "Empty" : "Contains a signature")
+    init(keepsExistingArtwork: Bool) {
+        self.keepsExistingArtwork = keepsExistingArtwork
     }
 
-    private func draw(_ stroke: [CGPoint], in context: inout GraphicsContext) {
+    func append(_ stroke: [CGPoint]) {
         guard !stroke.isEmpty else { return }
-        if let dot = SignatureRenderer.dotRect(for: stroke, lineWidth: lineWidth) {
-            context.fill(Path(ellipseIn: dot), with: .color(.black))
-        } else {
-            context.stroke(
-                Path(SignatureRenderer.smoothedPath(for: stroke)),
-                with: .color(.black),
-                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
-            )
+        replace(strokes: strokes + [stroke], keepsExistingArtwork: false, actionName: "Stroke")
+    }
+
+    func clear() {
+        guard !strokes.isEmpty || keepsExistingArtwork else { return }
+        replace(strokes: [], keepsExistingArtwork: false, actionName: "Clear Drawing")
+    }
+
+    private func replace(strokes: [[CGPoint]], keepsExistingArtwork: Bool, actionName: String) {
+        let previousStrokes = self.strokes
+        let previousArtwork = self.keepsExistingArtwork
+        if let undoManager {
+            undoManager.beginUndoGrouping()
+            undoManager.registerUndo(withTarget: self) { target in
+                MainActor.assumeIsolated {
+                    target.replace(
+                        strokes: previousStrokes,
+                        keepsExistingArtwork: previousArtwork,
+                        actionName: actionName
+                    )
+                }
+            }
+            undoManager.setActionName(actionName)
+            undoManager.endUndoGrouping()
         }
+        self.strokes = strokes
+        self.keepsExistingArtwork = keepsExistingArtwork
+    }
+}
+
+/// A native first responder lets Edit > Undo resolve to the sheet's UndoManager after drawing.
+private struct DrawSignatureCanvas: NSViewRepresentable {
+    @ObservedObject var drawing: SignatureDrawingState
+    let underlay: NSImage?
+
+    func makeNSView(context _: Context) -> SignatureCanvasView {
+        SignatureCanvasView(drawing: drawing)
+    }
+
+    func updateNSView(_ view: SignatureCanvasView, context _: Context) {
+        view.underlay = underlay
+        view.needsDisplay = true
+    }
+}
+
+private final class SignatureCanvasView: NSView {
+    let drawing: SignatureDrawingState
+    var underlay: NSImage?
+    private var currentStroke: [CGPoint] = []
+    private let lineWidth = SignatureRenderer.inkWidth(forCanvasHeight: SignatureSetupSheet.canvasSize.height)
+
+    init(drawing: SignatureDrawingState) {
+        self.drawing = drawing
+        super.init(frame: .zero)
+        setAccessibilityElement(true)
+        setAccessibilityLabel("Signature drawing area")
+        setAccessibilityHelp("To sign without drawing, choose Type")
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        nil
+    }
+
+    override var isFlipped: Bool {
+        true
+    }
+
+    override var acceptsFirstResponder: Bool {
+        true
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let window {
+            drawing.undoManager = window.undoManager
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        currentStroke = [point(for: event)]
+        needsDisplay = true
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        currentStroke.append(point(for: event))
+        needsDisplay = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard !currentStroke.isEmpty else { return }
+        let last = point(for: event)
+        if currentStroke.last != last {
+            currentStroke.append(last)
+        }
+        drawing.append(currentStroke)
+        currentStroke = []
+        needsDisplay = true
+    }
+
+    private func point(for event: NSEvent) -> CGPoint {
+        let point = convert(event.locationInWindow, from: nil)
+        return CGPoint(x: min(max(point.x, 0), bounds.width), y: min(max(point.y, 0), bounds.height))
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        if let underlay, drawing.keepsExistingArtwork, currentStroke.isEmpty {
+            let scale = min(1, (bounds.width - 64) / underlay.size.width, (bounds.height - 40) / underlay.size.height)
+            let size = CGSize(width: underlay.size.width * scale, height: underlay.size.height * scale)
+            let rect = CGRect(
+                x: bounds.midX - size.width / 2,
+                y: bounds.midY - size.height / 2,
+                width: size.width,
+                height: size.height
+            )
+            underlay.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        }
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        context.setFillColor(CGColor(gray: 0, alpha: 1))
+        context.setStrokeColor(CGColor(gray: 0, alpha: 1))
+        context.setLineWidth(lineWidth)
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+        for stroke in drawing.strokes + [currentStroke] where !stroke.isEmpty {
+            if let dot = SignatureRenderer.dotRect(for: stroke, lineWidth: lineWidth) {
+                context.fillEllipse(in: dot)
+            } else {
+                context.addPath(SignatureRenderer.smoothedPath(for: stroke))
+                context.strokePath()
+            }
+        }
+        setAccessibilityValue(drawing.strokes.isEmpty && underlay == nil ? "Empty" : "Contains a signature")
     }
 }

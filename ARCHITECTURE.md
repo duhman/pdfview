@@ -22,9 +22,11 @@ Signing mode consumes placement clicks while normal reading retains PDFKit's sel
 
 ## Signature creation and storage
 
-One app-wide `SignatureStore` is injected into document windows. It persists a signature profile locally in the sandbox's Application Support directory and validates that stored image data decodes. It does not upload or sync signatures.
+One app-wide `SignatureStore` is injected into document windows. It persists a signature and optional initials profile locally in the sandbox's Application Support directory and validates that stored image data decodes. `profile(for:)`, `saveProfile(_:for:)`, and `deleteProfile(for:)` operate on either `SignatureKind`; the existing `profile` property and default save/delete arguments still address the signature. Loading accepts the original bare-profile JSON; the next successful mutation writes both profiles atomically in one envelope. It does not upload or sync signatures.
 
 `SignatureRenderer` handles drawn, typed, and imported artwork. Drawing uses a paper-white surface with black ink, smooth strokes, single-tap dots, uniform scaling, and crop-to-ink bounds. Typed signatures fit their names; imported images can remove white backgrounds. Editing restores existing artwork instead of discarding it.
+
+`SignatureSetupSheet(existingProfile:kind:fullName:onCancel:onSave:)` supports both kinds, defaulting new initials to the first character of each name component. Its native drawing canvas becomes first responder and registers strokes and clearing with the sheet window's UndoManager; undo restores saved artwork when appropriate. Text fields retain native text undo. `SignatureRenderer.renderDate` returns the same transparent PNG/point-size rendering as typed signatures, using today's date, the current locale and time zone, medium date style, or an optional custom format. Date, locale, time zone and font are injectable. The integrator must expose initials setup and wire initials/date menus and placement; this slice leaves document coordination unchanged.
 
 ## Reader features
 

@@ -33,7 +33,7 @@ duti -s com.bigmac.pdfview com.adobe.pdf all
 ### Read
 
 - Page indicator with PDF page labels and a validated Go to Page sheet.
-- Thumbnails and document outline (bookmarks) in the sidebar.
+- A native sidebar with a Thumbnails/Outline selector and current-section selection in the outline.
 - Asynchronous text search with match highlights and previous/next navigation.
 - Print the PDF with any placed signatures included; document print permissions are respected.
 - Remember your page, scroll position and zoom for the 200 most recently read file paths.
@@ -48,6 +48,8 @@ duti -s com.bigmac.pdfview com.adobe.pdf all
 - Save a flattened signed copy while keeping page sizes, links, and bookmarks; the original stays separate.
 - Follow page-by-page save progress and cancel before the destination changes.
 - Keep the signature profile locally in the app's sandbox, shared across document windows.
+
+The signing components also support an optional initials profile with draw/type/import editing and a transparent, locale-aware date renderer. Initials and date placement commands await integration; the existing reader still places the signature profile.
 
 Signatures are **visual stamps, not certificate-based digital signatures**. They do not provide certificate identity verification or cryptographic tamper detection. Flattening puts the visible signature into the page content; it does not make the PDF tamper-proof.
 
@@ -66,6 +68,7 @@ Signatures are **visual stamps, not certificate-based digital signatures**. They
 | ⌘G / ⇧⌘G | Next / Previous Match |
 | ⌃⌘F | Enter/Exit Full Screen |
 | ⌘P | Print |
+| ⌘Z / ⇧⌘Z | Undo / redo drawing edits while the signature canvas has focus |
 | ⌘0 | Actual Size |
 | ⌘9 | Zoom to Fit |
 | ⌘+ / ⌘− | Zoom in / out |

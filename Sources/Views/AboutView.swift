@@ -38,7 +38,7 @@ struct AboutView: View {
             }
             .font(.callout)
 
-            Text("© 2026 Adrian Marten")
+            Text(Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String ?? "")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)

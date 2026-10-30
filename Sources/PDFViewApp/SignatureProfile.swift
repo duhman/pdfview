@@ -1,5 +1,33 @@
 import Foundation
 
+enum SignatureKind: String, CaseIterable, Identifiable {
+    case signature
+    case initials
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .signature: "Signature"
+        case .initials: "Initials"
+        }
+    }
+
+    func defaultText(for fullName: String) -> String {
+        switch self {
+        case .signature: fullName
+        case .initials:
+            fullName.split { $0.isWhitespace }
+                .compactMap(\.first)
+                .map(String.init)
+                .joined()
+                .uppercased()
+        }
+    }
+}
+
 /// Persistent signature profile for the current macOS user.
 struct SignatureProfile: Codable, Identifiable, Equatable {
     enum SourceKind: String, Codable, CaseIterable {
