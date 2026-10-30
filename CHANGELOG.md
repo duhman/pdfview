@@ -17,7 +17,7 @@ Stops form entries from being written back into the original PDF, and refines ke
 - The initials signing banner fits on one line at a 1000 pt window: the Place Initials on Every Page (⌥⌘I) hint moved to the banner's help tag, and VoiceOver still hears it when signing starts
 - A selected stamp's outline and corner handles sit half a handle outside the stamp, so on small stamps such as a date the handles no longer cover the text; dragging a handle resizes by the pointer's travel instead of snapping the corner to the pointer
 - The signature sheet's font picker reads "Style:", with the colon the "Full name:" and "Signature:" labels use
-- The sidebar's Outline segment is disabled, with the help tag "This PDF has no outline", when the PDF has no outline, instead of opening an empty list
+- The sidebar shows only thumbnails, without the Thumbnails/Outline switch, when the PDF has no outline, instead of opening an empty list
 - Next / Previous Form Field skips read-only fields; a form with nothing editable says "This document has no form fields you can fill in."
 - Landing on a checkbox, radio button, pop-up, list or button with Next / Previous Form Field gives the document keyboard focus and ends any text edit, so Space and Return act on that field instead of typing into the text field just left
 - Sign > Anywhere is available only while signing; choosing it no longer starts signing

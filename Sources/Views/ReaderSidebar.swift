@@ -10,32 +10,34 @@ struct ReaderSidebar: View {
         case outline = "Outline"
     }
 
-    /// Without an outline the Outline segment is disabled, so it never shows an empty list.
+    /// Without an outline only thumbnails are shown, so the sidebar never shows an empty list.
     static func shownTab(_ tab: Tab, hasOutline: Bool) -> Tab {
         hasOutline ? tab : .thumbnails
     }
 
-    static func outlineHelp(hasOutline: Bool) -> String? {
-        hasOutline ? nil : "This PDF has no outline"
+    /// A segmented picker ignores `.disabled` on one segment, so the picker appears only with a choice.
+    static func availableTabs(hasOutline: Bool) -> [Tab] {
+        hasOutline ? Tab.allCases : [.thumbnails]
     }
 
     var body: some View {
         let hasOutline = !reader.outline.isEmpty
         VStack(spacing: 0) {
-            Picker("Sidebar content", selection: shownTabBinding(hasOutline: hasOutline)) {
-                ForEach(Tab.allCases, id: \.self) { tab in
-                    Text(tab.rawValue)
-                        .tag(tab)
-                        .disabled(tab == .outline && !hasOutline)
+            let tabs = Self.availableTabs(hasOutline: hasOutline)
+            if tabs.count > 1 {
+                Picker("Sidebar content", selection: shownTabBinding(hasOutline: hasOutline)) {
+                    ForEach(tabs, id: \.self) { tab in
+                        Text(tab.rawValue).tag(tab)
+                    }
                 }
-            }
-            .pickerStyle(.segmented)
-            // The label stays for VoiceOver; on screen the segments speak for themselves.
-            .labelsHidden()
-            .help(Self.outlineHelp(hasOutline: hasOutline) ?? "Show page thumbnails or the document outline")
-            .padding(10)
+                .pickerStyle(.segmented)
+                // The label stays for VoiceOver; on screen the segments speak for themselves.
+                .labelsHidden()
+                .help("Show page thumbnails or the document outline")
+                .padding(10)
 
-            Divider()
+                Divider()
+            }
 
             switch Self.shownTab(tab, hasOutline: hasOutline) {
             case .thumbnails:

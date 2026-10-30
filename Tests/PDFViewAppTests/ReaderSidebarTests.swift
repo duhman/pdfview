@@ -23,8 +23,9 @@ func theOutlineTabIsOfferedOnlyWhenThePDFHasAnOutline() {
     #expect(ReaderSidebar.shownTab(.outline, hasOutline: false) == .thumbnails)
     #expect(ReaderSidebar.shownTab(.outline, hasOutline: true) == .outline)
     #expect(ReaderSidebar.shownTab(.thumbnails, hasOutline: false) == .thumbnails)
-    #expect(ReaderSidebar.outlineHelp(hasOutline: false) == "This PDF has no outline")
-    #expect(ReaderSidebar.outlineHelp(hasOutline: true) == nil)
+    // A segmented picker ignores .disabled on one segment, so without an outline there is no picker.
+    #expect(ReaderSidebar.availableTabs(hasOutline: false) == [.thumbnails])
+    #expect(ReaderSidebar.availableTabs(hasOutline: true) == [.thumbnails, .outline])
     // A root with no sections is no outline.
     #expect((ReaderOutlineNode.children(of: PDFOutline()) ?? []).isEmpty)
 }
