@@ -160,6 +160,8 @@ struct PDFKitView: NSViewRepresentable {
     /// Stop Signing from the page's context menu.
     var onStopSigning: () -> Void
     var isExporting: Bool
+    /// The saved banner is the next thing Escape closes when nothing nearer is open.
+    var isShowingSavedBanner = false
 
     /// The window hosting the PDF view, reported whenever it is (re)attached.
     var onWindow: (NSWindow) -> Void

@@ -39,10 +39,11 @@ extension PDFKitView.Coordinator {
             isExporting: parent.isExporting,
             isSigning: parent.signingMode != .idle,
             isFindVisible: parent.reader.find.isVisible,
-            hasSelection: selectedPlacementID != nil
+            hasSelection: selectedPlacementID != nil,
+            isSavedBannerVisible: parent.isShowingSavedBanner
         )
         switch action {
-        case .cancelExport, .stopSigning, .closeFind:
+        case .cancelExport, .stopSigning, .closeFind, .closeSavedBanner:
             parent.onEscape()
         case .deselect:
             selectedPlacementID = nil

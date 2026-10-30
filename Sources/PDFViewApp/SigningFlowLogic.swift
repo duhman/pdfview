@@ -49,6 +49,7 @@ enum EscapeAction: Equatable {
     case stopSigning
     case closeFind
     case deselect
+    case closeSavedBanner
     case none
 }
 
@@ -119,7 +120,8 @@ enum SigningFlowLogic {
         isExporting: Bool,
         isSigning: Bool,
         isFindVisible: Bool,
-        hasSelection: Bool
+        hasSelection: Bool,
+        isSavedBannerVisible: Bool = false
     ) -> EscapeAction {
         if isExporting {
             .cancelExport
@@ -129,6 +131,8 @@ enum SigningFlowLogic {
             .closeFind
         } else if hasSelection {
             .deselect
+        } else if isSavedBannerVisible {
+            .closeSavedBanner
         } else {
             .none
         }

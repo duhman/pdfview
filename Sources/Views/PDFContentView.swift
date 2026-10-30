@@ -137,7 +137,7 @@ struct PDFContentView: View {
             }
             if signingMode != .idle {
                 signingBanner
-            } else if showsSavedBanner, let lastSavedURL {
+            } else if isSavedBannerVisible, let lastSavedURL {
                 savedBanner(for: lastSavedURL)
             }
 
@@ -171,6 +171,7 @@ struct PDFContentView: View {
             onEscape: handleEscape,
             onStopSigning: exitSigning,
             isExporting: export.progress != nil,
+            isShowingSavedBanner: isSavedBannerVisible,
             onWindow: attachCloseGuard,
             onPlaceSignature: placeSignature,
             onUpdatePlacementBounds: updatePlacementBounds,
@@ -307,7 +308,7 @@ extension PDFContentView {
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Close")
-            .help("Close. File > Share Signed Copy… and Show Signed Copy in Finder stay available.")
+            .help("Close (Esc). File > Share Signed Copy… (⌥⇧⌘E) and Show Signed Copy in Finder (⇧⌘R) stay available.")
         }
         .font(.callout)
         .padding(.horizontal, 12)
@@ -390,6 +391,10 @@ extension PDFContentView {
 
     private var signatureFields: [SignatureField] {
         documentState?.signatureFields ?? []
+    }
+
+    private var isSavedBannerVisible: Bool {
+        showsSavedBanner && lastSavedURL != nil && signingMode == .idle
     }
 
     private var isLocked: Bool {
@@ -837,13 +842,15 @@ extension PDFContentView {
             isExporting: export.progress != nil,
             isSigning: signingMode != .idle,
             isFindVisible: reader.find.isVisible,
-            hasSelection: viewer.selectedPlacementID != nil
+            hasSelection: viewer.selectedPlacementID != nil,
+            isSavedBannerVisible: isSavedBannerVisible
         )
         switch action {
         case .cancelExport: cancelExport()
         case .stopSigning: exitSigning()
         case .closeFind: closeFind()
         case .deselect: viewer.select(placementID: nil)
+        case .closeSavedBanner: dismissSavedBanner()
         case .none: break
         }
     }

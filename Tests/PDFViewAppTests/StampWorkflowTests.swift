@@ -472,3 +472,47 @@ private func arrowEvent(_ key: Int, modifiers: NSEvent.ModifierFlags, in window:
     #expect(!StampAccessibility.moveInstructions(for: .signature).contains("Option moves"))
     #expect(StampAccessibility.moveInstructions(for: .signature).contains("Option-Shift"))
 }
+
+// MARK: Saved banner
+
+@Test func escapeClosesTheSavedBannerWhenNothingNewerIsOpen() {
+    #expect(SigningFlowLogic.escapeAction(
+        isExporting: false, isSigning: false, isFindVisible: false, hasSelection: false, isSavedBannerVisible: true
+    ) == .closeSavedBanner)
+    // A selected stamp or the Find bar is closer at hand, so it goes first.
+    #expect(SigningFlowLogic.escapeAction(
+        isExporting: false, isSigning: false, isFindVisible: false, hasSelection: true, isSavedBannerVisible: true
+    ) == .deselect)
+    #expect(SigningFlowLogic.escapeAction(
+        isExporting: false, isSigning: false, isFindVisible: true, hasSelection: false, isSavedBannerVisible: true
+    ) == .closeFind)
+}
+
+@MainActor
+@Test func escapeInTheDocumentReachesTheSavedBanner() throws {
+    var escapes = 0
+    var representable = makeRepresentable()
+    representable.isShowingSavedBanner = true
+    representable.onEscape = { escapes += 1 }
+    let coordinator = representable.makeCoordinator()
+    let escape = try #require(NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: [],
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        characters: "\u{1B}",
+        charactersIgnoringModifiers: "\u{1B}",
+        isARepeat: false,
+        keyCode: 53
+    ))
+    #expect(coordinator.handleKey(escape))
+    #expect(escapes == 1)
+}
+
+@Test func shareAndShowInFinderHaveTheirOwnShortcuts() {
+    let chords = MenuShortcuts.appSpecific.map(MenuShortcuts.Chord.init)
+    #expect(chords.contains(MenuShortcuts.Chord(MenuShortcuts.shareSignedCopy)))
+    #expect(chords.contains(MenuShortcuts.Chord(MenuShortcuts.showSignedCopyInFinder)))
+}

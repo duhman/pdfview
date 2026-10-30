@@ -43,6 +43,9 @@ enum MenuShortcuts {
     static let selectPreviousSignature = KeyboardShortcut("[", modifiers: [.command, .option])
     /// ⇧⌘S is Save As's convention and ⌥⇧⌘S is taken; ⇧⌘E ("export") is free in the standard menus.
     static let saveSignedCopy = KeyboardShortcut("e", modifiers: [.command, .shift])
+    static let shareSignedCopy = KeyboardShortcut("e", modifiers: [.command, .option, .shift])
+    /// R for "reveal", as Show in Finder is called elsewhere on the Mac.
+    static let showSignedCopyInFinder = KeyboardShortcut("r", modifiers: [.command, .shift])
 
     // View and Go menus.
     static let toggleSidebar = KeyboardShortcut("s", modifiers: [.command, .control])
@@ -67,7 +70,8 @@ enum MenuShortcuts {
     static var appSpecific: [KeyboardShortcut] {
         [
             toggleSigning, placeSignature, placeInitials, placeDate, placeInNextField, placeOnCurrentPage,
-            selectNextSignature, selectPreviousSignature, saveSignedCopy, toggleSidebar, nextPage, previousPage,
+            selectNextSignature, selectPreviousSignature, saveSignedCopy, shareSignedCopy, showSignedCopyInFinder,
+            toggleSidebar, nextPage, previousPage,
             firstPage, lastPage, goToPage, actualSize, zoomToFit, zoomIn, zoomOut,
         ]
     }
@@ -160,12 +164,14 @@ struct SigningCommandMenu: Commands {
                     actions?.shareSignedCopy(url)
                 }
             }
+            .keyboardShortcut(MenuShortcuts.shareSignedCopy)
             .disabled(url == nil)
             Button("Show Signed Copy in Finder") {
                 if let url {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 }
             }
+            .keyboardShortcut(MenuShortcuts.showSignedCopyInFinder)
             .disabled(url == nil)
 
             Divider()
