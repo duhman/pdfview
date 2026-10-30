@@ -18,6 +18,7 @@ struct PDFViewApp: App {
             AppInfoCommands()
             HelpCommands()
             ZoomCommands()
+            ReaderCommands()
             SigningCommandMenu(signatureStore: signatureStore)
         }
 

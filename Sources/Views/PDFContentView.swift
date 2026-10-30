@@ -14,6 +14,9 @@ struct PDFContentView: View {
     private var undoManager
     @EnvironmentObject private var signatureStore: SignatureStore
 
+    @State private var reader = ReaderController()
+    @State private var export = SignedCopyOperation()
+    @State private var printTask: Task<Void, Never>?
     @State private var zoom: ZoomState = .fit
     @State private var viewer = PDFViewerProxy()
     @State private var editor = SignaturePlacementEditor()
@@ -39,16 +42,26 @@ struct PDFContentView: View {
             } message: { alert in
                 Text(alert.message)
             }
-            .onExitCommand(perform: signingMode == .idle ? nil : { exitSigning() })
+            .onExitCommand(perform: handleEscape)
+            .onDisappear {
+                reader.persist()
+                export.cancel()
+                printTask?.cancel()
+            }
             .onChange(of: hasUnexportedPlacements) { _, isEdited in
                 closeGuard.isEdited = isEdited
             }
             .focusedSceneValue(\.signingActions, signingActions)
             .focusedSceneValue(\.zoomActions, zoomActions)
+            .focusedSceneValue(\.readerActions, ReaderCommandActions(
+                reader: reader, isBusy: export.isBusy, printDocument: printDocument
+            ))
     }
 
     private var window: some View {
-        content
+        @Bindable var reader = reader
+        return content
+            .sheet(isPresented: $reader.showGoToPage) { GoToPageSheet(reader: reader) }
             .frame(minWidth: 600, minHeight: 400)
             .toolbar {
                 toolbarContent
@@ -67,13 +80,27 @@ struct PDFContentView: View {
 
     private var content: some View {
         VStack(spacing: 0) {
+            if let progress = export.progress {
+                ExportProgressBanner(progress: progress, cancel: cancelExport)
+            }
             if signingMode != .idle {
                 signingBanner
             } else if let savedURL {
                 savedBanner(for: savedURL)
             }
 
-            pdfView
+            if reader.find.isVisible {
+                FindBar(find: reader.find, onEscape: handleEscape)
+            }
+            if let reason = reader.printDisabledReason {
+                Text(reason).font(.caption).foregroundStyle(.secondary).padding(4)
+            }
+            HSplitView {
+                if reader.sidebarVisible {
+                    ReaderSidebar(reader: reader)
+                }
+                pdfView
+            }
         }
     }
 
@@ -85,21 +112,37 @@ struct PDFContentView: View {
             signingMode: signingMode,
             signatureProfile: signatureStore.profile,
             viewer: viewer,
+            reader: reader,
+            fileURL: fileURL,
+            onEscape: handleEscape,
+            isExporting: export.progress != nil,
             onWindow: attachCloseGuard,
             onPlaceSignature: placeSignature,
             onUpdatePlacementBounds: { id, bounds, actionName in
                 configuredEditor().setBounds(id: id, to: bounds, actionName: actionName)
             },
             onDeletePlacement: { configuredEditor().delete(id: $0) },
-            onExitSigning: exitSigning,
             onDocumentStateChange: applyDocumentState
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+}
 
-    // MARK: Toolbar and banners
-
+extension PDFContentView {
     @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            Button { reader.sidebarVisible.toggle() } label: {
+                Label("Toggle Sidebar", systemImage: "sidebar.left")
+            }
+            .help("Show or hide the document sidebar")
+        }
+        ToolbarItem(placement: .principal) {
+            Button { reader.showGoToPage = true } label: { Text(reader.pageIndicator).monospacedDigit() }
+                .disabled(!reader.canRead)
+                .accessibilityLabel("Current page")
+                .accessibilityValue(reader.pageIndicator)
+                .help("Go to Page…")
+        }
         ToolbarItemGroup(placement: .primaryAction) {
             ControlGroup {
                 Button(action: zoomOut) {
@@ -160,7 +203,6 @@ struct PDFContentView: View {
                 .fixedSize()
             }
             Button("Done", action: exitSigning)
-                .keyboardShortcut(.cancelAction)
         }
         .font(.callout)
         .padding(.horizontal, 12)
@@ -274,7 +316,7 @@ struct PDFContentView: View {
     }
 
     private var canSaveSignedCopy: Bool {
-        document.pdfDocument != nil && !document.signaturePlacements.isEmpty
+        document.pdfDocument != nil && !document.signaturePlacements.isEmpty && !export.isBusy
     }
 
     private var hasUnexportedPlacements: Bool {
@@ -463,43 +505,72 @@ extension PDFContentView {
 
     /// Asks for a destination in a sheet on this document's window, then writes the signed copy.
     private func saveSignedCopy(completion: @escaping (Bool) -> Void = { _ in }) {
-        guard canSaveSignedCopy, let window = viewer.window else {
-            completion(false)
+        guard canSaveSignedCopy, let window = viewer.window, export.reserve() else { completion(false)
             return
         }
-
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [.pdf]
         panel.nameFieldStringValue = SigningFlowLogic.signedFileName(for: fileURL)
         panel.directoryURL = fileURL?.deletingLastPathComponent()
-
         panel.beginSheetModal(for: window) { response in
-            guard response == .OK, let url = panel.url else {
+            guard response == .OK, let url = panel.url, let source = document.pdfDocument else {
+                export.release()
                 completion(false)
                 return
             }
-            completion(writeSignedCopy(to: url))
+            let placements = document.signaturePlacements
+            export.write(source, placements: placements, to: url) { result in
+                switch result {
+                case .success:
+                    exportedPlacements = placements
+                    savedURL = url
+                    announce(SigningFlowLogic.savedAnnouncement(fileName: url.lastPathComponent))
+                    completion(document.signaturePlacements == placements)
+                case let .failure(error):
+                    if !(error is CancellationError) {
+                        errorAlert = ErrorAlert(title: "Couldn’t Save Signed Copy", error: error)
+                    }
+                    completion(false)
+                }
+            }
         }
     }
 
-    private func writeSignedCopy(to url: URL) -> Bool {
-        let didAccess = url.startAccessingSecurityScopedResource()
-        defer {
-            if didAccess {
-                url.stopAccessingSecurityScopedResource()
+    private func printDocument() {
+        guard reader.canPrint, let source = document.pdfDocument, export.reserve() else { return }
+        let placements = document.signaturePlacements
+        printTask = Task {
+            let printing = PDFPrinting()
+            defer {
+                printing.cleanup()
+                export.release()
+                printTask = nil
+            }
+            do {
+                try await printing.prepare(source: source, placements: placements) { export.updateProgress($0) }
+                try Task.checkCancellation()
+                try printing.run()
+            } catch {
+                if !(error is CancellationError) {
+                    errorAlert = ErrorAlert(title: "Couldn’t Print PDF", error: error)
+                }
             }
         }
+    }
 
-        do {
-            try document.writeSignedCopy(to: url)
-            exportedPlacements = document.signaturePlacements
-            savedURL = url
-            announce(SigningFlowLogic.savedAnnouncement(fileName: url.lastPathComponent))
-            return true
-        } catch {
-            errorAlert = ErrorAlert(title: "Couldn’t Save Signed Copy", error: error)
-            return false
+    private func cancelExport() {
+        export.cancel()
+        printTask?.cancel()
+    }
+
+    private func handleEscape() {
+        if export.progress != nil {
+            cancelExport()
+        } else if signingMode != .idle {
+            exitSigning()
+        } else if reader.find.isVisible {
+            reader.find.close()
         }
     }
 

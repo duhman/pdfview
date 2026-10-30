@@ -82,6 +82,10 @@ struct PDFKitView: NSViewRepresentable {
     var signingMode: SigningMode
     var signatureProfile: SignatureProfile?
     var viewer: PDFViewerProxy
+    var reader: ReaderController
+    var fileURL: URL?
+    var onEscape: () -> Void
+    var isExporting: Bool
 
     /// The window hosting the PDF view, reported whenever it is (re)attached.
     var onWindow: (NSWindow) -> Void
@@ -89,7 +93,6 @@ struct PDFKitView: NSViewRepresentable {
     var onPlaceSignature: (_ pageIndex: Int, _ bounds: CGRect) -> Void
     var onUpdatePlacementBounds: (_ id: UUID, _ bounds: CGRect, _ actionName: String) -> Void
     var onDeletePlacement: (UUID) -> Void
-    var onExitSigning: () -> Void
     /// Fields and lock state, reported when the document changes or unlocks.
     var onDocumentStateChange: (DocumentState) -> Void
 
@@ -122,11 +125,21 @@ struct PDFKitView: NSViewRepresentable {
             coordinator.documentDidChange(document)
         }
 
+        // Publish reader state after SwiftUI has finished this representable update.
+        DispatchQueue.main.async { [weak nsView, weak reader] in
+            guard let nsView, nsView.document === document else { return }
+            reader?.attach(to: nsView, fileURL: fileURL)
+        }
         coordinator.apply(zoom, to: nsView)
         coordinator.refreshOverlays()
         if let window = nsView.window {
             onWindow(window)
         }
+    }
+
+    static func dismantleNSView(_ nsView: SigningPDFView, coordinator: Coordinator) {
+        coordinator.parent.reader.detach()
+        nsView.pageOverlayViewProvider = nil
     }
 }
 
@@ -300,10 +313,14 @@ extension PDFKitView {
 
         // MARK: Keyboard
 
+        private var isHandlingEscape: Bool {
+            parent.isExporting || parent.signingMode != .idle || parent.reader.find.isVisible
+        }
+
         private func handleKey(_ event: NSEvent) -> Bool {
             if event.keyCode == 53 {
-                if parent.signingMode != .idle {
-                    parent.onExitSigning()
+                if isHandlingEscape {
+                    parent.onEscape()
                     return true
                 }
                 if selectedPlacementID != nil {

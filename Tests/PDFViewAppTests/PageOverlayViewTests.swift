@@ -128,11 +128,14 @@ private func color(of overlay: PageOverlayView, atPagePoint point: CGPoint) thro
         signingMode: .idle,
         signatureProfile: nil,
         viewer: PDFViewerProxy(),
+        reader: ReaderController(),
+        fileURL: nil,
+        onEscape: {},
+        isExporting: false,
         onWindow: { _ in },
         onPlaceSignature: { _, _ in },
         onUpdatePlacementBounds: { _, _, _ in },
         onDeletePlacement: { _ in },
-        onExitSigning: {},
         onDocumentStateChange: { _ in }
     )
     let coordinator = representable.makeCoordinator()
