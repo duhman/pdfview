@@ -190,3 +190,39 @@ func makeStampPNG(width: Int, height: Int) throws -> Data {
     #expect(MenuShortcuts.appSpecific
         .contains { MenuShortcuts.Chord($0) == MenuShortcuts.Chord(MenuShortcuts.placeSignature) })
 }
+
+// MARK: Next empty field
+
+private func field(_ page: Int, x: CGFloat) -> SignatureField {
+    SignatureField(pageIndex: page, bounds: CGRect(x: x, y: 100, width: 150, height: 40))
+}
+
+private func stamp(in field: SignatureField) -> PDFViewerDocument.SignaturePlacement {
+    PDFViewerDocument.SignaturePlacement(
+        pageIndex: field.pageIndex,
+        bounds: field.bounds.insetBy(dx: 4, dy: 4),
+        signaturePNGData: Data([1]),
+        signerName: "Tester"
+    )
+}
+
+@Test func nextFieldSkipsFieldsThatAlreadyHoldAStamp() {
+    let fields = [field(0, x: 50), field(0, x: 300), field(1, x: 50)]
+    let placements = [stamp(in: fields[1])]
+    #expect(StampWorkflow.nextEmptyFieldIndex(after: nil, fields: fields, placements: placements) == 0)
+    #expect(StampWorkflow.nextEmptyFieldIndex(after: 0, fields: fields, placements: placements) == 2)
+    // Wraps past the end to the first empty field.
+    #expect(StampWorkflow.nextEmptyFieldIndex(after: 2, fields: fields, placements: [stamp(in: fields[0])]) == 1)
+}
+
+@Test func nextFieldIsNilOnceEveryFieldHoldsAStamp() {
+    let fields = [field(0, x: 50), field(1, x: 50)]
+    #expect(StampWorkflow.nextEmptyFieldIndex(after: nil, fields: fields, placements: fields.map(stamp)) == nil)
+    #expect(StampWorkflow.nextEmptyFieldIndex(after: nil, fields: [], placements: []) == nil)
+    // A stamp on another page at the same spot does not fill the field.
+    let elsewhere = PDFViewerDocument.SignaturePlacement(
+        pageIndex: 5, bounds: fields[0].bounds, signaturePNGData: Data([1]), signerName: "Tester"
+    )
+    #expect(StampWorkflow.nextEmptyFieldIndex(after: nil, fields: fields, placements: [elsewhere]) == 0)
+    #expect(StampWorkflow.allFieldsFilledAnnouncement == "Every signature field already has a stamp.")
+}

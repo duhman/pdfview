@@ -159,12 +159,6 @@ enum SigningFlowLogic {
         return ordered[next].id
     }
 
-    static func nextFieldIndex(after lastIndex: Int?, count: Int) -> Int? {
-        guard count > 0 else { return nil }
-        guard let lastIndex, lastIndex + 1 < count else { return 0 }
-        return lastIndex + 1
-    }
-
     /// True while the window holds placements that differ from the last saved signed copy.
     static func hasUnexportedPlacements(
         _ placements: [PDFViewerDocument.SignaturePlacement],

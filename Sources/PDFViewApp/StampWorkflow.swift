@@ -64,4 +64,27 @@ enum StampWorkflow {
     static func placeOnCurrentPageTitle(kind: StampKind) -> String {
         "Place \(kind.title) on Current Page"
     }
+
+    static let allFieldsFilledAnnouncement = "Every signature field already has a stamp."
+
+    /// The next field after `lastIndex`, wrapping, that has no stamp centred inside it yet.
+    static func nextEmptyFieldIndex(
+        after lastIndex: Int?,
+        fields: [SignatureField],
+        placements: [PDFViewerDocument.SignaturePlacement]
+    ) -> Int? {
+        guard !fields.isEmpty else { return nil }
+        let start = lastIndex.map { $0 + 1 } ?? 0
+        return (0 ..< fields.count).lazy
+            .map { (start + $0) % fields.count }
+            .first { index in
+                let field = fields[index]
+                return !placements.contains {
+                    $0.pageIndex == field.pageIndex && field.bounds.contains(CGPoint(
+                        x: $0.bounds.midX,
+                        y: $0.bounds.midY
+                    ))
+                }
+            }
+    }
 }

@@ -46,14 +46,6 @@ import Testing
     #expect(SigningFlowLogic.enteredAnnouncement(mode: .freePlacement).contains("Escape"))
 }
 
-@Test func nextFieldCyclesThroughDetectedFields() {
-    #expect(SigningFlowLogic.nextFieldIndex(after: nil, count: 3) == 0)
-    #expect(SigningFlowLogic.nextFieldIndex(after: 0, count: 3) == 1)
-    #expect(SigningFlowLogic.nextFieldIndex(after: 2, count: 3) == 0)
-    #expect(SigningFlowLogic.nextFieldIndex(after: 7, count: 3) == 0)
-    #expect(SigningFlowLogic.nextFieldIndex(after: nil, count: 0) == nil)
-}
-
 @Test func unexportedStateTracksTheLastSavedPlacements() {
     let placement = PDFViewerDocument.SignaturePlacement(
         pageIndex: 0,

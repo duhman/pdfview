@@ -552,11 +552,16 @@ extension PDFContentView {
             requestSignatureSetup(then: .placeInNextField)
             return
         }
-        guard let index = SigningFlowLogic.nextFieldIndex(after: lastFieldIndex, count: signatureFields.count),
-              let page = document.pdfDocument?.page(at: signatureFields[index].pageIndex)
-        else {
+        guard let index = StampWorkflow.nextEmptyFieldIndex(
+            after: lastFieldIndex,
+            fields: signatureFields,
+            placements: document.signaturePlacements
+        ) else {
+            NSSound.beep()
+            announce(StampWorkflow.allFieldsFilledAnnouncement)
             return
         }
+        guard let page = document.pdfDocument?.page(at: signatureFields[index].pageIndex) else { return }
 
         let field = signatureFields[index]
         lastFieldIndex = index
