@@ -18,7 +18,7 @@ A full native Mac PDF reader with private, offline visual signing.
 
 ## Install
 
-Requires **macOS 14.2 or later**. Download the universal ZIP for Apple silicon and Intel from the [latest release](https://github.com/duhman/pdfview/releases/latest), unzip it, and move `PDFView.app` to Applications. The features below are in version 0.2.1 and later.
+Requires **macOS 14.2 or later**. Download the universal ZIP for Apple silicon and Intel from the [latest release](https://github.com/duhman/pdfview/releases/latest), unzip it, and move `PDFView.app` to Applications. The features below are in version 0.2.2 and later.
 
 The downloadable build is ad-hoc signed and not notarized. For the first launch:
 
@@ -141,7 +141,7 @@ Local builds use ad-hoc signing (`SIGNING_IDENTITY=-`) by default. With a Develo
 SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)" \
 NOTARIZE=true \
 NOTARY_PROFILE="your-notary-profile" \
-VERSION="0.2.1" \
+VERSION="0.2.2" \
 BUILD_NUMBER="1" \
 /bin/bash ./build_app.sh release
 ```
