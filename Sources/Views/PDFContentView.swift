@@ -124,7 +124,7 @@ struct PDFContentView: View {
                     cancel: cancelExport
                 )
             }
-            if protectionSession.protection?.isLocked == true {
+            if isLocked {
                 HStack {
                     Text("This PDF is locked. Unlock it to read, sign, save a signed copy, or print.")
                     Spacer()
@@ -143,8 +143,9 @@ struct PDFContentView: View {
             if reader.find.isVisible {
                 FindBar(find: reader.find, onEscape: closeFind)
             }
-            if let reason = reader.printDisabledReason {
-                Text(reason).font(.caption).foregroundStyle(.secondary).padding(4)
+            // The locked banner already says printing needs the password.
+            if !isLocked, let reason = reader.printDisabledReason {
+                Text(reason).font(.callout).foregroundStyle(.secondary).padding(4)
             }
             HSplitView {
                 if reader.sidebarVisible {
@@ -157,7 +158,7 @@ struct PDFContentView: View {
 
     private var pdfView: some View {
         PDFKitView(
-            document: document.pdfDocument,
+            document: Self.documentForPageView(document.pdfDocument, protection: protectionSession.protection),
             signaturePlacements: document.signaturePlacements,
             zoom: $zoom,
             signingMode: signingMode,
@@ -177,6 +178,22 @@ struct PDFContentView: View {
             onFormValuesChange: applyFormValues
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay {
+            if isLocked {
+                ContentUnavailableView(
+                    "This PDF Is Locked",
+                    systemImage: "lock",
+                    description: Text("Unlock it to see its pages.")
+                )
+            }
+        }
+    }
+
+    /// PDFKit shows its own password field for a locked document, which would give the window two
+    /// unlock surfaces; it gets no document until the unlock sheet has opened it.
+    static func documentForPageView(_ document: PDFDocument?, protection: DocumentProtection?) -> PDFDocument? {
+        let isLocked = protection?.isLocked ?? document?.isLocked ?? false
+        return isLocked ? nil : document
     }
 }
 
@@ -372,6 +389,10 @@ extension PDFContentView {
 
     private var signatureFields: [SignatureField] {
         documentState?.signatureFields ?? []
+    }
+
+    private var isLocked: Bool {
+        protectionSession.protection?.isLocked ?? document.pdfDocument?.isLocked ?? false
     }
 
     private var hasSignatureFields: Bool {

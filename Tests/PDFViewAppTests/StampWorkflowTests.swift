@@ -345,3 +345,22 @@ private func initials(page: Int, bounds: CGRect) -> PDFViewerDocument.SignatureP
     #expect(ExportPurpose.signedCopy.text(for: rendering) == rendering.text)
     #expect(ExportPurpose.signedCopy.title == "Saving signed copy")
 }
+
+// MARK: One unlock surface
+
+@MainActor
+@Test func lockedDocumentIsNeverHandedToPDFKit() throws {
+    let source = try #require(PDFDocument(data: makeBlankPDF(pages: 1)))
+    let data = try #require(source.dataRepresentation(options: [
+        PDFDocumentWriteOption.userPasswordOption: "reader", PDFDocumentWriteOption.ownerPasswordOption: "owner",
+    ]))
+    let locked = try #require(PDFDocument(data: data))
+    #expect(locked.isLocked)
+    // Before the window has attached protection, the document's own lock state decides.
+    #expect(PDFContentView.documentForPageView(locked, protection: nil) == nil)
+
+    let protection = DocumentProtection(document: locked)
+    #expect(PDFContentView.documentForPageView(locked, protection: protection) == nil)
+    #expect(protection.unlock(withPassword: "reader"))
+    #expect(PDFContentView.documentForPageView(locked, protection: protection) === locked)
+}
