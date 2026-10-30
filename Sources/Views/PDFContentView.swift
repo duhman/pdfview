@@ -837,13 +837,14 @@ extension PDFContentView {
             isExporting: export.progress != nil,
             isSigning: signingMode != .idle,
             isFindVisible: reader.find.isVisible,
-            hasSelection: false
+            hasSelection: viewer.selectedPlacementID != nil
         )
         switch action {
         case .cancelExport: cancelExport()
         case .stopSigning: exitSigning()
         case .closeFind: closeFind()
-        case .deselect, .none: break
+        case .deselect: viewer.select(placementID: nil)
+        case .none: break
         }
     }
 

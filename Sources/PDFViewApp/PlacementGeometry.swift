@@ -108,13 +108,19 @@ enum PlacementGeometry {
         return CGRect(origin: origin, size: size)
     }
 
-    /// Arrow-key step: 1 pt, Shift 10 pt, Option 50 pt. Option-Shift resizes instead, so it has no step.
-    static func nudgeDistance(shift: Bool, option: Bool) -> CGFloat? {
+    enum ArrowAction: Equatable {
+        case move(CGFloat)
+        case resize
+    }
+
+    /// What an arrow key does to the selected stamp: move 1 pt, Shift 10 pt, Option-Shift resize.
+    /// Option alone is nil so Option-Up/Down keep turning pages through the Go menu.
+    static func arrowAction(shift: Bool, option: Bool) -> ArrowAction? {
         switch (shift, option) {
-        case (false, false): 1
-        case (true, false): 10
-        case (false, true): 50
-        case (true, true): nil
+        case (false, false): .move(1)
+        case (true, false): .move(10)
+        case (true, true): .resize
+        case (false, true): nil
         }
     }
 

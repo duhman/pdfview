@@ -20,13 +20,13 @@ extension PDFKitView.Coordinator {
             return true
         case let key? where [.leftArrow, .rightArrow, .upArrow, .downArrow].contains(key):
             let flags = event.modifierFlags
-            if let distance = PlacementGeometry.nudgeDistance(
-                shift: flags.contains(.shift),
-                option: flags.contains(.option)
-            ) {
+            switch PlacementGeometry.arrowAction(shift: flags.contains(.shift), option: flags.contains(.option)) {
+            case let .move(distance)?:
                 nudge(placement, key: key, by: distance)
-            } else {
+            case .resize?:
                 resize(placement, growing: key == .rightArrow || key == .upArrow)
+            case nil:
+                return false
             }
             return true
         default:

@@ -417,3 +417,58 @@ private func initials(page: Int, bounds: CGRect) -> PDFViewerDocument.SignatureP
     try await Task.sleep(for: .milliseconds(30))
     #expect(window.firstResponder !== pdfView)
 }
+
+// MARK: Selected stamp keys
+
+@MainActor
+private func arrowEvent(_ key: Int, modifiers: NSEvent.ModifierFlags, in window: NSWindow) throws -> NSEvent {
+    let character = try String(#require(UnicodeScalar(key)).description)
+    return try #require(NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: modifiers.union([.numericPad, .function]),
+        timestamp: 0,
+        windowNumber: window.windowNumber,
+        context: nil,
+        characters: character,
+        charactersIgnoringModifiers: character,
+        isARepeat: false,
+        keyCode: key == NSDownArrowFunctionKey ? 125 : 126
+    ))
+}
+
+@MainActor
+@Test func selectedStampLeavesOptionArrowsToPageNavigation() throws {
+    let pdfView = SigningPDFView(frame: CGRect(x: 0, y: 0, width: 400, height: 600))
+    let window = NSWindow(contentRect: pdfView.frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = pdfView
+    window.makeFirstResponder(pdfView)
+    var handled: [NSEvent.ModifierFlags] = []
+    pdfView.hasSelectedStamp = { true }
+    pdfView.keyHandler = { event in
+        handled.append(event.modifierFlags.intersection([.shift, .option]))
+        return true
+    }
+    let move = try arrowEvent(NSDownArrowFunctionKey, modifiers: [], in: window)
+    let bigMove = try arrowEvent(NSUpArrowFunctionKey, modifiers: [.shift], in: window)
+    let resize = try arrowEvent(NSUpArrowFunctionKey, modifiers: [.shift, .option], in: window)
+    let nextPage = try arrowEvent(NSDownArrowFunctionKey, modifiers: [.option], in: window)
+
+    #expect(pdfView.performKeyEquivalent(with: move))
+    #expect(pdfView.performKeyEquivalent(with: bigMove))
+    #expect(pdfView.performKeyEquivalent(with: resize))
+    _ = pdfView.performKeyEquivalent(with: nextPage)
+    #expect(handled == [[], [.shift], [.shift, .option]])
+
+    // With nothing selected the arrows are never claimed.
+    pdfView.hasSelectedStamp = { false }
+    #expect(!pdfView.performKeyEquivalent(with: move))
+    #expect(handled.count == 3)
+}
+
+@Test func placementAnnouncementSaysHowToMoveAndFinish() {
+    let text = StampAccessibility.placedAnnouncement(pageIndex: 1, location: "at center", kind: .initials)
+    #expect(text == "Initials placed on page 2, at center. Arrow keys move it, Escape when done.")
+    #expect(!StampAccessibility.moveInstructions(for: .signature).contains("Option moves"))
+    #expect(StampAccessibility.moveInstructions(for: .signature).contains("Option-Shift"))
+}

@@ -72,8 +72,9 @@ enum StampAccessibility {
         return "\(subject), page \(pageIndex + 1), \(place)"
     }
 
+    /// The new stamp is selected, so the announcement says how to adjust it and how to finish.
     static func placedAnnouncement(pageIndex: Int, location: String, kind: StampKind = .signature) -> String {
-        "\(kind.title) placed on page \(pageIndex + 1), \(location)"
+        "\(kind.title) placed on page \(pageIndex + 1), \(location). Arrow keys move it, Escape when done."
     }
 
     static func movedAnnouncement(pageIndex: Int, location: String) -> String {
@@ -81,8 +82,8 @@ enum StampAccessibility {
     }
 
     static func moveInstructions(for kind: StampKind) -> String {
-        "Use the arrow keys to move the \(kind.title.lowercased()): Shift moves 10 points, "
-            + "Option moves 50. Option-Shift arrows resize it. Delete removes it."
+        "Use the arrow keys to move the \(kind.title.lowercased()): Shift moves 10 points. "
+            + "Option-Shift arrows resize it. Delete removes it. Escape when done."
     }
 
     @MainActor
