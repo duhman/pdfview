@@ -146,6 +146,32 @@ enum PlacementGeometry {
         }
     }
 
+    /// How far the selection outline sits outside a stamp, in screen points: half a handle, so the
+    /// corner handles stay off the ink of small stamps such as a date.
+    static let selectionOutset: CGFloat = 5.5
+
+    /// The selection outline and its corner handles, `onePoint` being one screen point in page units.
+    static func selectionFrame(around rect: CGRect, onePoint: CGFloat) -> CGRect {
+        rect.insetBy(dx: -selectionOutset * onePoint, dy: -selectionOutset * onePoint)
+    }
+
+    /// A corner drag by the pointer's travel since the press, so grabbing a handle away from the
+    /// stamp's exact corner does not make it jump.
+    static func resized(
+        _ rect: CGRect,
+        dragging corner: Corner,
+        by travel: CGVector,
+        within bounds: CGRect
+    ) -> CGRect {
+        let start = corner.point(in: rect)
+        return resized(
+            rect,
+            dragging: corner,
+            to: CGPoint(x: start.x + travel.dx, y: start.y + travel.dy),
+            within: bounds
+        )
+    }
+
     static func isClick(from start: CGPoint, to end: CGPoint, threshold: CGFloat = clickThreshold) -> Bool {
         hypot(end.x - start.x, end.y - start.y) <= threshold
     }

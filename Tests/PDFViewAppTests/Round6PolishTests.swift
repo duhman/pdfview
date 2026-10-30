@@ -268,3 +268,36 @@ private final class WindowEditingFixture {
     #expect(!state.canUndo && !state.canRedo)
     #expect(UndoMenuState(UndoManager()) == state)
 }
+
+// MARK: Selection handles sit outside small stamps
+
+@MainActor
+@Test func theSelectionFrameIsOutsetByHalfAHandle() {
+    #expect(PlacementGeometry.selectionOutset == PageOverlayView.handleSize / 2)
+    let stamp = CGRect(x: 100, y: 100, width: 110, height: 20)
+    #expect(PlacementGeometry.selectionFrame(around: stamp, onePoint: 1)
+        == CGRect(x: 94.5, y: 94.5, width: 121, height: 31))
+    // At 200% zoom one screen point is half a page unit.
+    #expect(PlacementGeometry.selectionFrame(around: stamp, onePoint: 0.5)
+        == CGRect(x: 97.25, y: 97.25, width: 115.5, height: 25.5))
+}
+
+@MainActor
+@Test func handlesOnADateStampDoNotCoverItsInk() {
+    let stamp = CGRect(x: 100, y: 100, width: 110, height: 20)
+    let frame = PlacementGeometry.selectionFrame(around: stamp, onePoint: 1)
+    let handle = PageOverlayView.handleSize
+    for corner in PlacementGeometry.Corner.allCases {
+        let center = corner.point(in: frame)
+        let square = CGRect(x: center.x - handle / 2, y: center.y - handle / 2, width: handle, height: handle)
+        #expect(!square.intersects(stamp.insetBy(dx: 0.01, dy: 0.01)), "\(corner)")
+    }
+}
+
+@Test func aResizeDragMovesTheCornerByThePointerTravelWithoutJumping() {
+    let stamp = CGRect(x: 100, y: 100, width: 110, height: 20)
+    let page = CGRect(x: 0, y: 0, width: 600, height: 800)
+    #expect(PlacementGeometry.resized(stamp, dragging: .topRight, by: .zero, within: page) == stamp)
+    let wider = PlacementGeometry.resized(stamp, dragging: .topRight, by: CGVector(dx: 110, dy: 0), within: page)
+    #expect(wider == CGRect(x: 100, y: 100, width: 220, height: 40))
+}
