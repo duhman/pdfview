@@ -35,7 +35,7 @@ final class SignedCopyOperation {
         task?.cancel()
     }
 
-    /// Integrator: call before presenting the save panel and retain protection per document window.
+    /// Installs the accessory before the window presents its reserved save panel.
     func configure(_ panel: NSSavePanel, originalURL: URL?, protection: DocumentProtection) {
         self.originalURL = originalURL
         self.protection = protection

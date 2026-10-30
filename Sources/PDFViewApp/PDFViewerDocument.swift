@@ -62,19 +62,25 @@ struct PDFViewerDocument: FileDocument {
         var bounds: CGRect
         let signaturePNGData: Data
         let signerName: String
+        let kind: StampKind
+        let dateText: String?
 
         init(
             id: UUID = UUID(),
             pageIndex: Int,
             bounds: CGRect,
             signaturePNGData: Data,
-            signerName: String
+            signerName: String,
+            kind: StampKind = .signature,
+            dateText: String? = nil
         ) {
             self.id = id
             self.pageIndex = pageIndex
             self.bounds = bounds
             self.signaturePNGData = signaturePNGData
             self.signerName = signerName
+            self.kind = kind
+            self.dateText = dateText
         }
     }
 

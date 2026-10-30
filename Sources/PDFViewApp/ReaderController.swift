@@ -117,7 +117,7 @@ final class ReaderController: NSObject {
         schedulePersistence()
     }
 
-    private func refresh() {
+    func refresh() {
         guard let document = attachedDocument else { return }
         pageCount = document.pageCount
         outline = ReaderOutlineNode.children(of: document.outlineRoot) ?? []
@@ -156,9 +156,12 @@ final class ReaderController: NSObject {
         )
     }
 
-    /// Integrator: cancel the task on document replacement/unlock and discard canceled partial results.
+    /// One cancellable annotation walk; callers can collect editable widgets alongside signature fields.
     static func scanSignatureFields(
-        in document: PDFDocument, batchSize: Int = 16, batch: ([SignatureField]) -> Void = { _ in }
+        in document: PDFDocument,
+        batchSize: Int = 16,
+        batch: ([SignatureField]) -> Void = { _ in },
+        visitPage: (PDFPage) -> Void = { _ in }
     ) async throws -> [SignatureField] {
         guard !document.isLocked else { return [] }
         var fields: [SignatureField] = []
@@ -168,8 +171,9 @@ final class ReaderController: NSObject {
             var found: [SignatureField] = []
             for index in start ..< min(start + stride, document.pageCount) {
                 guard let page = document.page(at: index) else { continue }
+                visitPage(page)
                 found += page.annotations.filter(SigningFlowLogic.isSignatureField).map {
-                    SignatureField(pageIndex: index, bounds: $0.bounds)
+                    SignatureField(pageIndex: index, bounds: $0.bounds, name: $0.fieldName)
                 }
             }
             fields += found

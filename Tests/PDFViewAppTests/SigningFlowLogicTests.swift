@@ -96,9 +96,10 @@ import Testing
     #expect(!plain.message.isEmpty)
 }
 
-@Test func onlyRealSignatureFieldsAreDetected() throws {
+@MainActor
+@Test func onlyRealSignatureFieldsAreDetected() async throws {
     let document = try makeFormDocument()
-    let fields = SigningFlowLogic.signatureFields(in: document)
+    let fields = try await ReaderController.scanSignatureFields(in: document)
 
     #expect(fields == [
         SignatureField(pageIndex: 1, bounds: CGRect(x: 20, y: 100, width: 220, height: 50), name: "ClientSignature"),

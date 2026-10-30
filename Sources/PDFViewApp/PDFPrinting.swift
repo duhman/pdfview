@@ -10,6 +10,7 @@ final class PDFPrinting {
     func prepare(
         source: PDFDocument,
         placements: [PDFViewerDocument.SignaturePlacement],
+        password: String? = nil,
         progress: (ExportProgress) -> Void
     ) async throws {
         guard !source.isLocked, source.allowsPrinting else { throw CocoaError(.fileReadNoPermission) }
@@ -19,9 +20,16 @@ final class PDFPrinting {
             let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
             temporaryURL = url
             do {
-                try await SignedPDFExporter.writeAsync(source, placements: placements, to: url, progress: progress)
+                try await SignedPDFExporter.writeAsync(
+                    source, placements: placements, to: url, password: password, progress: progress
+                )
                 guard let signed = PDFDocument(url: url)
                 else { throw PDFViewerDocument.ExportError.invalidExportedDocument }
+                if signed.isLocked {
+                    guard let password, signed.unlock(withPassword: password) else {
+                        throw PDFViewerDocument.ExportError.documentLocked
+                    }
+                }
                 document = signed
             } catch {
                 cleanup()

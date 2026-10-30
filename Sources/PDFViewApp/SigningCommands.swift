@@ -19,6 +19,10 @@ struct SigningCommandActions {
     var shareSignedCopy: (URL) -> Void
     var editSignature: () -> Void
     var deleteSignature: () -> Void
+    var placeStamp: (StampKind) -> Void
+    var editInitials: () -> Void
+    var canUnlock: Bool
+    var unlock: () -> Void
 }
 
 /// Zoom actions the focused document window publishes for the View menu.
@@ -81,6 +85,15 @@ struct SigningCommandMenu: Commands {
             .keyboardShortcut("s", modifiers: [.command, .option])
             .disabled(!canSign)
 
+            Button("Place Signature") { actions?.placeStamp(.signature) }
+                .disabled(!canSign)
+            Button("Place Initials") { actions?.placeStamp(.initials) }
+                .keyboardShortcut("i", modifiers: [.command, .option, .shift])
+                .disabled(!canSign)
+            Button("Place Date") { actions?.placeStamp(.date) }
+                .keyboardShortcut("d", modifiers: [.command, .option, .shift])
+                .disabled(!canSign)
+
             // Keys mirror SigningShortcut, which the signing banner shows.
             Button("Place in Next Field") {
                 actions?.placeInNextField()
@@ -132,6 +145,12 @@ struct SigningCommandMenu: Commands {
                 actions?.editSignature()
             }
             .disabled(actions == nil)
+
+            Button("Create/Edit Initials…") { actions?.editInitials() }
+                .disabled(actions == nil)
+
+            Button("Unlock…") { actions?.unlock() }
+                .disabled(actions?.canUnlock != true)
 
             Button("Delete Saved Signature…") {
                 actions?.deleteSignature()

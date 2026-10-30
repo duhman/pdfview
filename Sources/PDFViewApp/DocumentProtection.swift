@@ -53,3 +53,29 @@ final class DocumentProtection {
         isLocked = document.isLocked
     }
 }
+
+/// Retains the password only while this window shows the same PDFKit document.
+@MainActor
+@Observable
+final class DocumentProtectionSession {
+    private(set) var protection: DocumentProtection?
+    var showsUnlock = false
+
+    func attach(_ document: PDFDocument?) {
+        guard protection?.document !== document else { return }
+        protection = document.map(DocumentProtection.init)
+        showsUnlock = protection?.isLocked == true
+    }
+
+    func refresh() {
+        protection?.refresh()
+        if protection?.isLocked != true {
+            showsUnlock = false
+        }
+    }
+
+    func requestUnlock() {
+        refresh()
+        showsUnlock = protection?.isLocked == true
+    }
+}

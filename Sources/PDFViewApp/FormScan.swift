@@ -18,28 +18,17 @@ struct FormScan {
 
     static func scan(_ document: PDFDocument, pagesPerYield: Int = 8) async -> FormScan {
         var result = FormScan()
-        for pageIndex in 0 ..< document.pageCount {
-            if pageIndex.isMultiple(of: max(pagesPerYield, 1)) {
-                if pageIndex > 0 {
-                    await Task.yield()
-                }
-                if Task.isCancelled {
-                    result.isCancelled = true
-                    return result
-                }
+        func collectWidgets(_ page: PDFPage) {
+            result.widgets += page.annotations.filter {
+                $0.type == "Widget" && !SigningFlowLogic.isSignatureField($0)
             }
-            guard let page = document.page(at: pageIndex) else { continue }
-            for annotation in page.annotations where annotation.type == "Widget" {
-                if SigningFlowLogic.isSignatureField(annotation) {
-                    result.signatureFields.append(SignatureField(
-                        pageIndex: pageIndex,
-                        bounds: annotation.bounds,
-                        name: annotation.fieldName
-                    ))
-                } else {
-                    result.widgets.append(annotation)
-                }
-            }
+        }
+        do {
+            result.signatureFields = try await ReaderController.scanSignatureFields(
+                in: document, batchSize: pagesPerYield, visitPage: collectWidgets
+            )
+        } catch {
+            result.isCancelled = true
         }
         return result
     }

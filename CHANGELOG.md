@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Secure unlock on opening a locked PDF, Sign > Unlock… retry, and a locked-state banner after Cancel
+- Sign menu and compact toolbar menu for Signature, Initials and Date; initials setup resumes pending placement
+- Place Initials (⌥⇧⌘I), Place Date (⌥⇧⌘D), and Create/Edit Initials… commands
+- Per-placement stamp kind, image and formatted date, including initials/date VoiceOver labels
 - Form entries count as unsaved work: the close prompt names them, and a filled form can be saved without a stamp
 - Quitting reviews every window with unsaved signatures or form entries (Review Changes / Discard Changes / Cancel)
 - File > Share Signed Copy… and Show Signed Copy in Finder for the window's last saved copy
@@ -15,11 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Option-arrow 50 pt nudges and Option-Shift-arrow aspect-locked keyboard resizing for a selected stamp
 - VoiceOver elements for placed stamps (signer, page, field or position) with Remove and Move actions, plus position announcements after placing and moving
 - Stop Signing context menu while signing; Go to Page explains invalid input inline
-- Document-scoped, memory-only password state, secure unlock sheet and save-accessory components for view-layer integration
-- Protected signed export with default-on password retention, explicit opt-out and unknown-password notice APIs
-- Incremental, cancellable signature-field scanning API for the PDFKit view layer
+- Document-scoped, memory-only password state, secure unlock sheet and save protection accessory
+- Protected signed export with default-on password retention, explicit opt-out and unknown-password notice in Save Signed Copy
+- Incremental, cancellable signature-field scanning shared by field placement and editable-form discovery
 - Independent signature and initials profiles with legacy JSON migration and initials setup entry point
-- Transparent locale-aware date stamp renderer for placement integration
+- Transparent locale-aware date stamps rendered at placement time
 - Thumbnail and recursive outline sidebar, page labels, Go menu and validated Go to Page sheet
 - Asynchronous Find with match count, highlights, next/previous commands and Escape dismissal
 - Signed printing with PDF permission checks, auto-rotation, temporary-file cleanup and a sandbox print entitlement
@@ -33,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.github/SECURITY.md` vulnerability reporting policy
 
 ### Changed
+- Save Signed Copy configures protection and original-file safety before opening the save panel
+- Protected signed printing unlocks its temporary copy in memory and cleans it after use
+- One signature-field scan preserves field names and restarts safely on unlock or document replacement
 - Signature fields and form widgets are scanned a few pages at a time after the pages appear; page overlays redraw only when their inputs change
 - The saved banner stays until closed and names the folder; the signing banner names the keyboard path
 - Escape closes Find first when the Find field has focus; leaving signing is announced and focus returns to the document
@@ -51,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ARCHITECTURE.md aligned with current signing modes and test layout
 
 ### Removed
+- Duplicate synchronous signature-field scan and unused profile-kind identity property
 - Unused original PDF bytes, signature-store lookup wrappers and signing-mode convenience property
 - Redundant StrictConcurrency upcoming-feature flags in the Swift 6 package
 - GitHub Actions workflows (`ci.yml`, `quality.yml`, `release.yml`); checks and releases run locally
