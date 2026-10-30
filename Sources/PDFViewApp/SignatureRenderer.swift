@@ -196,18 +196,13 @@ enum SignatureRenderer {
     static func dateText(
         _ date: Date = Date(),
         locale: Locale = .current,
-        timeZone: TimeZone = .current,
-        customFormat: String? = nil
+        timeZone: TimeZone = .current
     ) -> String {
         let formatter = DateFormatter()
         formatter.locale = locale
         formatter.timeZone = timeZone
-        if let customFormat, !customFormat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            formatter.dateFormat = customFormat
-        } else {
-            formatter.dateStyle = .medium
-            formatter.timeStyle = .none
-        }
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
         return formatter.string(from: date)
     }
 
@@ -220,11 +215,10 @@ enum SignatureRenderer {
     static func renderDate(
         _ date: Date = Date(),
         locale: Locale = .current,
-        timeZone: TimeZone = .current,
-        customFormat: String? = nil
+        timeZone: TimeZone = .current
     ) -> Rendering? {
         renderText(
-            dateText(date, locale: locale, timeZone: timeZone, customFormat: customFormat),
+            dateText(date, locale: locale, timeZone: timeZone),
             font: dateFont(size:)
         )
     }

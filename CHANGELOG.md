@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A just-placed stamp leaves plain arrow keys to scrolling; click it or choose Select Next Stamp (⌥⌘]) to move it with the arrows
 - The save and print progress banner appears only when the work takes longer than 300 ms
 - Sign menu titles: Create Initials… / Edit Initials… follow whether initials exist; Select Next / Previous Stamp replace Select Next / Previous Signature
+- Move the test-only signed-copy convenience into test support and remove unused viewer/store/date-format APIs
 
 ### Added
 - Banner messages instead of beeps, also read by VoiceOver: a click outside every signature field in Fields mode, every field already filled, nothing left for Place Initials on Every Page, a stamp at the page edge or size limit, and a cancelled save or print ("Save cancelled.")
@@ -24,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Cancelling initials setup while signing returns to the previous stamp kind and placement mode instead of leaving initials active without artwork
+- Locked, never-unlocked PDFs no longer show an edited dot or request close/quit review for unavailable form values
+- Protected signed copies preserve the opening password's access permissions and user/owner role; reject copies whose permissions PDFKit cannot reproduce before changing the destination
+- Resolve the current outline section by destination page, including image-only pages, without extracting page text
 
 ## [0.2.0] - 2026-10-30
 

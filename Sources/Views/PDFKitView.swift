@@ -65,11 +65,6 @@ final class PDFViewerProxy {
         pdfView.go(to: rect.insetBy(dx: -40, dy: -40), on: page)
     }
 
-    /// Reads the form widgets now, so a close or quit decision sees an edit PDFKit has not reported yet.
-    func currentFormValues() -> [FormFieldValue]? {
-        coordinator?.formScan?.values()
-    }
-
     /// Reports any form edit PDFKit has made since the last check.
     func refreshFormValues() {
         coordinator?.checkFormValues()

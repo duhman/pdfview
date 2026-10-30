@@ -60,7 +60,7 @@ duti -s com.bigmac.pdfview com.adobe.pdf all
 - Keep both profiles locally in the app's sandbox, shared across document windows; delete either one from the Sign menu.
 - Overlays follow Increase Contrast, and messages use at least 12 pt text.
 
-For encrypted sources, Save Signed Copy offers **Keep password protection**, enabled by default when PDFView knows the password. Locked PDFs unlock only through PDFView’s own password sheet; File > Unlock… reopens it while a PDF is locked.
+For encrypted sources, Save Signed Copy offers **Keep password protection**, enabled by default when PDFView knows the password. Protected copies retain the opening password's access permissions. A user password stays a user password; the copy gets a new private owner password instead of reusing the source's unknown owner credential. If PDFKit cannot reproduce the permissions, saving stops with an explanation and leaves the destination unchanged. Locked PDFs unlock only through PDFView’s own password sheet; File > Unlock… reopens it while a PDF is locked.
 
 Signatures are **visual stamps, not certificate-based digital signatures**. They do not provide certificate identity verification or cryptographic tamper detection. Flattening puts the visible signature into the page content; it does not make the PDF tamper-proof.
 
@@ -122,7 +122,7 @@ To build a release bundle:
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the pinned SwiftLint and SwiftFormat setup, quality checks, icon generation, and manual verification. There is no hosted CI: run `/bin/bash scripts/ci-local.sh` before pushing. It builds both bundle configurations with `/bin/bash`, runs the tests, checks the bundle, and lints the unmodified checkout.
 
-Signed exports capture form values and a stable document snapshot together, then render and validate that private snapshot in the background. Closing or quitting after a save proceeds only when the live stamps and form values still match the saved copy. Form baselines are captured before editing, including before the incremental field scan finishes. Viewer documents explicitly offer no writable content types; use Save Signed Copy for flattened output. Signed exports reject replacing the original file. The window retains password state only for the current PDF, offers secure unlock, and passes the save accessory’s protection choice to export. Protected export with nonzero page origins fails with recovery advice instead of risking an invalid copy.
+Signed exports capture form values and a stable document snapshot together, then render and validate that private snapshot in the background. Closing or quitting after a save proceeds only when the live stamps and form values still match the saved copy. Form baselines are captured before editing, including before the incremental field scan finishes. Locked documents have no editable work and do not request save-before-close/quit review. Viewer documents explicitly offer no writable content types; use Save Signed Copy for flattened output. Signed exports reject replacing the original file. The window retains password state only for the current PDF, offers secure unlock, and passes the save accessory’s protection choice to export. Protected export with nonzero page origins fails with recovery advice instead of risking an invalid copy.
 
 ### Signing and notarization
 

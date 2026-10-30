@@ -20,11 +20,23 @@ struct ReaderPerformanceTests {
         #expect(reader.observedClipView == nil)
     }
 
-    @Test func outlineLookupIsCachedWhenRevisitingAPage() async throws {
-        let fixture = try ExportFixture.document(mediaBoxes: Array(
-            repeating: CGRect(x: 0, y: 0, width: 400, height: 600), count: 2
-        ))
-        let document = try #require(OutlineLookupDocument(data: requireData(fixture)))
+    @Test(arguments: [false, true])
+    func outlineUsesDestinationPagesWithoutTextSelection(imageOnly: Bool) async throws {
+        let document = try outlineDocument(imageOnly: imageOnly)
+        let root = PDFOutline()
+        let chapter = PDFOutline()
+        chapter.label = "Chapter"
+        chapter.destination = try PDFDestination(page: #require(document.page(at: 1)), at: .zero)
+        let section = PDFOutline()
+        section.label = "Section"
+        section.action = try PDFActionGoTo(destination: PDFDestination(page: #require(document.page(at: 3)), at: .zero))
+        chapter.insertChild(section, at: 0)
+        let next = PDFOutline()
+        next.label = "Next"
+        next.destination = try PDFDestination(page: #require(document.page(at: 5)), at: .zero)
+        root.insertChild(chapter, at: 0)
+        root.insertChild(next, at: 1)
+        document.outlineRoot = root
         let view = PDFView(frame: CGRect(x: 0, y: 0, width: 500, height: 400))
         view.document = document
         let reader = ReaderController()
@@ -33,21 +45,39 @@ struct ReaderPerformanceTests {
         for _ in 0 ..< 20 {
             await Task.yield()
         }
-        reader.go(to: 1)
-        for _ in 0 ..< 20 {
-            await Task.yield()
+        for index in [0, 1, 2, 3, 4, 5, 1, 4] {
+            reader.go(to: index)
+            for _ in 0 ..< 20 {
+                await Task.yield()
+            }
+            let expected = switch index {
+            case 0: nil as ObjectIdentifier?
+            case 1, 2: ObjectIdentifier(chapter)
+            case 3, 4: ObjectIdentifier(section)
+            default: ObjectIdentifier(next)
+            }
+            #expect(reader.currentOutlineID == expected, "Page \(index)")
         }
-        let count = document.lookups
-        reader.go(to: 0)
-        for _ in 0 ..< 20 {
-            await Task.yield()
+        #expect(document.lookups == 0)
+    }
+
+    private func outlineDocument(imageOnly: Bool) throws -> OutlineLookupDocument {
+        let fixture = try ExportFixture.document(mediaBoxes: Array(
+            repeating: CGRect(x: 0, y: 0, width: 400, height: 600), count: 6
+        ))
+        if imageOnly {
+            let page = try #require(fixture.page(at: 0))
+            let image = page.thumbnail(of: CGSize(width: 100, height: 150), for: .mediaBox)
+            for index in 0 ..< fixture.pageCount {
+                fixture.removePage(at: index)
+                try fixture.insert(#require(PDFPage(image: image)), at: index)
+            }
         }
-        reader.go(to: 1)
-        for _ in 0 ..< 20 {
-            await Task.yield()
+        let document = try #require(OutlineLookupDocument(data: requireData(fixture)))
+        if imageOnly {
+            #expect(document.page(at: 0)?.string?.isEmpty != false)
         }
-        #expect(count > 0)
-        #expect(document.lookups == count)
+        return document
     }
 
     private func requireData(_ document: PDFDocument) throws -> Data {

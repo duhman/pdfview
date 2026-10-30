@@ -230,14 +230,17 @@ enum SigningFlowLogic {
     }
 
     /// Placements not yet in a saved copy, and form values that differ from the last saved copy
-    /// (or from the file as opened). Unavailable form values conservatively require review.
+    /// (or from the file as opened). Locked documents have no editable work; otherwise unavailable values require
+    /// review.
     static func unsavedWork(
         placements: [PDFViewerDocument.SignaturePlacement],
         exported: [PDFViewerDocument.SignaturePlacement]?,
         formValues: [FormFieldValue]?,
-        savedFormValues: [FormFieldValue]?
+        savedFormValues: [FormFieldValue]?,
+        isLocked: Bool = false
     ) -> UnsavedWork {
-        UnsavedWork(
+        guard !isLocked else { return UnsavedWork() }
+        return UnsavedWork(
             signatures: hasUnexportedPlacements(placements, exported: exported),
             formEntries: formValues == nil || savedFormValues == nil || formValues != savedFormValues
         )
