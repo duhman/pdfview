@@ -37,7 +37,10 @@ extension PDFKitView.Coordinator {
         case .choose:
             return chooseValue(for: widget, on: page)
         case .edit:
-            pdfView?.clickWidget(widget, on: page)
+            // Once it has scrolled into view, as Next Form Field does.
+            DispatchQueue.main.async { [weak pdfView] in
+                pdfView?.clickWidget(widget, on: page)
+            }
             return .changed("Editing \(name ?? "text field")")
         case .unavailable:
             return .unavailable(FormFieldNavigation.unavailableMessage(name: name, kind: kind))
@@ -67,7 +70,7 @@ extension PDFKitView.Coordinator {
     func handleFormFieldKey(_ event: NSEvent) -> Bool {
         let isActivationKey = [49, 36, 76].contains(event.keyCode)
             && event.modifierFlags.isDisjoint(with: [.command, .option, .control, .shift])
-        guard isActivationKey, acceptsFormFieldKeys, selectedPlacementID == nil else {
+        guard isActivationKey, acceptsFormFieldKeys, !stampOwnsArrowKeys else {
             acceptsFormFieldKeys = false
             return false
         }
