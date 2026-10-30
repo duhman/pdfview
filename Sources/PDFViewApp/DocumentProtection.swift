@@ -24,6 +24,20 @@ final class DocumentProtection: NSObject {
         )
     }
 
+    func unsavedWork(
+        placements: [PDFViewerDocument.SignaturePlacement],
+        exported: ExportedState?,
+        formValues: [FormFieldValue]?
+    ) -> UnsavedWork {
+        SigningFlowLogic.unsavedWork(
+            placements: placements,
+            exported: exported?.placements,
+            formValues: formValues ?? formBaseline?.values(),
+            savedFormValues: exported?.formValues ?? initialFormValues,
+            isLocked: document.isLocked
+        )
+    }
+
     var isEncrypted: Bool {
         document.isEncrypted
     }

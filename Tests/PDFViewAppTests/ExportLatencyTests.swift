@@ -55,7 +55,10 @@ struct ExportLatencyTests {
             gaps[stage] = max(gaps[stage, default: .zero], last.duration(to: now))
             last = now
         }
+        let saveStart = clock.now
+        var firstSuspension: Duration?
         let heartbeat = Task { @MainActor in
+            firstSuspension = saveStart.duration(to: clock.now)
             while !Task.isCancelled {
                 beat()
                 ticks[stage, default: 0] += 1
@@ -68,6 +71,9 @@ struct ExportLatencyTests {
             stage = progress.stage
         }
         beat()
+        let capture = try #require(firstSuspension)
+        print("300-page image-heavy save-to-first-suspension: \(capture)")
+        #expect(capture < .milliseconds(100))
         #expect(ticks[.rendering, default: 0] > 10)
         #expect(ticks[.writing, default: 0] > 1)
         for stage in [ExportProgress.Stage.rendering, .writing, .restoringGeometry, .validating] {

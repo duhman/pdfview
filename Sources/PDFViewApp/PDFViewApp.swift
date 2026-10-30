@@ -20,6 +20,7 @@ struct PDFViewApp: App {
         .windowStyle(.titleBar)
         .commands {
             AppInfoCommands()
+            ReadOnlyDocumentCommands()
             HelpCommands()
             ZoomCommands()
             ReaderCommands()
@@ -37,6 +38,20 @@ struct PDFViewApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .commandsRemoved()
+    }
+}
+
+/// Save, Save As, Duplicate, Rename and Move To would write the PDF without its stamps (and,
+/// for Duplicate, an unsigned copy); the only way to write is File > Save Signed Copy.
+/// Replacing the group also drops Close, so it is restored here.
+private struct ReadOnlyDocumentCommands: Commands {
+    var body: some Commands {
+        CommandGroup(replacing: .saveItem) {
+            Button("Close") {
+                NSApp.keyWindow?.performClose(nil)
+            }
+            .keyboardShortcut("w")
+        }
     }
 }
 

@@ -308,9 +308,11 @@ enum SigningFlowLogic {
     static func hasSignedCopyContent(
         placements: [PDFViewerDocument.SignaturePlacement],
         formValues: [FormFieldValue]?,
-        originalFormValues: [FormFieldValue]?
+        originalFormValues: [FormFieldValue]?,
+        exported: ExportedState? = nil
     ) -> Bool {
         !placements.isEmpty || (formValues != nil && formValues != originalFormValues)
+            || (exported != nil && exported?.matches(placements: placements, formValues: formValues) == false)
     }
 
     /// Why Save Signed Copy is disabled, for the toolbar button's help tag and VoiceOver hint; nil when

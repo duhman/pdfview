@@ -10,8 +10,6 @@ struct PDFContentView: View {
     /// The file this window shows; drives the signed copy's default name and folder.
     let fileURL: URL?
 
-    @Environment(\.undoManager)
-    private var undoManager
     @EnvironmentObject private var signatureStore: SignatureStore
     @Environment(StampSizeMemory.self)
     private var stampSizes
@@ -33,11 +31,13 @@ struct PDFContentView: View {
     /// Nil until the PDF view has scanned the document.
     @State private var documentState: PDFKitView.DocumentState?
     @State private var lastFieldIndex: Int?
-    @State private var exportedPlacements: [PDFViewerDocument.SignaturePlacement]?
+    @State private var exportedState: ExportedState?
     /// Live, initial and last-exported form values; the baseline is captured before editing.
     @State private var formValues: [FormFieldValue]?
-    @State private var originalFormValues: [FormFieldValue]?
-    @State private var savedFormValues: [FormFieldValue]?
+    private var originalFormValues: [FormFieldValue]? {
+        protectionSession.protection?.initialFormValues
+    }
+
     /// The last signed copy saved from this window; File menu sharing stays bound to it.
     @State private var lastSavedURL: URL?
     @State private var showsSavedBanner = false
@@ -475,8 +475,9 @@ extension PDFContentView {
         document.pdfDocument?.isLocked == false && protectionSession.protection != nil
             && !export.isBusy && SigningFlowLogic.hasSignedCopyContent(
                 placements: document.signaturePlacements,
-                formValues: formValues,
-                originalFormValues: originalFormValues
+                formValues: protectionSession.protection?.formBaseline?.values() ?? formValues,
+                originalFormValues: originalFormValues,
+                exported: exportedState
             )
     }
 
@@ -493,13 +494,9 @@ extension PDFContentView {
     }
 
     private func unsavedWork(formValues: [FormFieldValue]?) -> UnsavedWork {
-        SigningFlowLogic.unsavedWork(
-            placements: document.signaturePlacements,
-            exported: exportedPlacements,
-            formValues: formValues,
-            savedFormValues: savedFormValues,
-            isLocked: document.pdfDocument?.isLocked == true
-        )
+        protectionSession.protection?.unsavedWork(
+            placements: document.signaturePlacements, exported: exportedState, formValues: formValues
+        ) ?? UnsavedWork()
     }
 
     private var activeArtwork: StampArtwork? {
@@ -559,10 +556,6 @@ extension PDFContentView {
         reader.refresh()
         documentState = state
         formValues = protectionSession.protection?.formBaseline?.values() ?? state.formValues
-        if originalFormValues == nil {
-            originalFormValues = protectionSession.protection?.initialFormValues
-            savedFormValues = originalFormValues
-        }
         lastFieldIndex = nil
         signingMode = state.isLocked ? .idle :
             SigningFlowLogic.refreshed(signingMode, hasSignatureFields: !state.signatureFields.isEmpty)
@@ -579,10 +572,8 @@ extension PDFContentView {
         setupRequest = nil
         showSignatureSetupSheet = false
         lastFieldIndex = nil
-        exportedPlacements = nil
+        exportedState = nil
         formValues = protectionSession.protection?.formBaseline?.values()
-        originalFormValues = protectionSession.protection?.initialFormValues
-        savedFormValues = originalFormValues
         lastSavedURL = nil
         showsSavedBanner = false
     }
@@ -825,7 +816,7 @@ extension PDFContentView {
 
     private func configuredEditor() -> SignaturePlacementEditor {
         editor.document = $document
-        editor.undoManager = undoManager
+        editor.undoManager = closeGuard.undoManager
         return editor
     }
 
@@ -858,8 +849,8 @@ extension PDFContentView {
     /// Asks for a destination in a sheet on this document's window, then writes the signed copy.
     private func saveSignedCopy(completion: @escaping (Bool) -> Void = { _ in }) {
         viewer.refreshFormValues()
-        guard canSaveSignedCopy, let protection = protectionSession.protection,
-              let source = document.pdfDocument, let window = viewer.window, export.reserve()
+        guard let protection = protectionSession.protection,
+              let source = document.pdfDocument, !source.isLocked, let window = viewer.window, export.reserve()
         else {
             completion(false)
             return
@@ -878,8 +869,7 @@ extension PDFContentView {
             export.write(source, placements: placements, to: url) { result in
                 switch result {
                 case let .success(state):
-                    exportedPlacements = state.placements
-                    savedFormValues = state.formValues
+                    exportedState = state
                     lastSavedURL = url
                     showsSavedBanner = true
                     announce(SigningFlowLogic.savedAnnouncement(for: url))
@@ -1094,6 +1084,12 @@ final class DocumentCloseGuard: NSObject, NSWindowDelegate {
         didSet { window?.isDocumentEdited = isEdited }
     }
 
+    /// Stamp edits register with the window's undo manager, which Edit > Undo uses; the
+    /// document itself has none (see install(on:)).
+    var undoManager: UndoManager? {
+        window?.undoManager
+    }
+
     private weak var window: NSWindow?
     // swiftlint:disable:next modifier_order
     private nonisolated(unsafe) weak var originalDelegate: NSWindowDelegate?
@@ -1111,6 +1107,17 @@ final class DocumentCloseGuard: NSObject, NSWindowDelegate {
         window.delegate = self
         // The window holds the delegate weakly; tie the shim's lifetime to the window.
         objc_setAssociatedObject(window, &Self.associationKey, self, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        // The document never writes edits back (see PDFViewerDocument.fileWrapper), so it must not
+        // track them either: with an undo manager, PDFKit form edits and stamp edits would mark it
+        // changed, and macOS would autosave over the original or ask to unlock a read-only file.
+        // The window keeps its own undo manager for Edit > Undo.
+        if let document = NSDocumentController.shared.document(for: window) {
+            document.hasUndoManager = false
+            // Dropping the undo manager leaves the document flagged as edited; clear it so the
+            // title bar shows "Edited" only for real unsaved signatures and form entries.
+            document.updateChangeCount(.changeCleared)
+        }
+        window.isDocumentEdited = isEdited
     }
 
     override nonisolated func responds(to aSelector: Selector!) -> Bool {

@@ -37,32 +37,40 @@ func makeRepresentable(
     )
 }
 
-private enum Sample {
-    static let placement = PDFViewerDocument.SignaturePlacement(
-        pageIndex: 0,
-        bounds: CGRect(x: 10, y: 10, width: 60, height: 20),
-        signaturePNGData: Data([1]),
-        signerName: "Tester"
-    )
-}
-
 @MainActor
-@Test func overlaysRefreshOnlyWhenTheirInputsChange() {
-    var representable = makeRepresentable()
+@Test func overlaysFollowPlacementsAndSelection() throws {
+    let document = try ExportFixture.document()
+    let model = try ExportFixture.model(document)
+    let placement = try #require(model.signaturePlacements.first)
+    var representable = makeRepresentable(document: document)
     let coordinator = representable.makeCoordinator()
+    let pdfView = SigningPDFView(frame: CGRect(x: 0, y: 0, width: 400, height: 600))
+    coordinator.attach(to: pdfView)
+    pdfView.document = document
+    let page = try #require(document.page(at: 0))
+    let overlay = try #require(coordinator.pdfView(pdfView, overlayViewFor: page) as? PageOverlayView)
 
+    overlay.frame = CGRect(x: 0, y: 0, width: 400, height: 600)
     coordinator.updateOverlaysIfNeeded()
     coordinator.updateOverlaysIfNeeded()
-    #expect(coordinator.overlayRefreshCount == 1)
+    #expect(overlay.content.stamps.isEmpty)
 
-    representable.signaturePlacements = [Sample.placement]
+    representable.signaturePlacements = [placement]
     coordinator.parent = representable
     coordinator.updateOverlaysIfNeeded()
-    #expect(coordinator.overlayRefreshCount == 2)
+    #expect(overlay.content.stamps.map(\.id) == [placement.id])
+    #expect(overlay.content.stamps.first?.bounds == placement.bounds)
 
-    coordinator.selectedPlacementID = Sample.placement.id
-    coordinator.selectedPlacementID = Sample.placement.id
-    #expect(coordinator.overlayRefreshCount == 3)
+    coordinator.selectedPlacementID = placement.id
+    #expect(overlay.content.selectedID == placement.id)
+    coordinator.selectedPlacementID = placement.id
+    #expect(overlay.content.selectedID == placement.id)
+    #expect(overlay.content.stamps.map(\.id) == [placement.id])
+
+    representable.signaturePlacements = []
+    coordinator.parent = representable
+    coordinator.updateOverlaysIfNeeded()
+    #expect(overlay.content.stamps.isEmpty)
 }
 
 @MainActor

@@ -250,8 +250,6 @@ extension PDFKitView {
         private(set) var lastFormFieldID: ObjectIdentifier?
         /// Space and Return activate that widget until another key, a click or a scroll.
         var acceptsFormFieldKeys = false
-        /// Counts overlay rebuilds, so tests can check that unrelated updates skip them.
-        private(set) var overlayRefreshCount = 0
 
         var selectedPlacementID: UUID? {
             didSet {
@@ -489,7 +487,6 @@ extension PDFKitView {
         }
 
         func refreshOverlays() {
-            overlayRefreshCount += 1
             for overlay in overlays.values {
                 overlay.content = content(for: overlay.page)
             }
@@ -744,6 +741,8 @@ final class SigningPDFView: PDFView {
 
     /// PDFKit has no API to start editing a widget, so this clicks its centre. The press goes straight
     /// to PDFKit rather than through the window; the release is queued for PDFKit's tracking loop.
+    /// Hit-target guards are tested on macOS 27.2. Opening the native editor is unverified on screen
+    /// on macOS 14.2, 15, 26 and 27; run CONTRIBUTING's widget-navigation check on each supported version.
     func clickWidget(_ widget: PDFAnnotation, on page: PDFPage) {
         guard let window, let point = widgetClickPoint(widget, on: page) else { return }
         let events = [NSEvent.EventType.leftMouseDown, .leftMouseUp].compactMap { type in
