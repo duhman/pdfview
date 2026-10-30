@@ -18,12 +18,6 @@ enum SignedPDFExporter {
         let pages: [PDFPage]
     }
 
-    private struct CapturedAnnotation {
-        let bounds: CGRect
-        let type: PDFAnnotationSubtype
-        let properties: [AnyHashable: Any]
-    }
-
     private struct CapturedPage {
         let content: CGPDFPage
         let page: PDFPage
@@ -31,7 +25,7 @@ enum SignedPDFExporter {
     }
 
     /// PDFKit does not declare Sendable. Transfer only private page/structure objects, frozen
-    /// annotation properties and immutable CGPDFPage content to one worker, never live PDFKit pages.
+    /// annotation properties or copies and immutable CGPDFPage content to one worker, never live PDFKit pages.
     private struct Snapshot: @unchecked Sendable {
         let document: PDFDocument
         let pages: [CapturedPage]
@@ -167,9 +161,7 @@ enum SignedPDFExporter {
         autoreleasepool {
             let page = captured.page
             for annotation in captured.annotations {
-                page.addAnnotation(PDFAnnotation(
-                    bounds: annotation.bounds, forType: annotation.type, withProperties: annotation.properties
-                ))
+                page.addAnnotation(annotation.annotation)
             }
             let media = page.bounds(for: .mediaBox)
             context.beginPDFPage([
@@ -230,14 +222,7 @@ enum SignedPDFExporter {
             let page = PDFPage()
             page.setBounds(original.bounds(for: .mediaBox), for: .mediaBox)
             page.setBounds(original.bounds(for: .cropBox), for: .cropBox)
-            let annotations = original.annotations.compactMap { annotation -> CapturedAnnotation? in
-                guard annotation.type != "Link", let type = annotation.type else { return nil }
-                return CapturedAnnotation(
-                    bounds: annotation.bounds,
-                    type: PDFAnnotationSubtype(rawValue: type),
-                    properties: annotation.annotationKeyValues.mapValues(frozenValue)
-                )
-            }
+            let annotations = original.annotations.compactMap(CapturedAnnotation.init)
             document.insert(page, at: index)
             captured.append(CapturedPage(content: content, page: page, annotations: annotations))
         }
@@ -333,16 +318,6 @@ enum SignedPDFExporter {
 extension SignedPDFExporter {
     /// PDFKit exposes arrays, dictionaries and mutable drawing objects in annotation properties.
     /// Copy those values now; no live annotation or mutable property crosses to the worker.
-    private static func frozenValue(_ value: Any) -> Any {
-        if let dictionary = value as? [AnyHashable: Any] {
-            return dictionary.mapValues(frozenValue)
-        }
-        if let array = value as? [Any] {
-            return array.map(frozenValue)
-        }
-        return (value as? NSCopying)?.copy(with: nil) ?? value
-    }
-
     private static func restoreStructure(from source: PDFDocument, to output: PDFDocument) throws {
         for index in 0 ..< source.pageCount {
             guard let page = source.page(at: index), let result = output.page(at: index) else {
@@ -638,5 +613,48 @@ struct ExportProgress: Equatable, Sendable {
         case .restoringGeometry: "Preserving page geometry…"
         case .validating: "Checking signed copy…"
         }
+    }
+}
+
+private enum CapturedAnnotation {
+    /// Text and choice fields look like their value, which PDFKit redraws from these properties.
+    case rebuilt(bounds: CGRect, type: PDFAnnotationSubtype, properties: [AnyHashable: Any])
+    /// Everything else is copied: `annotationKeyValues` has no /AP, so a rebuilt annotation lost
+    /// its appearance stream (a prior signer's visible signature, image stamps, checkbox art).
+    /// Copying is slower, so 2000 text fields stay on the rebuilt path.
+    case copied(PDFAnnotation)
+
+    init?(_ annotation: PDFAnnotation) {
+        guard let type = annotation.type, type != "Link" else { return nil }
+        if annotation.widgetFieldType == .text || annotation.widgetFieldType == .choice {
+            self = .rebuilt(
+                bounds: annotation.bounds,
+                type: PDFAnnotationSubtype(rawValue: type),
+                properties: annotation.annotationKeyValues.mapValues(Self.frozenValue)
+            )
+        } else if let copy = annotation.copy() as? PDFAnnotation {
+            self = .copied(copy)
+        } else {
+            return nil
+        }
+    }
+
+    var annotation: PDFAnnotation {
+        switch self {
+        case let .rebuilt(bounds, type, properties):
+            PDFAnnotation(bounds: bounds, forType: type, withProperties: properties)
+        case let .copied(copy):
+            copy
+        }
+    }
+
+    private static func frozenValue(_ value: Any) -> Any {
+        if let dictionary = value as? [AnyHashable: Any] {
+            return dictionary.mapValues(frozenValue)
+        }
+        if let array = value as? [Any] {
+            return array.map(frozenValue)
+        }
+        return (value as? NSCopying)?.copy(with: nil) ?? value
     }
 }

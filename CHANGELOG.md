@@ -7,9 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.2] - 2026-10-30
-
-Stops form entries from being written back into the original PDF, and refines keyboard, VoiceOver and save feedback.
+### Fixed
+- Save Signed Copy keeps annotations drawn by their own appearance stream: another party's visible signature, image stamps, custom checkbox art and ink. Before, the copy redrew them from their properties, so a prior signature could vanish and custom check marks turned into PDFKit's default look
 
 ### Changed
 - View > Zoom to Fit (⌘9) shows the whole current page; before, it fit only the page width in continuous mode and cut off the bottom. The old behaviour is View > Fit Width (⌥⌘9)
@@ -18,6 +17,13 @@ Stops form entries from being written back into the original PDF, and refines ke
 - A selected stamp's outline and corner handles sit half a handle outside the stamp, so on small stamps such as a date the handles no longer cover the text; dragging a handle resizes by the pointer's travel instead of snapping the corner to the pointer
 - The signature sheet's font picker reads "Style:", with the colon the "Full name:" and "Signature:" labels use
 - The sidebar shows only thumbnails, without the Thumbnails/Outline switch, when the PDF has no outline, instead of opening an empty list
+- Help > Keyboard Shortcuts opens tall enough to show every menu, with one aligned key column; before, a new window opened 450 pt tall and cut off Go and Sign
+
+## [0.2.2] - 2026-10-30
+
+Stops form entries from being written back into the original PDF, and refines keyboard, VoiceOver and save feedback.
+
+### Changed
 - Next / Previous Form Field skips read-only fields; a form with nothing editable says "This document has no form fields you can fill in."
 - Landing on a checkbox, radio button, pop-up, list or button with Next / Previous Form Field gives the document keyboard focus and ends any text edit, so Space and Return act on that field instead of typing into the text field just left
 - Sign > Anywhere is available only while signing; choosing it no longer starts signing
