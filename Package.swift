@@ -16,18 +16,12 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "PDFViewApp",
-            path: "Sources",
-            swiftSettings: [
-                .enableUpcomingFeature("StrictConcurrency"),
-            ]
+            path: "Sources"
         ),
         .testTarget(
             name: "PDFViewAppTests",
             dependencies: ["PDFViewApp"],
-            path: "Tests/PDFViewAppTests",
-            swiftSettings: [
-                .enableUpcomingFeature("StrictConcurrency"),
-            ]
+            path: "Tests/PDFViewAppTests"
         ),
     ]
 )

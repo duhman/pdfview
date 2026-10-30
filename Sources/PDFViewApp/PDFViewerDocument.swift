@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 /// Document model for PDF files conforming to FileDocument protocol
 struct PDFViewerDocument: FileDocument {
     enum ExportError: LocalizedError, Equatable {
+        case cannotReplaceOriginal
         case missingDocument
         case documentLocked
         case cannotReadPage(index: Int)
@@ -21,6 +22,8 @@ struct PDFViewerDocument: FileDocument {
 
         var errorDescription: String? {
             switch self {
+            case .cannotReplaceOriginal:
+                "Choose a different name: a signed copy can't replace the original."
             case .missingDocument:
                 "No PDF document is loaded."
             case .documentLocked:
@@ -32,7 +35,11 @@ struct PDFViewerDocument: FileDocument {
             case let .cannotDecodeSignature(id):
                 "Could not decode the signature image (\(id))."
             case .cannotPreservePageGeometry:
-                "Could not preserve the PDF page coordinate system."
+                """
+                This PDF uses a page coordinate system that could not be preserved safely. \
+                The destination was not changed. \
+                Use Print > Save as PDF to create a normalized PDF, then reopen it and place your signatures again.
+                """
             case .cannotPreserveNavigation:
                 "Could not preserve the PDF's links or bookmarks."
             case .invalidExportedDocument:
@@ -74,9 +81,6 @@ struct PDFViewerDocument: FileDocument {
     /// The underlying PDFKit document
     var pdfDocument: PDFDocument?
 
-    /// Immutable baseline bytes used for deterministic flattened visual signature exports.
-    private var originalPDFData: Data?
-
     /// Signature placements added during this document session.
     var signaturePlacements: [SignaturePlacement] = []
 
@@ -88,12 +92,10 @@ struct PDFViewerDocument: FileDocument {
     /// Initialize with empty document
     init() {
         pdfDocument = nil
-        originalPDFData = nil
     }
 
-    init(pdfDocument: PDFDocument?, originalPDFData: Data? = nil) {
+    init(pdfDocument: PDFDocument?) {
         self.pdfDocument = pdfDocument
-        self.originalPDFData = originalPDFData
     }
 
     /// Initialize from file configuration
@@ -103,7 +105,6 @@ struct PDFViewerDocument: FileDocument {
         }
 
         pdfDocument = document
-        originalPDFData = data
     }
 
     /// Write document to file.
@@ -128,13 +129,19 @@ struct PDFViewerDocument: FileDocument {
 
     /// Writes the live document with form values and visual signatures flattened into page content.
     @MainActor
-    func writeSignedCopy(to destinationURL: URL) throws {
+    func writeSignedCopy(to destinationURL: URL, password: String? = nil) throws {
         guard destinationURL.isFileURL else {
             throw ExportError.invalidDestinationURL
         }
         guard let pdfDocument else {
             throw ExportError.missingDocument
         }
-        try SignedPDFExporter.write(pdfDocument, placements: signaturePlacements, to: destinationURL)
+        try SignedCopyOperation.validateDestination(destinationURL, originalURL: pdfDocument.documentURL)
+        try SignedPDFExporter.write(
+            pdfDocument,
+            placements: signaturePlacements,
+            to: destinationURL,
+            password: password
+        )
     }
 }

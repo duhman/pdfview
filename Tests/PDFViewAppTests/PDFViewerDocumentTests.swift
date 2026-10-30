@@ -26,7 +26,7 @@ func placementAddAndRemoveRoundTrip() {
 func signedCopyFailsForNonFileDestination() throws {
     let pdfData = makeSamplePDFData()
     let pdf = PDFDocument(data: pdfData)
-    var document = PDFViewerDocument(pdfDocument: pdf, originalPDFData: pdfData)
+    var document = PDFViewerDocument(pdfDocument: pdf)
     document.addSignaturePlacement(
         PDFViewerDocument.SignaturePlacement(
             pageIndex: 0,
@@ -55,7 +55,7 @@ func signedCopyDoesNotMutateSourceDocumentAnnotations() throws {
         return
     }
 
-    var document = PDFViewerDocument(pdfDocument: sourceDocument, originalPDFData: baselineData)
+    var document = PDFViewerDocument(pdfDocument: sourceDocument)
     document.addSignaturePlacement(
         PDFViewerDocument.SignaturePlacement(
             pageIndex: 0,

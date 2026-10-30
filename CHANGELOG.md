@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Document-scoped, memory-only password state, secure unlock sheet and save-accessory components for view-layer integration
+- Protected signed export with default-on password retention, explicit opt-out and unknown-password notice APIs
+- Incremental, cancellable signature-field scanning API for the PDFKit view layer
 - Independent signature and initials profiles with legacy JSON migration and initials setup entry point
 - Transparent locale-aware date stamp renderer for placement integration
 - Thumbnail and recursive outline sidebar, page labels, Go menu and validated Go to Page sheet
@@ -34,9 +37,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ARCHITECTURE.md aligned with current signing modes and test layout
 
 ### Removed
+- Unused original PDF bytes, signature-store lookup wrappers and signing-mode convenience property
+- Redundant StrictConcurrency upcoming-feature flags in the Swift 6 package
 - GitHub Actions workflows (`ci.yml`, `quality.yml`, `release.yml`); checks and releases run locally
 
 ### Fixed
+- Async exports freeze form/page state before yielding, including unlocked encrypted sources
+- Signed-copy destination checks reject the original by path, symlink and hard-link identity
+- Finalize yields between writing, geometry repair and validation; pure geometry work runs off the main actor
+- Scroll observation is scoped to the PDF clip view and outline lookups are cached per page
+- Unsupported geometry fails without replacing the destination and gives normalization/reopen instructions
 - Drawing strokes and clearing participate in the sheet window's native undo/redo history
 - Debug packaging works with Bash 3.2; configuration parsing no longer uses Bash 4-only syntax
 - Universal packaging preserves each architecture before SwiftPM can overwrite its shared product path

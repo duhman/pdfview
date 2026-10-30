@@ -80,9 +80,8 @@ struct SignedPDFExporterTests {
         let source = try ExportFixture.document()
         let page = try #require(source.page(at: 0))
         let field = ExportFixture.textField(on: page)
-        let baseline = try #require(source.dataRepresentation())
         field.widgetStringValue = "Edited contact value"
-        let model = try ExportFixture.model(source, baseline: baseline, signed: signed)
+        let model = try ExportFixture.model(source, signed: signed)
         try ExportFixture.withDirectory { directory in
             let url = directory.appendingPathComponent("signed.pdf")
             try model.writeSignedCopy(to: url)
@@ -103,11 +102,10 @@ struct SignedPDFExporterTests {
             #expect(source.write(to: encryptedURL, withOptions: [
                 .userPasswordOption: "test-user", .ownerPasswordOption: "test-owner",
             ]))
-            let baseline = try Data(contentsOf: encryptedURL)
-            let unlocked = try #require(PDFDocument(data: baseline))
+            let unlocked = try #require(PDFDocument(url: encryptedURL))
             #expect(unlocked.isLocked)
             #expect(unlocked.unlock(withPassword: "test-user"))
-            let model = try ExportFixture.model(unlocked, baseline: baseline, signed: signed)
+            let model = try ExportFixture.model(unlocked, signed: signed)
             let url = directory.appendingPathComponent("signed.pdf")
             try model.writeSignedCopy(to: url)
             let output = try #require(PDFDocument(url: url))

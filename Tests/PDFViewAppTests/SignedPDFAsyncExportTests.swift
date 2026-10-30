@@ -18,7 +18,7 @@ struct SignedPDFAsyncExportTests {
         try await SignedPDFExporter.writeAsync(source, placements: model.signaturePlacements, to: url) {
             progress.append($0)
         }
-        #expect(progress.map(\.completedPages) == Array(0 ... 12))
+        #expect(progress.filter { $0.stage == .rendering }.map(\.completedPages) == Array(0 ... 12))
         #expect(progress.allSatisfy { $0.totalPages == 12 })
         let output = try #require(PDFDocument(url: url))
         #expect(output.pageCount == 12)

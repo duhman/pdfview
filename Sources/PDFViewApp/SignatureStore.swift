@@ -42,7 +42,6 @@ final class SignatureStore: ObservableObject {
     private static let logger = Logger(subsystem: "com.bigmac.pdfview", category: "SignatureStore")
 
     enum SignatureError: LocalizedError {
-        case noProfileFound
         case cannotEncodeProfile
         case cannotCreateStorageDirectory(underlying: Error)
         case cannotWriteProfile(underlying: Error)
@@ -54,8 +53,6 @@ final class SignatureStore: ObservableObject {
 
         var errorDescription: String? {
             switch self {
-            case .noProfileFound:
-                "No signature profile found."
             case .cannotEncodeProfile:
                 "Cannot encode the signature profile."
             case let .cannotCreateStorageDirectory(underlying):
@@ -77,8 +74,6 @@ final class SignatureStore: ObservableObject {
 
         var recoverySuggestion: String? {
             switch self {
-            case .noProfileFound:
-                "Create a new signature by clicking the signature button."
             case .cannotEncodeProfile, .invalidProfileData, .storageCorrupted:
                 "Delete the corrupted signature and create a new one."
             case .cannotCreateStorageDirectory, .permissionDenied:
@@ -152,17 +147,6 @@ final class SignatureStore: ObservableObject {
         } catch {
             throw SignatureError.cannotWriteProfile(underlying: error)
         }
-    }
-
-    func loadProfile() throws -> SignatureProfile {
-        guard let existingProfile = profile else {
-            throw SignatureError.noProfileFound
-        }
-        return existingProfile
-    }
-
-    var hasProfile: Bool {
-        profile != nil
     }
 
     func deleteProfile(for kind: SignatureKind = .signature) throws {

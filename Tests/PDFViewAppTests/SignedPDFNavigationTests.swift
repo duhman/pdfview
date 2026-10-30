@@ -70,17 +70,45 @@ struct SignedPDFNavigationTests {
         }
     }
 
+    @Test(arguments: [CGPoint.zero, CGPoint(x: -20, y: -30)])
+    func snapshotKeepsNavigationWhenSourceChanges(origin: CGPoint) async throws {
+        let fixture = try navigationDocument(origin: origin)
+        let source = fixture.document
+        defer { withExtendedLifetime(fixture.pages) {} }
+        let model = try ExportFixture.model(source)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try await SignedPDFExporter.writeAsync(source, placements: model.signaturePlacements, to: url) { progress in
+            if progress.completedPages == 1, progress.stage == .rendering {
+                source.outlineRoot = nil
+                for page in fixture.pages {
+                    page.rotation = 90
+                    for annotation in page.annotations {
+                        page.removeAnnotation(annotation)
+                    }
+                }
+            }
+        }
+        let output = try #require(PDFDocument(url: url))
+        let pages = (0 ..< output.pageCount).compactMap { output.page(at: $0) }
+        defer { withExtendedLifetime(pages) {} }
+        #expect(pages.allSatisfy { $0.rotation == 0 })
+        #expect(pages.first?.annotations.count == 2)
+        #expect(output.outlineRoot?.child(at: 0)?.destination?.page === output.page(at: 1))
+        let action = pages.first?.annotations.compactMap { $0.action as? PDFActionGoTo }.first
+        #expect(action?.destination.page === output.page(at: 1))
+    }
+
     @Test(arguments: [false, true])
     func preservesDocumentAttributes(signed: Bool) throws {
         let source = try ExportFixture.document()
-        let baseline = try #require(source.dataRepresentation())
         source.documentAttributes = [
             PDFDocumentAttribute.titleAttribute: "Signed agreement",
             PDFDocumentAttribute.authorAttribute: "Tester",
             PDFDocumentAttribute.subjectAttribute: "Export regression",
             PDFDocumentAttribute.keywordsAttribute: ["offline", "signing"],
         ]
-        let model = try ExportFixture.model(source, baseline: baseline, signed: signed)
+        let model = try ExportFixture.model(source, signed: signed)
         try ExportFixture.withDirectory { directory in
             let url = directory.appendingPathComponent("signed.pdf")
             try model.writeSignedCopy(to: url)

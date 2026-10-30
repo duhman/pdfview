@@ -50,8 +50,8 @@ enum ExportFixture {
         return try #require(bitmap.representation(using: .png, properties: [:]))
     }
 
-    static func model(_ pdf: PDFDocument, baseline: Data? = nil, signed: Bool = true) throws -> PDFViewerDocument {
-        var model = PDFViewerDocument(pdfDocument: pdf, originalPDFData: baseline)
+    static func model(_ pdf: PDFDocument, signed: Bool = true) throws -> PDFViewerDocument {
+        var model = PDFViewerDocument(pdfDocument: pdf)
         if signed {
             try model.addSignaturePlacement(.init(
                 pageIndex: 0, bounds: marker, signaturePNGData: signature(), signerName: "Tester"
