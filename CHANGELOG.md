@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Typing into a form field no longer rewrites the original PDF: macOS autosave saved the document in place with the typed values. The original is now never written; form entries and stamps only reach disk through Save Signed Copy. A read-only original no longer triggers the "file is locked" alert.
+- File > Save, Save As, Duplicate, Rename and Move To are removed; Duplicate wrote an unsigned copy of a document you had just signed.
+
 ## [0.2.1] - 2026-10-30
 
 Fixes locked PDFs reporting unsaved work, keeps print and copy restrictions on protected signed copies, and makes initials, dates and form fields faster to use from the keyboard.

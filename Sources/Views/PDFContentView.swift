@@ -10,8 +10,6 @@ struct PDFContentView: View {
     /// The file this window shows; drives the signed copy's default name and folder.
     let fileURL: URL?
 
-    @Environment(\.undoManager)
-    private var undoManager
     @EnvironmentObject private var signatureStore: SignatureStore
     @Environment(StampSizeMemory.self)
     private var stampSizes
@@ -783,7 +781,7 @@ extension PDFContentView {
 
     private func configuredEditor() -> SignaturePlacementEditor {
         editor.document = $document
-        editor.undoManager = undoManager
+        editor.undoManager = closeGuard.undoManager
         return editor
     }
 
@@ -1041,6 +1039,12 @@ final class DocumentCloseGuard: NSObject, NSWindowDelegate {
         didSet { window?.isDocumentEdited = isEdited }
     }
 
+    /// Stamp edits register with the window's undo manager, which Edit > Undo uses; the
+    /// document itself has none (see install(on:)).
+    var undoManager: UndoManager? {
+        window?.undoManager
+    }
+
     private weak var window: NSWindow?
     // swiftlint:disable:next modifier_order
     private nonisolated(unsafe) weak var originalDelegate: NSWindowDelegate?
@@ -1058,6 +1062,11 @@ final class DocumentCloseGuard: NSObject, NSWindowDelegate {
         window.delegate = self
         // The window holds the delegate weakly; tie the shim's lifetime to the window.
         objc_setAssociatedObject(window, &Self.associationKey, self, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        // The document never writes edits back (see PDFViewerDocument.fileWrapper), so it must not
+        // track them either: with an undo manager, PDFKit form edits and stamp edits would mark it
+        // changed, and macOS would autosave over the original or ask to unlock a read-only file.
+        // The window keeps its own undo manager for Edit > Undo.
+        NSDocumentController.shared.document(for: window)?.hasUndoManager = false
     }
 
     override nonisolated func responds(to aSelector: Selector!) -> Bool {
