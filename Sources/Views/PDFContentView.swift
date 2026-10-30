@@ -1066,7 +1066,13 @@ final class DocumentCloseGuard: NSObject, NSWindowDelegate {
         // track them either: with an undo manager, PDFKit form edits and stamp edits would mark it
         // changed, and macOS would autosave over the original or ask to unlock a read-only file.
         // The window keeps its own undo manager for Edit > Undo.
-        NSDocumentController.shared.document(for: window)?.hasUndoManager = false
+        if let document = NSDocumentController.shared.document(for: window) {
+            document.hasUndoManager = false
+            // Dropping the undo manager leaves the document flagged as edited; clear it so the
+            // title bar shows "Edited" only for real unsaved signatures and form entries.
+            document.updateChangeCount(.changeCleared)
+        }
+        window.isDocumentEdited = isEdited
     }
 
     override nonisolated func responds(to aSelector: Selector!) -> Bool {
