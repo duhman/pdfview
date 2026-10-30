@@ -65,7 +65,7 @@ struct PDFContentView: View {
             .focusedSceneValue(\.signingActions, signingActions)
             .focusedSceneValue(\.zoomActions, zoomActions)
             .focusedSceneValue(\.readerActions, ReaderCommandActions(
-                reader: reader, isBusy: export.isBusy, printDocument: printDocument
+                reader: reader, isBusy: export.isBusy, printDocument: printDocument, pageSetup: runPageSetup
             ))
     }
 
@@ -611,6 +611,12 @@ extension PDFContentView {
                 }
             }
         }
+    }
+
+    /// Page Setup as a sheet on this window; the print panel itself is run by `PDFPrinting`.
+    private func runPageSetup() {
+        guard let window = viewer.window else { return }
+        NSPageLayout().beginSheet(using: NSPrintInfo.shared, on: window, completionHandler: nil)
     }
 
     private func cancelExport() {
