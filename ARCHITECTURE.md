@@ -16,9 +16,11 @@ Flattened stamps are page artwork. This is not certificate signing, identity ver
 
 `PDFKitView` bridges PDFKit into SwiftUI. A `PDFPageOverlayViewProvider` draws signature overlays that follow each page during scrolling and zooming. Placement, selection, moving, and aspect-locked resizing use page coordinates; the document model remains the source of truth. Undo and redo operate on model changes.
 
-Signing mode consumes placement clicks while normal reading retains PDFKit's selection and navigation behavior. Only signature widgets are treated as signature fields; detection refreshes when a protected document is unlocked. Keyboard placement, focus, and accessibility announcements accompany pointer interaction.
+Signing mode consumes placement clicks while normal reading retains PDFKit's selection and navigation behavior. Only signature widgets are treated as signature fields. `FormScan` walks the document a few pages at a time in a cancellable task after the pages are shown, collecting signature fields and the other form widgets; it reruns when a protected document is unlocked. Overlays redraw only when their inputs (placements, mode, profile image, fields, selection) change.
 
-`PDFContentView` coordinates the toolbar, sidebar, signing setup, and document status. `SigningCommands` routes app menu commands to the focused document. Unsaved placements require a close confirmation; saving reports success only after export finishes.
+Each page overlay exposes its stamps as `StampAccessibilityElement` buttons labelled by `StampAccessibility` (signer, page, field or on-screen position, with PDF-supplied field names flattened and truncated) and offering Remove and Move actions. Keyboard editing lives in `PDFKitView+Keyboard`: arrows move a selected stamp 1/10/50 pt, Option-Shift arrows resize it, and the PDF view claims arrow key equivalents before the Go menu while a stamp is selected. Escape follows `SigningFlowLogic.escapeAction` (export, signing, Find, selection); the Find field closes Find itself.
+
+`PDFContentView` coordinates the toolbar, sidebar, signing setup, and document status. `SigningCommands` routes app menu commands to the focused document. Unsaved work is placements not in the last saved copy plus form values that differ from the last saved copy; the close guard reads it at decision time, and `AppDelegate` runs `TerminationReview` over every window's guard when the app quits. Saving reports success only after export finishes.
 
 ## Signature creation and storage
 
@@ -34,7 +36,7 @@ The reader provides a page indicator, Go to Page, thumbnails and outline sidebar
 
 `ReaderController` observes PDFKit page/scale and clip-view scroll changes, owns per-window sidebar/layout state and restores reading destinations after the view attaches or the PDF unlocks. `ReaderSidebar` binds a `PDFThumbnailView` to that same PDF view and renders a recursive outline. `ReaderCommands` uses the existing focused-scene action pattern for View, Go, Find and Print; standard SwiftUI window commands retain native full screen. Plain arrow and Page Up/Down events remain with PDFKit, except when a selected signature owns arrow-key editing.
 
-`FindController` cancels prior searches and observes `PDFDocumentDidFindMatch` / `PDFDocumentDidEndFind` on the main queue. Generation checks discard queued stale callbacks; PDFKit selections remain on the main actor. `FindState` holds tested match counting and wrapping. The find bar requests text focus when opened; Escape finishes signing before closing Find. During export, Escape cancels the export first.
+`FindController` cancels prior searches and observes `PDFDocumentDidFindMatch` / `PDFDocumentDidEndFind` on the main queue. Generation checks discard queued stale callbacks; PDFKit selections remain on the main actor. `FindState` holds tested match counting and wrapping. The find bar requests text focus when opened; Escape in the Find field closes Find, and elsewhere finishes signing before closing Find. During export, Escape cancels the export first.
 
 `ReadingPositionStore` is a Codable value with SHA-256 keys derived from standardized file paths. UserDefaults retains at most 200 entries in least-recently-used order. Values contain the page index, destination point and fit/manual zoom; paths and security bookmarks are not persisted. Invalid, corrupt or out-of-range positions are ignored.
 

@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Form entries count as unsaved work: the close prompt names them, and a filled form can be saved without a stamp
+- Quitting reviews every window with unsaved signatures or form entries (Review Changes / Discard Changes / Cancel)
+- File > Share Signed Copy… and Show Signed Copy in Finder for the window's last saved copy
+- Sign > Place in Next Field (⌥⌘N), Place on Current Page (⌥⌘P), Select Next / Previous Signature (⌥⌘] / ⌥⌘[)
+- Option-arrow 50 pt nudges and Option-Shift-arrow aspect-locked keyboard resizing for a selected stamp
+- VoiceOver elements for placed stamps (signer, page, field or position) with Remove and Move actions, plus position announcements after placing and moving
+- Stop Signing context menu while signing; Go to Page explains invalid input inline
 - Document-scoped, memory-only password state, secure unlock sheet and save-accessory components for view-layer integration
 - Protected signed export with default-on password retention, explicit opt-out and unknown-password notice APIs
 - Incremental, cancellable signature-field scanning API for the PDFKit view layer
@@ -26,6 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.github/SECURITY.md` vulnerability reporting policy
 
 ### Changed
+- Signature fields and form widgets are scanned a few pages at a time after the pages appear; page overlays redraw only when their inputs change
+- The saved banner stays until closed and names the folder; the signing banner names the keyboard path
+- Escape closes Find first when the Find field has focus; leaving signing is announced and focus returns to the document
+- Placing before a signature exists runs the placement after setup; Place on Current Page scrolls to the stamp
+- Menu names: Create Signature… (when none exists), Delete Saved Signature…, Remove Signature from Page
+- Thicker selection outline, larger handles and higher-contrast signature field outlines
+- File > Page Setup… is back alongside Print…
 - Reader sidebar uses a top segmented control, native outline selection and full-height thumbnails
 - About window reads the bundled copyright; app metadata declares the Productivity category
 - Verification runs locally: `scripts/ci-local.sh` builds debug and release bundles with stock `/bin/bash`, runs the tests, checks the bundle and runs pinned SwiftLint 0.65.1 / SwiftFormat 0.64.4 on the untouched checkout
