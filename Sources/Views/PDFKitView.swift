@@ -58,7 +58,43 @@ final class PDFViewerProxy {
         pdfView.go(to: rect.insetBy(dx: -40, dy: -40), on: page)
     }
 
+    /// Reads the form widgets now, so a close or quit decision sees an edit PDFKit has not reported yet.
+    func currentFormValues() -> [FormFieldValue]? {
+        coordinator?.formScan?.values()
+    }
+
+    /// Reports any form edit PDFKit has made since the last check.
+    func refreshFormValues() {
+        coordinator?.checkFormValues()
+    }
+
+    /// Returns keyboard focus to the document, e.g. after a banner or the Find bar closes.
+    func focusDocument() {
+        guard let pdfView, let window = pdfView.window else { return }
+        window.makeFirstResponder(pdfView)
+    }
+
+    /// Opens the share menu from the top of the document, for File > Share Signed Copy….
+    func showSharingPicker(for url: URL) {
+        guard let pdfView else { return }
+        let anchor = CGRect(x: pdfView.bounds.midX, y: pdfView.bounds.maxY - 1, width: 1, height: 1)
+        NSSharingServicePicker(items: [url]).show(relativeTo: anchor, of: pdfView, preferredEdge: .minY)
+    }
+
     /// Selects a stamp and gives the PDF view keyboard focus so arrow keys nudge it.
+    var selectedPlacementID: UUID? {
+        coordinator?.selectedPlacementID
+    }
+
+    /// The VoiceOver label of a placement as it is now, e.g. for Select Next Signature.
+    func label(for placement: PDFViewerDocument.SignaturePlacement) -> String? {
+        coordinator?.label(for: placement, bounds: placement.bounds)
+    }
+
+    func location(of bounds: CGRect, onPageAt pageIndex: Int) -> String? {
+        coordinator?.location(of: bounds, onPageAt: pageIndex)
+    }
+
     func select(placementID: UUID?) {
         coordinator?.selectedPlacementID = placementID
         if let pdfView, placementID != nil {
@@ -74,6 +110,16 @@ struct PDFKitView: NSViewRepresentable {
     struct DocumentState: Equatable {
         var signatureFields: [SignatureField]
         var isLocked: Bool
+        /// Nil until the incremental form scan has finished.
+        var formValues: [FormFieldValue]?
+    }
+
+    /// Everything the page overlays draw from; overlays are rebuilt only when this changes.
+    struct OverlayInputs: Equatable {
+        var placements: [PDFViewerDocument.SignaturePlacement]
+        var signingMode: SigningMode
+        var profilePNGData: Data?
+        var fields: [SignatureField]
     }
 
     var document: PDFDocument?
@@ -85,6 +131,8 @@ struct PDFKitView: NSViewRepresentable {
     var reader: ReaderController
     var fileURL: URL?
     var onEscape: () -> Void
+    /// Stop Signing from the page's context menu.
+    var onStopSigning: () -> Void
     var isExporting: Bool
 
     /// The window hosting the PDF view, reported whenever it is (re)attached.
@@ -93,8 +141,10 @@ struct PDFKitView: NSViewRepresentable {
     var onPlaceSignature: (_ pageIndex: Int, _ bounds: CGRect) -> Void
     var onUpdatePlacementBounds: (_ id: UUID, _ bounds: CGRect, _ actionName: String) -> Void
     var onDeletePlacement: (UUID) -> Void
-    /// Fields and lock state, reported when the document changes or unlocks.
+    /// Lock state as soon as a document is shown, then fields and form values once scanned.
     var onDocumentStateChange: (DocumentState) -> Void
+    /// The user changed a form widget's value.
+    var onFormValuesChange: ([FormFieldValue]) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -131,7 +181,7 @@ struct PDFKitView: NSViewRepresentable {
             reader?.attach(to: nsView, fileURL: fileURL)
         }
         coordinator.apply(zoom, to: nsView)
-        coordinator.refreshOverlays()
+        coordinator.updateOverlaysIfNeeded()
         if let window = nsView.window {
             onWindow(window)
         }
@@ -147,15 +197,25 @@ extension PDFKitView {
     @MainActor
     final class Coordinator: NSObject {
         var parent: PDFKitView
-        private weak var pdfView: SigningPDFView?
+        private(set) weak var pdfView: SigningPDFView?
         private var isApplyingZoom = false
         private var overlays: [ObjectIdentifier: PageOverlayView] = [:]
         private var imageCache: [UUID: CGImage] = [:]
         private var profileImageCache: (data: Data, image: CGImage?)?
-        private var signatureFields: [SignatureField] = []
+        private(set) var signatureFields: [SignatureField] = []
+        private var overlayInputs: OverlayInputs?
+        private var scanTask: Task<Void, Never>?
+        private var reportedFormValues: [FormFieldValue]?
+        private(set) var formScan: FormScan?
+        /// Counts overlay rebuilds, so tests can check that unrelated updates skip them.
+        private(set) var overlayRefreshCount = 0
 
         var selectedPlacementID: UUID? {
-            didSet { refreshOverlays() }
+            didSet {
+                if selectedPlacementID != oldValue {
+                    refreshOverlays()
+                }
+            }
         }
 
         init(_ parent: PDFKitView) {
@@ -169,13 +229,26 @@ extension PDFKitView {
             pdfView.onIdleMouseDown = { [weak self] in self?.selectedPlacementID = nil }
             pdfView.keyHandler = { [weak self] event in self?.handleKey(event) ?? false }
             pdfView.onWindowChange = { [weak self] window in self?.parent.onWindow(window) }
+            pdfView.onUserInteraction = { [weak self] in self?.scheduleFormValueCheck() }
+            pdfView.onStopSigning = { [weak self] in self?.parent.onStopSigning() }
+            pdfView.hasSelectedStamp = { [weak self] in self?.selectedPlacementID != nil }
 
-            NotificationCenter.default.addObserver(
+            let center = NotificationCenter.default
+            center.addObserver(
                 self,
                 selector: #selector(handleScaleChanged(_:)),
                 name: .PDFViewScaleChanged,
                 object: pdfView
             )
+            center.addObserver(
+                self,
+                selector: #selector(handlePossibleFormEdit(_:)),
+                name: .PDFViewAnnotationHit,
+                object: pdfView
+            )
+            for name in [NSText.didChangeNotification, NSText.didEndEditingNotification] {
+                center.addObserver(self, selector: #selector(handlePossibleFormEdit(_:)), name: name, object: nil)
+            }
         }
 
         // MARK: Document
@@ -200,15 +273,58 @@ extension PDFKitView {
             rescanDocument()
         }
 
+        /// Shows the pages first, then walks their annotations a few pages at a time. The task never
+        /// runs inside the SwiftUI update that called this, so reporting state from it is safe.
         private func rescanDocument() {
+            scanTask?.cancel()
+            formScan = nil
+            reportedFormValues = nil
+            signatureFields = []
             let document = pdfView?.document
-            signatureFields = document.map(SigningFlowLogic.signatureFields) ?? []
-            let state = DocumentState(signatureFields: signatureFields, isLocked: document?.isLocked ?? false)
-            // Reported asynchronously: this can run inside a SwiftUI view update.
-            DispatchQueue.main.async { [weak self] in
-                self?.parent.onDocumentStateChange(state)
-                self?.refreshOverlays()
+            scanTask = Task { [weak self] in
+                let isLocked = document?.isLocked ?? false
+                self?.parent.onDocumentStateChange(DocumentState(signatureFields: [], isLocked: isLocked))
+                self?.updateOverlaysIfNeeded()
+                guard let document, !isLocked else { return }
+
+                let scan = await FormScan.scan(document)
+                guard !scan.isCancelled, let self, pdfView?.document === document else { return }
+                formScan = scan
+                signatureFields = scan.signatureFields
+                let values = scan.values()
+                reportedFormValues = values
+                parent.onDocumentStateChange(DocumentState(
+                    signatureFields: scan.signatureFields,
+                    isLocked: false,
+                    formValues: values
+                ))
+                updateOverlaysIfNeeded()
             }
+        }
+
+        // MARK: Form edits
+
+        @objc
+        private func handlePossibleFormEdit(_ notification: Notification) {
+            if notification.name == .PDFViewAnnotationHit {
+                scheduleFormValueCheck()
+            } else if let pdfView, let text = notification.object as? NSView, text.isDescendant(of: pdfView) {
+                scheduleFormValueCheck()
+            }
+        }
+
+        /// PDFKit commits a widget's value after the event that changed it, so read it on the next turn.
+        private func scheduleFormValueCheck() {
+            guard formScan?.widgets.isEmpty == false else { return }
+            DispatchQueue.main.async { [weak self] in
+                self?.checkFormValues()
+            }
+        }
+
+        func checkFormValues() {
+            guard let values = formScan?.values(), values != reportedFormValues else { return }
+            reportedFormValues = values
+            parent.onFormValuesChange(values)
         }
 
         // MARK: Zoom
@@ -243,7 +359,20 @@ extension PDFKitView {
 
         // MARK: Overlays
 
+        func updateOverlaysIfNeeded() {
+            let inputs = OverlayInputs(
+                placements: parent.signaturePlacements,
+                signingMode: parent.signingMode,
+                profilePNGData: parent.signatureProfile?.signaturePNGData,
+                fields: signatureFields
+            )
+            guard inputs != overlayInputs else { return }
+            overlayInputs = inputs
+            refreshOverlays()
+        }
+
         func refreshOverlays() {
+            overlayRefreshCount += 1
             for overlay in overlays.values {
                 overlay.content = content(for: overlay.page)
             }
@@ -256,7 +385,12 @@ extension PDFKitView {
                 .filter { $0.pageIndex == pageIndex }
                 .compactMap { placement -> PageOverlayView.Stamp? in
                     guard let image = image(for: placement) else { return nil }
-                    return PageOverlayView.Stamp(id: placement.id, bounds: placement.bounds, image: image)
+                    return PageOverlayView.Stamp(
+                        id: placement.id,
+                        bounds: placement.bounds,
+                        image: image,
+                        accessibilityLabel: label(for: placement, bounds: placement.bounds)
+                    )
                 }
             let isSigning = parent.signingMode != .idle
 
@@ -267,6 +401,29 @@ extension PDFKitView {
                 signingMode: parent.signingMode,
                 fields: isSigning ? signatureFields.filter { $0.pageIndex == pageIndex }.map(\.bounds) : [],
                 ghostImage: isSigning ? profileImage() : nil
+            )
+        }
+
+        func label(for placement: PDFViewerDocument.SignaturePlacement, bounds: CGRect) -> String {
+            let page = pdfView?.document?.page(at: placement.pageIndex)
+            return StampAccessibility.label(
+                signerName: placement.signerName,
+                pageIndex: placement.pageIndex,
+                bounds: bounds,
+                cropBox: page?.bounds(for: .cropBox) ?? bounds,
+                rotation: page?.rotation ?? 0,
+                fields: signatureFields
+            )
+        }
+
+        func location(of bounds: CGRect, onPageAt pageIndex: Int) -> String {
+            let page = pdfView?.document?.page(at: pageIndex)
+            return StampAccessibility.location(
+                of: bounds,
+                pageIndex: pageIndex,
+                cropBox: page?.bounds(for: .cropBox) ?? bounds,
+                rotation: page?.rotation ?? 0,
+                fields: signatureFields
             )
         }
 
@@ -311,73 +468,8 @@ extension PDFKitView {
             overlays[ObjectIdentifier(page)] = nil
         }
 
-        // MARK: Keyboard
-
-        private var isHandlingEscape: Bool {
-            parent.isExporting || parent.signingMode != .idle || parent.reader.find.isVisible
-        }
-
-        private func handleKey(_ event: NSEvent) -> Bool {
-            if event.keyCode == 53 {
-                if isHandlingEscape {
-                    parent.onEscape()
-                    return true
-                }
-                if selectedPlacementID != nil {
-                    selectedPlacementID = nil
-                    return true
-                }
-                return false
-            }
-
-            guard let selectedID = selectedPlacementID,
-                  let placement = parent.signaturePlacements.first(where: { $0.id == selectedID })
-            else {
-                return false
-            }
-
-            switch event.specialKey {
-            case .delete?, .deleteForward?:
-                selectedPlacementID = nil
-                parent.onDeletePlacement(selectedID)
-                return true
-            case .leftArrow?, .rightArrow?, .upArrow?, .downArrow?:
-                nudge(placement, key: event.specialKey, by: event.modifierFlags.contains(.shift) ? 10 : 1)
-                return true
-            default:
-                return false
-            }
-        }
-
-        /// Moves the stamp in the on-screen direction of the arrow key, whatever the page rotation.
-        private func nudge(
-            _ placement: PDFViewerDocument.SignaturePlacement,
-            key: NSEvent.SpecialKey?,
-            by distance: CGFloat
-        ) {
-            guard let pdfView, let page = pdfView.document?.page(at: placement.pageIndex) else { return }
-
-            let screenUp: CGFloat = pdfView.isFlipped ? -1 : 1
-            let screenVector = switch key {
-            case .leftArrow?: CGVector(dx: -1, dy: 0)
-            case .rightArrow?: CGVector(dx: 1, dy: 0)
-            case .upArrow?: CGVector(dx: 0, dy: screenUp)
-            default: CGVector(dx: 0, dy: -screenUp)
-            }
-
-            let origin = pdfView.convert(CGPoint.zero, to: page)
-            let target = pdfView.convert(CGPoint(x: screenVector.dx, y: screenVector.dy), to: page)
-            let length = max(hypot(target.x - origin.x, target.y - origin.y), 0.0001)
-            let delta = CGVector(
-                dx: (target.x - origin.x) / length * distance,
-                dy: (target.y - origin.y) / length * distance
-            )
-
-            let bounds = PlacementGeometry.moved(placement.bounds, by: delta, within: page.bounds(for: .cropBox))
-            parent.onUpdatePlacementBounds(placement.id, bounds, "Move Signature")
-        }
-
         deinit {
+            scanTask?.cancel()
             NotificationCenter.default.removeObserver(self)
         }
     }
@@ -439,6 +531,15 @@ extension PDFKitView.Coordinator: PageOverlayViewDelegate {
         selectedPlacementID = nil
         parent.onDeletePlacement(id)
     }
+
+    func overlayDidRequestStopSigning(_: PageOverlayView) {
+        parent.onStopSigning()
+    }
+
+    func overlay(_ overlay: PageOverlayView, didRequestMove id: UUID) {
+        self.overlay(overlay, didSelect: id)
+        StampAccessibility.announce(StampAccessibility.moveInstructions, in: pdfView?.window)
+    }
 }
 
 @MainActor
@@ -447,6 +548,28 @@ final class SigningPDFView: PDFView {
     var onIdleMouseDown: (() -> Void)?
     var keyHandler: ((NSEvent) -> Bool)?
     var onWindowChange: ((NSWindow) -> Void)?
+    /// A click or key press PDFKit handled, which may have changed a form widget.
+    var onUserInteraction: (() -> Void)?
+    var onStopSigning: (() -> Void)?
+
+    var hasSelectedStamp: () -> Bool = { false }
+
+    /// The Go menu owns ⌥↑/⌥↓ and menu key equivalents are matched before keyDown, so arrow keys
+    /// for a selected stamp are claimed here first, while this view has keyboard focus.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let arrows: [NSEvent.SpecialKey] = [.leftArrow, .rightArrow, .upArrow, .downArrow]
+        let isStampArrow = event.specialKey.map(arrows.contains) == true && !event.modifierFlags.contains(.command)
+        if isStampArrow, window?.firstResponder === self, hasSelectedStamp(), keyHandler?(event) == true {
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    /// While signing, a right-click offers Stop Signing instead of PDFKit's reading menu.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard isSigning() else { return super.menu(for: event) }
+        return StopSigningMenu.make { [weak self] in self?.onStopSigning?() }
+    }
 
     /// Clicks that reach the PDF view itself (outside any page overlay) are consumed while signing
     /// and passed to PDFKit untouched otherwise.
@@ -454,6 +577,7 @@ final class SigningPDFView: PDFView {
         guard !isSigning() else { return }
         onIdleMouseDown?()
         super.mouseDown(with: event)
+        onUserInteraction?()
     }
 
     override func keyDown(with event: NSEvent) {
@@ -461,6 +585,7 @@ final class SigningPDFView: PDFView {
             return
         }
         super.keyDown(with: event)
+        onUserInteraction?()
     }
 
     override func viewDidMoveToWindow() {

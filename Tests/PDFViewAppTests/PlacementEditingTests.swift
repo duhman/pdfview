@@ -108,7 +108,7 @@ private final class EditingFixture {
     fixture.step { fixture.editor.add(third) }
     fixture.step { fixture.editor.delete(id: second.id) }
     #expect(fixture.document.signaturePlacements == [first, third])
-    #expect(fixture.undoManager.undoActionName == "Delete Signature")
+    #expect(fixture.undoManager.undoActionName == "Remove Signature from Page")
 
     fixture.undoManager.undo()
     #expect(fixture.document.signaturePlacements == [first, second, third])

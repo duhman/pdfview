@@ -98,6 +98,25 @@ enum PlacementGeometry {
         return CGRect(origin: origin, size: size)
     }
 
+    /// Arrow-key step: 1 pt, Shift 10 pt, Option 50 pt. Option-Shift resizes instead, so it has no step.
+    static func nudgeDistance(shift: Bool, option: Bool) -> CGFloat? {
+        switch (shift, option) {
+        case (false, false): 1
+        case (true, false): 10
+        case (false, true): 50
+        case (true, true): nil
+        }
+    }
+
+    /// Keyboard resize: changes the width by `delta` with the aspect ratio locked and the bottom-left
+    /// corner (the end of the signature line) fixed, within the same limits as a corner drag.
+    static func scaled(_ rect: CGRect, byWidth delta: CGFloat, within bounds: CGRect) -> CGRect {
+        guard rect.width > 0 else { return rect }
+        let scale = max(rect.width + delta, minimumWidth) / rect.width
+        let corner = CGPoint(x: rect.minX + rect.width * scale, y: rect.minY + rect.height * scale)
+        return resized(rect, dragging: .topRight, to: corner, within: bounds)
+    }
+
     static func corner(of rect: CGRect, near point: CGPoint, tolerance: CGFloat) -> Corner? {
         Corner.allCases.first { corner in
             let cornerPoint = corner.point(in: rect)

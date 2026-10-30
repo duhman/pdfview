@@ -42,18 +42,8 @@ import Testing
     #expect(SigningFlowLogic.refreshed(.idle, hasSignatureFields: false) == .idle)
 }
 
-@Test func bannerTextMatchesPlacementMode() {
-    #expect(SigningFlowLogic.statusText(mode: .freePlacement) == "Click where you want to sign.")
-    #expect(
-        SigningFlowLogic.statusText(mode: .fieldPlacement)
-            == "Click a signature field to sign, or choose Anywhere."
-    )
-}
-
 @Test func announcementsDescribeTheOutcome() {
     #expect(SigningFlowLogic.enteredAnnouncement(mode: .freePlacement).contains("Escape"))
-    #expect(SigningFlowLogic.placedAnnouncement(pageIndex: 1) == "Signature placed on page 2")
-    #expect(SigningFlowLogic.savedAnnouncement(fileName: "a-signed.pdf") == "Saved a-signed.pdf")
 }
 
 @Test func nextFieldCyclesThroughDetectedFields() {
@@ -110,7 +100,9 @@ import Testing
     let document = try makeFormDocument()
     let fields = SigningFlowLogic.signatureFields(in: document)
 
-    #expect(fields == [SignatureField(pageIndex: 1, bounds: CGRect(x: 20, y: 100, width: 220, height: 50))])
+    #expect(fields == [
+        SignatureField(pageIndex: 1, bounds: CGRect(x: 20, y: 100, width: 220, height: 50), name: "ClientSignature"),
+    ])
 }
 
 @Test func textFieldNamedLikeASignatureIsNotDetected() throws {

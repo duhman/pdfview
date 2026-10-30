@@ -27,11 +27,17 @@ struct PDFContentView: View {
     @State private var documentState: PDFKitView.DocumentState?
     @State private var lastFieldIndex: Int?
     @State private var exportedPlacements: [PDFViewerDocument.SignaturePlacement]?
-    @State private var savedURL: URL?
+    /// Form widget values now, as opened, and as last saved; nil until the form scan finishes.
+    @State private var formValues: [FormFieldValue]?
+    @State private var originalFormValues: [FormFieldValue]?
+    @State private var savedFormValues: [FormFieldValue]?
+    /// The last signed copy saved from this window; File menu sharing stays bound to it.
+    @State private var lastSavedURL: URL?
+    @State private var showsSavedBanner = false
 
     @State private var showSignatureSetupSheet = false
     @State private var isEditingSignature = false
-    @State private var modeAfterSetup: SigningMode?
+    @State private var pendingAfterSetup: PendingSigningAction?
     @State private var showDeleteSignatureAlert = false
     @State private var errorAlert: ErrorAlert?
 
@@ -48,13 +54,18 @@ struct PDFContentView: View {
                 export.cancel()
                 printTask?.cancel()
             }
-            .onChange(of: hasUnexportedPlacements) { _, isEdited in
-                closeGuard.isEdited = isEdited
+            .onChange(of: unsavedWork) { _, work in
+                closeGuard.isEdited = !work.isEmpty
+            }
+            .onChange(of: reader.find.isVisible) { _, isVisible in
+                if !isVisible {
+                    viewer.focusDocument()
+                }
             }
             .focusedSceneValue(\.signingActions, signingActions)
             .focusedSceneValue(\.zoomActions, zoomActions)
             .focusedSceneValue(\.readerActions, ReaderCommandActions(
-                reader: reader, isBusy: export.isBusy, printDocument: printDocument
+                reader: reader, isBusy: export.isBusy, printDocument: printDocument, pageSetup: runPageSetup
             ))
     }
 
@@ -85,12 +96,12 @@ struct PDFContentView: View {
             }
             if signingMode != .idle {
                 signingBanner
-            } else if let savedURL {
-                savedBanner(for: savedURL)
+            } else if showsSavedBanner, let lastSavedURL {
+                savedBanner(for: lastSavedURL)
             }
 
             if reader.find.isVisible {
-                FindBar(find: reader.find, onEscape: handleEscape)
+                FindBar(find: reader.find, onEscape: closeFind)
             }
             if let reason = reader.printDisabledReason {
                 Text(reason).font(.caption).foregroundStyle(.secondary).padding(4)
@@ -115,6 +126,7 @@ struct PDFContentView: View {
             reader: reader,
             fileURL: fileURL,
             onEscape: handleEscape,
+            onStopSigning: exitSigning,
             isExporting: export.progress != nil,
             onWindow: attachCloseGuard,
             onPlaceSignature: placeSignature,
@@ -122,7 +134,8 @@ struct PDFContentView: View {
                 configuredEditor().setBounds(id: id, to: bounds, actionName: actionName)
             },
             onDeletePlacement: { configuredEditor().delete(id: $0) },
-            onDocumentStateChange: applyDocumentState
+            onDocumentStateChange: applyDocumentState,
+            onFormValuesChange: applyFormValues
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -218,7 +231,7 @@ extension PDFContentView {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
                 .accessibilityHidden(true)
-            Text("Saved “\(url.lastPathComponent)”")
+            Text(SigningFlowLogic.savedText(for: url))
             Spacer()
             Button("Show in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -226,13 +239,12 @@ extension PDFContentView {
             ShareLink(item: url) {
                 Label("Share…", systemImage: "square.and.arrow.up")
             }
-            Button {
-                savedURL = nil
-            } label: {
+            Button(action: dismissSavedBanner) {
                 Image(systemName: "xmark")
             }
             .buttonStyle(.borderless)
-            .accessibilityLabel("Dismiss")
+            .accessibilityLabel("Close")
+            .help("Close. File > Share Signed Copy… and Show Signed Copy in Finder stay available.")
         }
         .font(.callout)
         .padding(.horizontal, 12)
@@ -241,12 +253,13 @@ extension PDFContentView {
         .overlay(alignment: .bottom) {
             Divider()
         }
-        .task(id: url) {
-            try? await Task.sleep(for: .seconds(8))
-            if !Task.isCancelled, savedURL == url {
-                savedURL = nil
-            }
-        }
+        // The banner stays until closed, so there is time to read it and to reach its buttons.
+        .onExitCommand(perform: dismissSavedBanner)
+    }
+
+    private func dismissSavedBanner() {
+        showsSavedBanner = false
+        viewer.focusDocument()
     }
 
     private var signatureSetupSheet: some View {
@@ -254,16 +267,20 @@ extension PDFContentView {
             existingProfile: isEditingSignature ? signatureStore.profile : nil,
             onCancel: {
                 showSignatureSetupSheet = false
-                modeAfterSetup = nil
+                pendingAfterSetup = nil
             },
             onSave: { profile in
                 do {
                     try signatureStore.saveProfile(profile)
                     showSignatureSetupSheet = false
-                    if let modeAfterSetup {
-                        enterSigning(modeAfterSetup)
+                    let pending = pendingAfterSetup
+                    pendingAfterSetup = nil
+                    switch pending {
+                    case let .enter(mode)?: enterSigning(mode)
+                    case .placeInNextField?: placeInNextField()
+                    case .placeOnCurrentPage?: placeOnCurrentPage()
+                    case nil: break
                     }
-                    modeAfterSetup = nil
                 } catch {
                     errorAlert = ErrorAlert(title: "Couldn’t Save Signature", error: error)
                 }
@@ -316,11 +333,24 @@ extension PDFContentView {
     }
 
     private var canSaveSignedCopy: Bool {
-        document.pdfDocument != nil && !document.signaturePlacements.isEmpty && !export.isBusy
+        document.pdfDocument != nil && !export.isBusy && SigningFlowLogic.hasSignedCopyContent(
+            placements: document.signaturePlacements,
+            formValues: formValues,
+            originalFormValues: originalFormValues
+        )
     }
 
-    private var hasUnexportedPlacements: Bool {
-        SigningFlowLogic.hasUnexportedPlacements(document.signaturePlacements, exported: exportedPlacements)
+    private var unsavedWork: UnsavedWork {
+        unsavedWork(formValues: formValues)
+    }
+
+    private func unsavedWork(formValues: [FormFieldValue]?) -> UnsavedWork {
+        SigningFlowLogic.unsavedWork(
+            placements: document.signaturePlacements,
+            exported: exportedPlacements,
+            formValues: formValues,
+            savedFormValues: savedFormValues
+        )
     }
 
     private var signatureImageSize: CGSize? {
@@ -340,7 +370,12 @@ extension PDFContentView {
             placeInNextField: placeInNextField,
             placeOnCurrentPage: placeOnCurrentPage,
             setAnywhere: setAnywhere,
+            hasPlacements: !document.signaturePlacements.isEmpty,
+            selectNextSignature: { selectAdjacentSignature(forward: true) },
+            selectPreviousSignature: { selectAdjacentSignature(forward: false) },
             saveSignedCopy: { saveSignedCopy() },
+            lastSavedURL: lastSavedURL,
+            shareSignedCopy: { url in viewer.showSharingPicker(for: url) },
             editSignature: editSignature,
             deleteSignature: confirmDeleteSignature
         )
@@ -355,8 +390,15 @@ extension PDFContentView {
         )
     }
 
+    private func applyFormValues(_ values: [FormFieldValue]) {
+        formValues = values
+    }
+
     private func applyDocumentState(_ state: PDFKitView.DocumentState) {
         documentState = state
+        formValues = state.formValues
+        originalFormValues = state.formValues
+        savedFormValues = state.formValues
         lastFieldIndex = nil
         signingMode = SigningFlowLogic.refreshed(signingMode, hasSignatureFields: !state.signatureFields.isEmpty)
     }
@@ -391,12 +433,17 @@ extension PDFContentView {
     private func startSigning(_ mode: SigningMode) {
         guard canSign else { return }
         guard signatureStore.profile != nil else {
-            isEditingSignature = false
-            modeAfterSetup = mode
-            showSignatureSetupSheet = true
+            requestSignatureSetup(then: .enter(mode))
             return
         }
         enterSigning(mode)
+    }
+
+    /// Asks for a signature first; the requested action runs once the sheet saves.
+    private func requestSignatureSetup(then action: PendingSigningAction) {
+        isEditingSignature = false
+        pendingAfterSetup = action
+        showSignatureSetupSheet = true
     }
 
     private func enterSigning(_ mode: SigningMode) {
@@ -406,7 +453,11 @@ extension PDFContentView {
     }
 
     private func exitSigning() {
+        guard signingMode != .idle else { return }
         signingMode = SigningFlowLogic.exited(signingMode)
+        announce(SigningFlowLogic.exitedAnnouncement)
+        // The Done button that may have had focus is gone; give focus back to the document.
+        viewer.focusDocument()
     }
 
     private func setAnywhere(_ anywhere: Bool) {
@@ -422,7 +473,7 @@ extension PDFContentView {
     private func placeInNextField() {
         guard canSign else { return }
         guard let imageSize = signatureImageSize else {
-            startSigning(.fieldPlacement)
+            requestSignatureSetup(then: .placeInNextField)
             return
         }
         guard let index = SigningFlowLogic.nextFieldIndex(after: lastFieldIndex, count: signatureFields.count),
@@ -446,7 +497,7 @@ extension PDFContentView {
     private func placeOnCurrentPage() {
         guard canSign else { return }
         guard let imageSize = signatureImageSize else {
-            startSigning(.freePlacement)
+            requestSignatureSetup(then: .placeOnCurrentPage)
             return
         }
         let pageIndex = viewer.currentPageIndex ?? 0
@@ -458,6 +509,7 @@ extension PDFContentView {
             imageSize: imageSize,
             pageBounds: cropBox
         )
+        viewer.reveal(bounds, onPageAt: pageIndex)
         placeSignature(pageIndex: pageIndex, bounds: bounds)
     }
 
@@ -473,7 +525,23 @@ extension PDFContentView {
         configuredEditor().add(placement)
         signingMode = SigningFlowLogic.afterPlacement(signingMode)
         viewer.select(placementID: placement.id)
-        announce(SigningFlowLogic.placedAnnouncement(pageIndex: pageIndex))
+        let location = viewer.location(of: bounds, onPageAt: pageIndex) ?? ""
+        announce(StampAccessibility.placedAnnouncement(pageIndex: pageIndex, location: location))
+    }
+
+    /// Select Next/Previous Signature: reveals the stamp, gives it keyboard focus and reads its label.
+    private func selectAdjacentSignature(forward: Bool) {
+        let placements = document.signaturePlacements
+        guard let id = SigningFlowLogic.adjacentPlacement(
+            after: viewer.selectedPlacementID,
+            in: placements,
+            forward: forward
+        ), let placement = placements.first(where: { $0.id == id }) else { return }
+        viewer.reveal(placement.bounds, onPageAt: placement.pageIndex)
+        viewer.select(placementID: id)
+        if let label = viewer.label(for: placement) {
+            announce(label)
+        }
     }
 
     private func configuredEditor() -> SignaturePlacementEditor {
@@ -482,9 +550,10 @@ extension PDFContentView {
         return editor
     }
 
+    /// Edits the saved signature, or creates one when there is none yet.
     private func editSignature() {
-        isEditingSignature = true
-        modeAfterSetup = nil
+        isEditingSignature = signatureStore.profile != nil
+        pendingAfterSetup = nil
         showSignatureSetupSheet = true
     }
 
@@ -505,6 +574,7 @@ extension PDFContentView {
 
     /// Asks for a destination in a sheet on this document's window, then writes the signed copy.
     private func saveSignedCopy(completion: @escaping (Bool) -> Void = { _ in }) {
+        viewer.refreshFormValues()
         guard canSaveSignedCopy, let window = viewer.window, export.reserve() else { completion(false)
             return
         }
@@ -520,12 +590,15 @@ extension PDFContentView {
                 return
             }
             let placements = document.signaturePlacements
+            let values = viewer.currentFormValues()
             export.write(source, placements: placements, to: url) { result in
                 switch result {
                 case .success:
                     exportedPlacements = placements
-                    savedURL = url
-                    announce(SigningFlowLogic.savedAnnouncement(fileName: url.lastPathComponent))
+                    savedFormValues = values
+                    lastSavedURL = url
+                    showsSavedBanner = true
+                    announce(SigningFlowLogic.savedAnnouncement(for: url))
                     completion(document.signaturePlacements == placements)
                 case let .failure(error):
                     if !(error is CancellationError) {
@@ -559,26 +632,43 @@ extension PDFContentView {
         }
     }
 
+    /// Page Setup as a sheet on this window; the print panel itself is run by `PDFPrinting`.
+    private func runPageSetup() {
+        guard let window = viewer.window else { return }
+        NSPageLayout().beginSheet(using: NSPrintInfo.shared, on: window, completionHandler: nil)
+    }
+
     private func cancelExport() {
         export.cancel()
         printTask?.cancel()
     }
 
     private func handleEscape() {
-        if export.progress != nil {
-            cancelExport()
-        } else if signingMode != .idle {
-            exitSigning()
-        } else if reader.find.isVisible {
-            reader.find.close()
+        let action = SigningFlowLogic.escapeAction(
+            isExporting: export.progress != nil,
+            isSigning: signingMode != .idle,
+            isFindVisible: reader.find.isVisible,
+            hasSelection: false
+        )
+        switch action {
+        case .cancelExport: cancelExport()
+        case .stopSigning: exitSigning()
+        case .closeFind: closeFind()
+        case .deselect, .none: break
         }
+    }
+
+    private func closeFind() {
+        reader.find.close()
+        viewer.focusDocument()
     }
 
     private func attachCloseGuard(to window: NSWindow) {
         closeGuard.documentName = fileURL?.lastPathComponent ?? "this document"
         closeGuard.saveSignedCopy = { completion in saveSignedCopy(completion: completion) }
+        closeGuard.unsavedWork = { unsavedWork(formValues: viewer.currentFormValues() ?? formValues) }
         closeGuard.install(on: window)
-        closeGuard.isEdited = hasUnexportedPlacements
+        closeGuard.isEdited = !unsavedWork.isEmpty
     }
 
     private func announce(_ message: String) {
@@ -602,7 +692,7 @@ final class SignaturePlacementEditor {
     }
 
     func delete(id: UUID) {
-        remove(id: id, actionName: "Delete Signature")
+        remove(id: id, actionName: "Remove Signature from Page")
     }
 
     func setBounds(id: UUID, to bounds: CGRect, actionName: String) {
@@ -657,8 +747,10 @@ final class DocumentCloseGuard: NSObject, NSWindowDelegate {
 
     var documentName = "this document"
     var saveSignedCopy: (@escaping (Bool) -> Void) -> Void = { $0(false) }
+    /// Asked at decision time: PDFKit may hold a form edit the window has not been told about yet.
+    var unsavedWork: () -> UnsavedWork = { UnsavedWork() }
 
-    /// Mirrors unexported placements into the window's edited dot.
+    /// Mirrors unsaved signatures and form entries into the window's edited dot.
     var isEdited = false {
         didSet { window?.isDocumentEdited = isEdited }
     }
@@ -667,6 +759,10 @@ final class DocumentCloseGuard: NSObject, NSWindowDelegate {
     // swiftlint:disable:next modifier_order
     private nonisolated(unsafe) weak var originalDelegate: NSWindowDelegate?
     private var isCloseConfirmed = false
+
+    static func installed(on window: NSWindow) -> DocumentCloseGuard? {
+        objc_getAssociatedObject(window, &associationKey) as? DocumentCloseGuard
+    }
 
     func install(on window: NSWindow) {
         self.window = window
@@ -687,36 +783,51 @@ final class DocumentCloseGuard: NSObject, NSWindowDelegate {
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        if isEdited, !isCloseConfirmed {
-            confirmClose(of: sender)
+        let work = unsavedWork()
+        if !work.isEmpty, !isCloseConfirmed {
+            confirmClose(of: sender, work: work)
             return false
         }
         return originalDelegate?.windowShouldClose?(sender) ?? true
     }
 
-    private func confirmClose(of window: NSWindow) {
+    private func confirmClose(of window: NSWindow, work: UnsavedWork) {
+        askToSave(in: window, work: work, before: "closing") { [weak self, weak window] proceed in
+            if proceed {
+                self?.close(window)
+            }
+        }
+    }
+
+    /// Save Signed Copy… reports whether the save finished; Don’t Save proceeds; Cancel stops.
+    private func askToSave(
+        in window: NSWindow,
+        work: UnsavedWork,
+        before action: String,
+        then done: @escaping (Bool) -> Void
+    ) {
         let alert = NSAlert()
-        alert.messageText = "Save a signed copy of “\(documentName)” before closing?"
-        alert.informativeText = "Your signatures will be lost if you don’t save."
+        alert.messageText = "Save a signed copy of “\(documentName)” before \(action)?"
+        alert.informativeText = work.lossWarning
         alert.addButton(withTitle: "Save Signed Copy…")
         let dontSave = alert.addButton(withTitle: "Don’t Save")
         dontSave.keyEquivalent = "d"
         dontSave.keyEquivalentModifierMask = .command
         alert.addButton(withTitle: "Cancel")
 
-        alert.beginSheetModal(for: window) { [weak self, weak window] response in
+        alert.beginSheetModal(for: window) { [weak self] response in
             MainActor.assumeIsolated {
                 switch response {
                 case .alertFirstButtonReturn:
-                    self?.saveSignedCopy { saved in
-                        if saved {
-                            self?.close(window)
-                        }
+                    if let save = self?.saveSignedCopy {
+                        save(done)
+                    } else {
+                        done(false)
                     }
                 case .alertSecondButtonReturn:
-                    self?.close(window)
+                    done(true)
                 default:
-                    break
+                    done(false)
                 }
             }
         }
@@ -725,5 +836,17 @@ final class DocumentCloseGuard: NSObject, NSWindowDelegate {
     private func close(_ window: NSWindow?) {
         isCloseConfirmed = true
         window?.performClose(nil)
+    }
+}
+
+extension DocumentCloseGuard: QuitReviewable {
+    var hasUnsavedWork: Bool {
+        !unsavedWork().isEmpty
+    }
+
+    func reviewBeforeQuitting(then done: @escaping (Bool) -> Void) {
+        guard let window else { return done(true) }
+        window.makeKeyAndOrderFront(nil)
+        askToSave(in: window, work: unsavedWork(), before: "quitting", then: done)
     }
 }

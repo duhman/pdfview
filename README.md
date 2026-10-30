@@ -44,7 +44,10 @@ duti -s com.bigmac.pdfview com.adobe.pdf all
 
 - Create a signature by drawing, typing, or importing an image; edit your saved signature.
 - Place it in the PDF's own signature fields or anywhere on a page.
-- Select, move, resize, delete, undo, and redo signature placements.
+- Select, move, resize, delete, undo, and redo signature placements, with the mouse or the keyboard.
+- Fill the PDF's form fields; a filled form can be saved as a signed copy even without a stamp.
+- Get asked before closing or quitting with unsaved signatures or form entries.
+- VoiceOver reads each placed signature with its signer, page and field or position, and offers Remove and Move actions.
 - Save a flattened signed copy while keeping page sizes, links, and bookmarks; the original stays separate.
 - Follow page-by-page save progress and cancel before the destination changes.
 - Keep the signature profile locally in the app's sandbox, shared across document windows.
@@ -58,8 +61,14 @@ Signatures are **visual stamps, not certificate-based digital signatures**. They
 | Shortcut | Action |
 | --- | --- |
 | ⌥⌘S | Start/Stop Signing |
+| ⌥⌘N | Place in Next Field |
+| ⌥⌘P | Place on Current Page |
+| ⌥⌘] / ⌥⌘[ | Select Next / Previous Signature |
+| ← → ↑ ↓ | Move the selected signature 1 pt (⇧ 10 pt, ⌥ 50 pt) |
+| ⌥⇧→ / ⌥⇧↑, ⌥⇧← / ⌥⇧↓ | Enlarge / shrink the selected signature |
+| ⌫ | Remove the selected signature from the page |
 | ⇧⌘E | Save Signed Copy… |
-| Esc | Cancel an export, finish signing, or close Find |
+| Esc | Cancel an export, finish signing, or close Find (in the Find field, closes Find first) |
 | ⌃⌘S | Show/Hide Sidebar |
 | ⌥⌘G | Go to Page… |
 | ⌥↓ / ⌥↑ | Next / Previous Page |
@@ -67,6 +76,7 @@ Signatures are **visual stamps, not certificate-based digital signatures**. They
 | ⌘F | Find |
 | ⌘G / ⇧⌘G | Next / Previous Match |
 | ⌃⌘F | Enter/Exit Full Screen |
+| ⇧⌘P | Page Setup… |
 | ⌘P | Print |
 | ⌘Z / ⇧⌘Z | Undo / redo drawing edits while the signature canvas has focus |
 | ⌘0 | Actual Size |

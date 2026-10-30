@@ -4,6 +4,8 @@ import SwiftUI
 /// Uses DocumentGroup for native document-based app architecture
 @main
 struct PDFViewApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self)
+    private var appDelegate
     /// One signature for the whole app, so editing it in one window updates every window.
     @StateObject private var signatureStore = SignatureStore()
 

@@ -131,12 +131,14 @@ private func color(of overlay: PageOverlayView, atPagePoint point: CGPoint) thro
         reader: ReaderController(),
         fileURL: nil,
         onEscape: {},
+        onStopSigning: {},
         isExporting: false,
         onWindow: { _ in },
         onPlaceSignature: { _, _ in },
         onUpdatePlacementBounds: { _, _, _ in },
         onDeletePlacement: { _ in },
-        onDocumentStateChange: { _ in }
+        onDocumentStateChange: { _ in },
+        onFormValuesChange: { _ in }
     )
     let coordinator = representable.makeCoordinator()
     let pdfView = SigningPDFView(frame: CGRect(x: 0, y: 0, width: 600, height: 800))
@@ -177,4 +179,55 @@ private func makeTwoPagePDF() throws -> Data {
 private func makeSignaturePNG() throws -> Data {
     let rep = try NSBitmapImageRep(cgImage: solidImage(width: 120, height: 40))
     return try #require(rep.representation(using: .png, properties: [:]))
+}
+
+/// WCAG contrast ratio of a colour drawn over a white page.
+private func contrastOnWhite(_ color: NSColor) -> CGFloat {
+    func linear(_ channel: CGFloat) -> CGFloat {
+        channel <= 0.04 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
+    }
+    let alpha = color.alphaComponent
+    // The rendered pixel is premultiplied; composite it over white.
+    let red = color.redComponent + (1 - alpha)
+    let green = color.greenComponent + (1 - alpha)
+    let blue = color.blueComponent + (1 - alpha)
+    let luminance = 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+    return 1.05 / (luminance + 0.05)
+}
+
+@MainActor
+@Test func selectionOutlineAndHandlesAreLargeEnoughToSee() throws {
+    let id = UUID()
+    let stamp = try PageOverlayView.Stamp(
+        id: id,
+        bounds: CGRect(x: 100, y: 100, width: 60, height: 20),
+        image: solidImage(width: 60, height: 20)
+    )
+    let unselected = makeOverlay(PageOverlayView.Content(cropBox: Fixture.cropBox, stamps: [stamp]))
+    let selected = makeOverlay(PageOverlayView.Content(cropBox: Fixture.cropBox, stamps: [stamp], selectedID: id))
+
+    // 1.5 pt above the top edge: only a 2 pt-or-wider outline reaches it.
+    let outline = CGPoint(x: 130, y: 121.5)
+    #expect(try color(of: unselected, atPagePoint: outline).alphaComponent < 0.1)
+    #expect(try color(of: selected, atPagePoint: outline).alphaComponent > 0.9)
+
+    // 4.5 pt beyond the corner on both axes: inside a 10 pt handle, outside a 7 pt one.
+    let handle = CGPoint(x: 164.5, y: 124.5)
+    #expect(try color(of: unselected, atPagePoint: handle).alphaComponent < 0.1)
+    #expect(try color(of: selected, atPagePoint: handle).alphaComponent > 0.9)
+}
+
+@MainActor
+@Test func signatureFieldOutlineHasNonTextContrastOnAWhitePage() throws {
+    let field = CGRect(x: 100, y: 200, width: 220, height: 50)
+    for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+        let overlay = makeOverlay(PageOverlayView.Content(
+            cropBox: Fixture.cropBox,
+            signingMode: .fieldPlacement,
+            fields: [field]
+        ))
+        overlay.appearance = NSAppearance(named: appearance)
+        let border = try color(of: overlay, atPagePoint: CGPoint(x: 101, y: 225))
+        #expect(contrastOnWhite(border) >= 3, "\(appearance.rawValue)")
+    }
 }

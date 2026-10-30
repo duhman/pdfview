@@ -10,7 +10,13 @@ struct SigningCommandActions {
     var placeInNextField: () -> Void
     var placeOnCurrentPage: () -> Void
     var setAnywhere: (Bool) -> Void
+    var hasPlacements: Bool
+    var selectNextSignature: () -> Void
+    var selectPreviousSignature: () -> Void
     var saveSignedCopy: () -> Void
+    /// The last signed copy this window saved, for the File menu's Share and Show in Finder.
+    var lastSavedURL: URL?
+    var shareSignedCopy: (URL) -> Void
     var editSignature: () -> Void
     var deleteSignature: () -> Void
 }
@@ -49,6 +55,21 @@ struct SigningCommandMenu: Commands {
     @ObservedObject var signatureStore: SignatureStore
 
     var body: some Commands {
+        CommandGroup(after: .saveItem) {
+            let url = actions?.lastSavedURL
+            Button("Share Signed Copy…") {
+                if let url {
+                    actions?.shareSignedCopy(url)
+                }
+            }
+            .disabled(url == nil)
+            Button("Show Signed Copy in Finder") {
+                if let url {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                }
+            }
+            .disabled(url == nil)
+        }
         CommandMenu("Sign") {
             let canSign = actions?.canSign ?? false
             let hasFields = actions?.hasSignatureFields ?? false
@@ -60,15 +81,34 @@ struct SigningCommandMenu: Commands {
             .keyboardShortcut("s", modifiers: [.command, .option])
             .disabled(!canSign)
 
+            // Keys mirror SigningShortcut, which the signing banner shows.
             Button("Place in Next Field") {
                 actions?.placeInNextField()
             }
+            .keyboardShortcut("n", modifiers: [.command, .option])
             .disabled(!(canSign && hasFields))
 
             Button("Place on Current Page") {
                 actions?.placeOnCurrentPage()
             }
+            .keyboardShortcut("p", modifiers: [.command, .option])
             .disabled(!canSign)
+
+            Divider()
+
+            Button("Select Next Signature") {
+                actions?.selectNextSignature()
+            }
+            .keyboardShortcut("]", modifiers: [.command, .option])
+            .disabled(!(actions?.hasPlacements ?? false))
+
+            Button("Select Previous Signature") {
+                actions?.selectPreviousSignature()
+            }
+            .keyboardShortcut("[", modifiers: [.command, .option])
+            .disabled(!(actions?.hasPlacements ?? false))
+
+            Divider()
 
             Toggle("Anywhere", isOn: Binding(
                 get: { actions?.signingMode == .freePlacement },
@@ -88,12 +128,12 @@ struct SigningCommandMenu: Commands {
 
             Divider()
 
-            Button("Edit Signature…") {
+            Button(SigningFlowLogic.signatureMenuTitle(hasProfile: signatureStore.profile != nil)) {
                 actions?.editSignature()
             }
-            .disabled(actions == nil || signatureStore.profile == nil)
+            .disabled(actions == nil)
 
-            Button("Delete Signature…") {
+            Button("Delete Saved Signature…") {
                 actions?.deleteSignature()
             }
             .disabled(actions == nil || signatureStore.profile == nil)

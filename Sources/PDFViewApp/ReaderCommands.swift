@@ -4,6 +4,7 @@ struct ReaderCommandActions {
     var reader: ReaderController
     var isBusy: Bool
     var printDocument: () -> Void
+    var pageSetup: () -> Void
 }
 
 private struct ReaderCommandActionsKey: FocusedValueKey {
@@ -47,7 +48,11 @@ struct ReaderCommands: Commands {
         }
         CommandMenu("Go") { navigationItems }
         CommandGroup(after: .textEditing) { findItems }
+        // Replacing .printItem removes the standard Page Setup… too, so it is put back here.
         CommandGroup(replacing: .printItem) {
+            Button("Page Setup…") { actions?.pageSetup() }
+                .keyboardShortcut("p", modifiers: [.command, .shift])
+                .disabled(actions == nil)
             Button("Print…") { actions?.printDocument() }
                 .keyboardShortcut("p")
                 .disabled(reader?.canPrint != true || actions?.isBusy == true)
