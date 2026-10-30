@@ -197,9 +197,11 @@ final class PageOverlayView: NSView {
 
     private func target(at point: CGPoint) -> DragTarget? {
         let tolerance = Self.handleSize * onePoint
-        let selected = content.stamps.first { $0.id == content.selectedID }
-        if let selected, let corner = PlacementGeometry.corner(of: selected.bounds, near: point, tolerance: tolerance) {
-            return .resize(selected, corner)
+        if let selected = content.stamps.first(where: { $0.id == content.selectedID }) {
+            let frame = PlacementGeometry.selectionFrame(around: selected.bounds, onePoint: onePoint)
+            if let corner = PlacementGeometry.corner(of: frame, near: point, tolerance: tolerance) {
+                return .resize(selected, corner)
+            }
         }
         return content.stamps.last { $0.bounds.contains(point) }.map(DragTarget.move)
     }
@@ -249,7 +251,11 @@ final class PageOverlayView: NSView {
         }
 
         if let selected = content.stamps.first(where: { $0.id == content.selectedID }) {
-            drawSelection(around: currentBounds(of: selected), in: context, onePoint: point)
+            drawSelection(
+                around: PlacementGeometry.selectionFrame(around: currentBounds(of: selected), onePoint: point),
+                in: context,
+                onePoint: point
+            )
         }
 
         context.restoreGState()
@@ -471,7 +477,12 @@ extension PageOverlayView {
                 within: content.cropBox
             )
         case let .resize(stamp, corner):
-            PlacementGeometry.resized(stamp.bounds, dragging: corner, to: point, within: content.cropBox)
+            PlacementGeometry.resized(
+                stamp.bounds,
+                dragging: corner,
+                by: CGVector(dx: point.x - start.x, dy: point.y - start.y),
+                within: content.cropBox
+            )
         }
     }
 }

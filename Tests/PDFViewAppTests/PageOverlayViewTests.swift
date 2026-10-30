@@ -206,13 +206,13 @@ private func contrastOnWhite(_ color: NSColor) -> CGFloat {
     let unselected = makeOverlay(PageOverlayView.Content(cropBox: Fixture.cropBox, stamps: [stamp]))
     let selected = makeOverlay(PageOverlayView.Content(cropBox: Fixture.cropBox, stamps: [stamp], selectedID: id))
 
-    // 1.5 pt above the top edge: only a 2 pt-or-wider outline reaches it.
-    let outline = CGPoint(x: 130, y: 121.5)
+    // The outline sits 5.5 pt outside the stamp; 1.5 pt beyond it only a 2 pt-or-wider outline reaches.
+    let outline = CGPoint(x: 130, y: 127)
     #expect(try color(of: unselected, atPagePoint: outline).alphaComponent < 0.1)
     #expect(try color(of: selected, atPagePoint: outline).alphaComponent > 0.9)
 
-    // 4.5 pt beyond the corner on both axes: inside a 10 pt handle, outside a 7 pt one.
-    let handle = CGPoint(x: 164.5, y: 124.5)
+    // 4.5 pt beyond the outline's corner on both axes: inside a 10 pt handle, outside a 7 pt one.
+    let handle = CGPoint(x: 170, y: 130)
     #expect(try color(of: unselected, atPagePoint: handle).alphaComponent < 0.1)
     #expect(try color(of: selected, atPagePoint: handle).alphaComponent > 0.9)
 }

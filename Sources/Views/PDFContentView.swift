@@ -306,7 +306,13 @@ extension PDFContentView {
             if let message = notice.text {
                 Label(message, systemImage: "exclamationmark.circle")
             } else {
-                Text(SigningFlowLogic.statusText(mode: signingMode, kind: stampKind))
+                let instruction = SigningFlowLogic.statusText(mode: signingMode, kind: stampKind)
+                Text(instruction)
+                    .help(SigningFlowLogic.statusHelp(kind: stampKind) ?? instruction)
+                if let location = fieldLocationText {
+                    Text(location)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer()
             if hasSignatureFields {
@@ -446,6 +452,16 @@ extension PDFContentView {
         documentState?.signatureFields ?? []
     }
 
+    /// Where the next empty signature field is, while placing into fields and none is on this page.
+    private var fieldLocationText: String? {
+        guard signingMode == .fieldPlacement else { return nil }
+        return SigningFlowLogic.fieldLocationText(
+            fields: signatureFields,
+            placements: document.signaturePlacements,
+            currentPageIndex: reader.pageIndex
+        )
+    }
+
     private var isSavedBannerVisible: Bool {
         showsSavedBanner && lastSavedURL != nil && signingMode == .idle
     }
@@ -541,6 +557,7 @@ extension PDFContentView {
         ZoomCommandActions(
             actualSize: { zoom = .actualSize },
             zoomToFit: zoomToFit,
+            fitWidth: fitWidth,
             zoomIn: zoomIn,
             zoomOut: zoomOut
         )
@@ -591,6 +608,12 @@ extension PDFContentView {
     }
 
     private func zoomToFit() {
+        if let scale = viewer.zoomToFitCurrentPage() {
+            zoom = .manual(scale)
+        }
+    }
+
+    private func fitWidth() {
         zoom = .fit
     }
 
@@ -643,7 +666,7 @@ extension PDFContentView {
         guard canSign else { return }
         viewer.select(placementID: nil)
         signingMode = mode
-        announce(SigningFlowLogic.enteredAnnouncement(mode: mode, kind: stampKind))
+        announce(SigningFlowLogic.enteredAnnouncement(mode: mode, kind: stampKind, fieldLocation: fieldLocationText))
     }
 
     private func exitSigning() {
@@ -752,6 +775,10 @@ extension PDFContentView {
         if !targets.isEmpty {
             let placements = targets.map { artwork.placement(pageIndex: $0.pageIndex, bounds: $0.bounds) }
             configuredEditor().add(placements, actionName: StampWorkflow.everyPageActionName)
+            // They usually land in the bottom margin, below what is on screen.
+            if let target = StampWorkflow.targetToReveal(targets, currentPageIndex: viewer.currentPageIndex) {
+                viewer.reveal(target.bounds, onPageAt: target.pageIndex)
+            }
             signingMode = .idle
             stampKind = StampWorkflow.kindAfterPlacementOrExit(stampKind)
         }

@@ -2,7 +2,8 @@ import AppKit
 @preconcurrency import Quartz
 import SwiftUI
 
-/// How the document is scaled. Fit follows the window size; manual holds a fixed scale.
+/// How the document is scaled. Fit follows the window width (View > Fit Width); manual holds a fixed
+/// scale, including the one Zoom to Fit picks to show a whole page.
 /// Keeping these apart stops an auto-fit scale (e.g. 1.6129) from being mistaken for a user zoom.
 enum ZoomState: Equatable {
     case fit
@@ -23,6 +24,14 @@ enum ZoomState: Equatable {
 
     static func zoomedOut(from displayedScale: CGFloat) -> ZoomState {
         .manual(clampedScale(displayedScale / step))
+    }
+
+    /// The scale that shows a whole page and the gap PDFKit draws around it; nil for an empty page.
+    static func fitPageScale(viewSize: CGSize, pageSize: CGSize, margins: NSEdgeInsets) -> CGFloat? {
+        let width = pageSize.width + margins.left + margins.right
+        let height = pageSize.height + margins.top + margins.bottom
+        guard pageSize.width > 0, pageSize.height > 0, viewSize.width > 0, viewSize.height > 0 else { return nil }
+        return clampedScale(min(viewSize.width / width, viewSize.height / height))
     }
 
     /// PDFKit leaves `autoScales` on while it fits the page and turns it off when the user
@@ -58,6 +67,11 @@ final class PDFViewerProxy {
         guard let pdfView, let page = pdfView.currentPage, let document = pdfView.document else { return nil }
         let index = document.index(for: page)
         return index == NSNotFound ? nil : index
+    }
+
+    /// Zoom to Fit: the whole current page, top to bottom. Returns the scale it chose.
+    func zoomToFitCurrentPage() -> CGFloat? {
+        pdfView?.zoomToFitCurrentPage()
     }
 
     func reveal(_ rect: CGRect, onPageAt pageIndex: Int) {
@@ -667,6 +681,24 @@ extension PDFKitView.Coordinator: PageOverlayViewDelegate {
 }
 
 @MainActor
+extension PDFView {
+    /// Autoscaling fits only the width in continuous mode, which cuts off the bottom of a tall page;
+    /// this scales the current page to fit both ways and scrolls it to the top.
+    func zoomToFitCurrentPage() -> CGFloat? {
+        guard let page = currentPage else { return nil }
+        var pageSize = page.bounds(for: displayBox).size
+        if page.rotation % 180 != 0 {
+            pageSize = CGSize(width: pageSize.height, height: pageSize.width)
+        }
+        guard let scale = ZoomState.fitPageScale(viewSize: bounds.size, pageSize: pageSize, margins: pageBreakMargins)
+        else { return nil }
+        autoScales = false
+        scaleFactor = scale
+        go(to: page)
+        return scale
+    }
+}
+
 final class SigningPDFView: PDFView {
     var isSigning: () -> Bool = { false }
     var onIdleMouseDown: (() -> Void)?

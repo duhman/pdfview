@@ -9,6 +9,7 @@ struct PDFViewApp: App {
     /// One signature for the whole app, so editing it in one window updates every window.
     @StateObject private var signatureStore = SignatureStore()
     @State private var stampSizes = StampSizeMemory()
+    @State private var undoMenu = UndoMenuModel()
 
     var body: some Scene {
         DocumentGroup(viewing: PDFViewerDocument.self) { file in
@@ -21,6 +22,7 @@ struct PDFViewApp: App {
         .commands {
             AppInfoCommands()
             ReadOnlyDocumentCommands()
+            UndoCommands(model: undoMenu)
             HelpCommands()
             ZoomCommands()
             ReaderCommands()

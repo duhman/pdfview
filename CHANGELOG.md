@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Stops form entries from being written back into the original PDF, and refines keyboard, VoiceOver and save feedback.
 
 ### Changed
+- View > Zoom to Fit (⌘9) shows the whole current page; before, it fit only the page width in continuous mode and cut off the bottom. The old behaviour is View > Fit Width (⌥⌘9)
+- Place Initials on Every Page scrolls to the new initials on the current page (or the next page that got some), so you can see where they went; the "Placed initials on N pages." notice stays
+- The initials signing banner fits on one line at a 1000 pt window: the Place Initials on Every Page (⌥⌘I) hint moved to the banner's help tag, and VoiceOver still hears it when signing starts
+- A selected stamp's outline and corner handles sit half a handle outside the stamp, so on small stamps such as a date the handles no longer cover the text; dragging a handle resizes by the pointer's travel instead of snapping the corner to the pointer
+- The signature sheet's font picker reads "Style:", with the colon the "Full name:" and "Signature:" labels use
+- The sidebar shows only thumbnails, without the Thumbnails/Outline switch, when the PDF has no outline, instead of opening an empty list
 - Next / Previous Form Field skips read-only fields; a form with nothing editable says "This document has no form fields you can fill in."
 - Landing on a checkbox, radio button, pop-up, list or button with Next / Previous Form Field gives the document keyboard focus and ends any text edit, so Space and Return act on that field instead of typing into the text field just left
 - Sign > Anywhere is available only while signing; choosing it no longer starts signing
@@ -20,12 +26,14 @@ Stops form entries from being written back into the original PDF, and refines ke
 - Activate Form Field on a push button says it can't be pressed from the keyboard, instead of asking for a click
 
 ### Added
+- While placing into signature fields, the signing banner says where the next empty field is when none is on the current page ("Next field: page 3."), and VoiceOver hears it when signing starts
 - After a stamp is placed, the banner says how to select it and move it with the arrow keys, matching the VoiceOver announcement; after the first initials on a multi-page PDF whose other pages have none, both also point to Place Initials on Every Page (⌥⌘I)
 - VoiceOver announces a successful unlock with the page count ("Unlocked, 12 pages")
 - The disabled Save Signed Copy toolbar button's help tag and VoiceOver hint say what is missing ("Place a signature or fill a field first.", or that the PDF is locked or a save is running)
 - README: a short "Why PDFView instead of Preview" section before Install
 
 ### Fixed
+- Edit > Undo and Redo name stamp edits again ("Undo Add Signature", "Undo Move Initials"); they read plain "Undo" after stamp edits moved to the window's undo manager
 - Cancelling the Save Signed Copy panel now shows and announces "Save cancelled.", as the 0.2.1 notes describe; before, only a save cancelled after it started did
 - Freeze page content and annotation values together at save, then prepare annotations in the background to keep widget-heavy exports responsive.
 - Let Save write the current state after every saved stamp is deleted or saved form edits are reverted; compare unlocked forms with their baseline before the reader scan finishes.

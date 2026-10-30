@@ -42,14 +42,14 @@ duti -s com.bigmac.pdfview com.adobe.pdf all
 ### Read
 
 - Page indicator with PDF page labels and a validated Go to Page sheet.
-- A native sidebar with a Thumbnails/Outline selector and current-section selection in the outline.
+- A native sidebar with a Thumbnails/Outline selector (Outline is disabled when the PDF has none) and current-section selection in the outline.
 - Asynchronous text search with match highlights and previous/next navigation; VoiceOver hears the result and each move.
 - Unlock password-protected PDFs with secure entry; cancel keeps the locked reader open with an Unlock banner.
 - Move between form fields with Go > Next/Previous Form Field, which reads each field’s name, kind and state; text fields open for typing, and Go > Activate Form Field (or Space or Return) toggles checkboxes and radio buttons and opens pop-up and list choices.
 - Print the PDF with any placed stamps included; document print permissions are respected.
 - Remember your page, scroll position and zoom for the 200 most recently read file paths.
 - Single-page and two-page layouts, continuous scrolling, and full screen.
-- Actual Size, Zoom to Fit, and manual zoom.
+- Actual Size, Zoom to Fit (the whole current page), Fit Width, and manual zoom.
 
 ### Sign offline
 
@@ -105,9 +105,10 @@ Help > Keyboard Shortcuts shows this list in the app, generated from the menus.
 | ⌃⌘F | Enter/Exit Full Screen |
 | ⇧⌘P | Page Setup… |
 | ⌘P | Print |
-| ⌘Z / ⇧⌘Z | Undo / redo drawing edits while the signature canvas has focus |
+| ⌘Z / ⇧⌘Z | Undo / redo the last stamp edit, named in the Edit menu ("Undo Add Signature"), or drawing edits while the signature canvas has focus |
 | ⌘0 | Actual Size |
-| ⌘9 | Zoom to Fit |
+| ⌘9 | Zoom to Fit (whole page) |
+| ⌥⌘9 | Fit Width |
 | ⌘+ / ⌘− | Zoom in / out |
 
 ## Development

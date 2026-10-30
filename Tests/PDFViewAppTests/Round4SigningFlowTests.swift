@@ -74,10 +74,10 @@ import Testing
     ))
 }
 
-@Test func theBannerOffersInitialsOnEveryPageWhilePlacingInitials() {
+@Test func enteringInitialsOffersInitialsOnEveryPage() {
     for mode in [SigningMode.freePlacement, .fieldPlacement] {
-        #expect(SigningFlowLogic.statusText(mode: mode, kind: .initials)
-            .hasSuffix("Sign > Place Initials on Every Page (⌥⌘I) initials every page at once."))
+        #expect(SigningFlowLogic.enteredAnnouncement(mode: mode, kind: .initials)
+            .contains("Sign > Place Initials on Every Page (⌥⌘I) initials every page at once."))
     }
-    #expect(!SigningFlowLogic.statusText(mode: .freePlacement, kind: .date).contains("Every Page"))
+    #expect(!SigningFlowLogic.enteredAnnouncement(mode: .freePlacement, kind: .date).contains("Every Page"))
 }

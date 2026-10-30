@@ -27,6 +27,7 @@ extension MenuShortcuts {
         Entry(menu: "View", title: "Show/Hide Sidebar", shortcut: toggleSidebar),
         Entry(menu: "View", title: "Actual Size", shortcut: actualSize),
         Entry(menu: "View", title: "Zoom to Fit", shortcut: zoomToFit),
+        Entry(menu: "View", title: "Fit Width", shortcut: fitWidth),
         Entry(menu: "View", title: "Zoom In", shortcut: zoomIn),
         Entry(menu: "View", title: "Zoom Out", shortcut: zoomOut),
         Entry(menu: "Go", title: "Next Page", shortcut: nextPage),
