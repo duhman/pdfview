@@ -100,3 +100,58 @@ import Testing
 @Test func aDocumentWithOnlyReadOnlyFieldsSaysThereIsNothingToFillIn() {
     #expect(FormFieldNavigation.noFieldsAnnouncement == "This document has no form fields you can fill in.")
 }
+
+// MARK: Focus after Next Form Field
+
+/// A text field above an "Agree" checkbox.
+@MainActor
+private func makeTextThenCheckboxForm() throws -> PDFDocument {
+    let document = try ExportFixture.document()
+    let page = try #require(document.page(at: 0))
+    let name = PDFAnnotation(
+        bounds: CGRect(x: 40, y: 600, width: 160, height: 24),
+        forType: .widget,
+        withProperties: nil
+    )
+    name.widgetFieldType = .text
+    name.fieldName = "Name"
+    page.addAnnotation(name)
+    let agree = PDFAnnotation(
+        bounds: CGRect(x: 40, y: 500, width: 20, height: 20),
+        forType: .widget,
+        withProperties: nil
+    )
+    agree.widgetFieldType = .button
+    agree.widgetControlType = .checkBoxControl
+    agree.fieldName = "Agree"
+    page.addAnnotation(agree)
+    return document
+}
+
+@MainActor
+@Test func movingToACheckboxTakesTheKeyboardBackFromATextFieldBeingEdited() async throws {
+    let document = try makeTextThenCheckboxForm()
+    let recorder = StateRecorder()
+    let coordinator = makeRepresentable(document: document, recorder: recorder).makeCoordinator()
+    let pdfView = SigningPDFView(frame: CGRect(x: 0, y: 0, width: 400, height: 600))
+    let window = NSWindow(contentRect: pdfView.frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = pdfView
+    coordinator.attach(to: pdfView)
+    pdfView.document = document
+    coordinator.documentDidChange(document)
+    for _ in 0 ..< 200 where recorder.states.last?.formValues == nil {
+        await Task.yield()
+    }
+    try #require(recorder.states.last?.formValues != nil)
+
+    // Stands in for PDFKit's editor of the text field the user was typing in.
+    let editor = NSTextView(frame: CGRect(x: 0, y: 0, width: 100, height: 20))
+    pdfView.addSubview(editor)
+    window.makeFirstResponder(editor)
+    #expect(window.firstResponder === editor)
+
+    #expect(coordinator.moveToFormField(forward: true) == "Name, text field, page 1")
+    #expect(coordinator.moveToFormField(forward: true) == "Agree, checkbox, unchecked, page 1")
+    // Space and Return now reach the PDF view, which activates the checkbox, not the old text field.
+    #expect(window.firstResponder === pdfView)
+}

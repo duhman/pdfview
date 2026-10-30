@@ -435,6 +435,10 @@ extension PDFKitView {
                 DispatchQueue.main.async { [weak pdfView] in
                     pdfView?.clickWidget(widget, on: page)
                 }
+            } else if pdfView.window?.firstResponder !== pdfView {
+                // Ends any text edit (committing it) so Space and Return reach `handleFormFieldKey`
+                // instead of typing into the text field the user just left.
+                pdfView.window?.makeFirstResponder(pdfView)
             }
             return FormFieldNavigation.announcement(for: field, state: FormFieldNavigation.spokenState(of: widget))
         }
