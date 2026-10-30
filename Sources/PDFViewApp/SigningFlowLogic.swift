@@ -57,6 +57,7 @@ enum PendingSigningAction: Equatable {
     case enter(SigningMode)
     case placeInNextField
     case placeOnCurrentPage
+    case placeInitialsOnEveryPage
 }
 
 /// Key equivalents for the Sign menu, shown in the banner so the keyboard path is discoverable.

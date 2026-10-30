@@ -320,6 +320,7 @@ extension PDFContentView {
                     case let .enter(mode)?: enterSigning(mode)
                     case .placeInNextField?: placeInNextField()
                     case .placeOnCurrentPage?: placeOnCurrentPage()
+                    case .placeInitialsOnEveryPage?: placeInitialsOnEveryPage()
                     case nil: break
                     }
                 } catch {
@@ -406,6 +407,7 @@ extension PDFContentView {
             toggleSigning: toggleSigning,
             placeInNextField: placeInNextField,
             placeOnCurrentPage: placeOnCurrentPage,
+            placeInitialsOnEveryPage: placeInitialsOnEveryPage,
             setAnywhere: setAnywhere,
             hasPlacements: !document.signaturePlacements.isEmpty,
             selectNextSignature: { selectAdjacentSignature(forward: true) },
@@ -593,6 +595,47 @@ extension PDFContentView {
         )
         viewer.reveal(bounds, onPageAt: pageIndex)
         placeSignature(pageIndex: pageIndex, bounds: bounds)
+    }
+
+    /// One undoable step that initials every page that has none, at the position of the selected or
+    /// last initials, or in the bottom-right margin.
+    private func placeInitialsOnEveryPage() {
+        guard canSign, let pdf = document.pdfDocument else { return }
+        let artwork = StampArtwork.make(
+            kind: .initials,
+            signature: nil,
+            initials: signatureStore.profile(for: .initials)
+        )
+        guard let artwork, let imageSize = artwork.imageSize else {
+            setupKind = .initials
+            isEditingSignature = false
+            pendingAfterSetup = .placeInitialsOnEveryPage
+            showSignatureSetupSheet = true
+            return
+        }
+        let pages = (0 ..< pdf.pageCount).map { index in
+            pdf.page(at: index)
+                .map { StampWorkflow.PageFrame(cropBox: $0.bounds(for: .cropBox), rotation: $0.rotation) }
+                ?? StampWorkflow.PageFrame(cropBox: .zero)
+        }
+        let targets = StampWorkflow.initialsOnEveryPage(
+            reference: StampWorkflow.referenceInitials(
+                selectedID: viewer.selectedPlacementID,
+                placements: document.signaturePlacements
+            ),
+            pages: pages,
+            placements: document.signaturePlacements,
+            defaultSize: PlacementGeometry.defaultSize(imageSize: imageSize, width: stampSizes.width(for: .initials))
+        )
+        if targets.isEmpty {
+            NSSound.beep()
+        } else {
+            let placements = targets.map { artwork.placement(pageIndex: $0.pageIndex, bounds: $0.bounds) }
+            configuredEditor().add(placements, actionName: StampWorkflow.everyPageActionName)
+            signingMode = .idle
+            stampKind = StampWorkflow.kindAfterPlacementOrExit(stampKind)
+        }
+        announce(StampWorkflow.everyPageAnnouncement(count: targets.count))
     }
 
     private func placeSignature(pageIndex: Int, bounds: CGRect) {
@@ -797,6 +840,16 @@ final class SignaturePlacementEditor {
 
     func add(_ placement: PDFViewerDocument.SignaturePlacement) {
         insert(placement, at: nil, actionName: placement.kind.actionName(.add))
+    }
+
+    /// Several stamps as one undoable step, e.g. Place Initials on Every Page.
+    func add(_ placements: [PDFViewerDocument.SignaturePlacement], actionName: String) {
+        undoManager?.beginUndoGrouping()
+        for placement in placements {
+            insert(placement, at: nil, actionName: actionName)
+        }
+        undoManager?.endUndoGrouping()
+        undoManager?.setActionName(actionName)
     }
 
     func delete(id: UUID) {

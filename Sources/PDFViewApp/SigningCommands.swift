@@ -11,6 +11,7 @@ struct SigningCommandActions {
     var toggleSigning: () -> Void
     var placeInNextField: () -> Void
     var placeOnCurrentPage: () -> Void
+    var placeInitialsOnEveryPage: () -> Void
     var setAnywhere: (Bool) -> Void
     var hasPlacements: Bool
     var selectNextSignature: () -> Void
@@ -193,6 +194,11 @@ struct SigningCommandMenu: Commands {
                 actions?.placeOnCurrentPage()
             }
             .keyboardShortcut(MenuShortcuts.placeOnCurrentPage)
+            .disabled(!canSign)
+
+            Button(StampWorkflow.everyPageActionName) {
+                actions?.placeInitialsOnEveryPage()
+            }
             .disabled(!canSign)
 
             Divider()

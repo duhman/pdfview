@@ -226,3 +226,98 @@ private func stamp(in field: SignatureField) -> PDFViewerDocument.SignaturePlace
     #expect(StampWorkflow.nextEmptyFieldIndex(after: nil, fields: fields, placements: [elsewhere]) == 0)
     #expect(StampWorkflow.allFieldsFilledAnnouncement == "Every signature field already has a stamp.")
 }
+
+// MARK: Initials on every page
+
+private func initials(page: Int, bounds: CGRect) -> PDFViewerDocument.SignaturePlacement {
+    PDFViewerDocument.SignaturePlacement(
+        pageIndex: page, bounds: bounds, signaturePNGData: Data([1]), signerName: "Tester", kind: .initials
+    )
+}
+
+@Test func initialsGoToTheBottomRightMarginWithoutAReference() {
+    let pages = [StampWorkflow.PageFrame(cropBox: Page.letter), StampWorkflow.PageFrame(cropBox: Page.letter)]
+    let targets = StampWorkflow.initialsOnEveryPage(
+        reference: nil, pages: pages, placements: [], defaultSize: CGSize(width: 60, height: 20)
+    )
+    #expect(targets.map(\.pageIndex) == [0, 1])
+    let rect = targets[0].bounds
+    #expect(rect.size == CGSize(width: 60, height: 20))
+    #expect(rect.maxX == Page.letter.maxX - StampWorkflow.pageMargin)
+    #expect(rect.minY == Page.letter.minY + StampWorkflow.pageMargin)
+}
+
+@Test func bottomRightFollowsThePageRotationOnScreen() {
+    let rotated = StampWorkflow.PageFrame(cropBox: Page.letter, rotation: 90)
+    let targets = StampWorkflow.initialsOnEveryPage(
+        reference: nil, pages: [rotated], placements: [], defaultSize: CGSize(width: 60, height: 20)
+    )
+    let rect = targets[0].bounds
+    // A page turned 90° clockwise shows its top-right page-space corner at the bottom right.
+    #expect(rect.maxX == Page.letter.maxX - StampWorkflow.pageMargin)
+    #expect(rect.maxY == Page.letter.maxY - StampWorkflow.pageMargin)
+}
+
+@Test func initialsCopyTheReferencePositionRelativeToEachPage() {
+    let small = CGRect(x: 0, y: 0, width: 306, height: 396)
+    let pages = [
+        StampWorkflow.PageFrame(cropBox: Page.letter),
+        StampWorkflow.PageFrame(cropBox: Page.letter),
+        StampWorkflow.PageFrame(cropBox: small),
+    ]
+    let reference = initials(page: 0, bounds: CGRect(x: 520, y: 40, width: 60, height: 20))
+    let signature = PDFViewerDocument.SignaturePlacement(
+        pageIndex: 1, bounds: CGRect(x: 10, y: 10, width: 180, height: 60), signaturePNGData: Data([1]), signerName: "T"
+    )
+    let targets = StampWorkflow.initialsOnEveryPage(
+        reference: reference, pages: pages, placements: [reference, signature], defaultSize: CGSize(width: 1, height: 1)
+    )
+    // The reference page already has initials; a signature does not count.
+    #expect(targets.map(\.pageIndex) == [1, 2])
+    #expect(targets[0].bounds == reference.bounds)
+    let scaled = targets[1].bounds
+    #expect(scaled.size == reference.bounds.size)
+    #expect(abs(scaled.midX - reference.bounds.midX / 2) < 0.001)
+    #expect(abs(scaled.midY - reference.bounds.midY / 2) < 0.001)
+    #expect(small.contains(scaled))
+}
+
+@Test func everyPageReferenceIsTheSelectedOrLastInitials() {
+    let first = initials(page: 0, bounds: CGRect(x: 1, y: 1, width: 60, height: 20))
+    let last = initials(page: 2, bounds: CGRect(x: 2, y: 2, width: 60, height: 20))
+    let signature = PDFViewerDocument.SignaturePlacement(
+        pageIndex: 1, bounds: .zero, signaturePNGData: Data([1]), signerName: "T"
+    )
+    let placements = [first, last, signature]
+    #expect(StampWorkflow.referenceInitials(selectedID: first.id, placements: placements) == first)
+    #expect(StampWorkflow.referenceInitials(selectedID: signature.id, placements: placements) == last)
+    #expect(StampWorkflow.referenceInitials(selectedID: nil, placements: [signature]) == nil)
+}
+
+@Test func everyPageAnnouncementCountsThePages() {
+    #expect(StampWorkflow.everyPageAnnouncement(count: 1) == "Placed initials on 1 page.")
+    #expect(StampWorkflow.everyPageAnnouncement(count: 12) == "Placed initials on 12 pages.")
+    #expect(StampWorkflow.everyPageAnnouncement(count: 0) == "Every page already has initials.")
+}
+
+@MainActor
+@Test func initialsOnEveryPageUndoAsOneStep() {
+    var document = PDFViewerDocument()
+    let undoManager = UndoManager()
+    undoManager.groupsByEvent = false
+    let editor = SignaturePlacementEditor()
+    editor.document = Binding(get: { document }, set: { document = $0 })
+    editor.undoManager = undoManager
+    let batch = (0 ..< 3).map { initials(page: $0, bounds: CGRect(x: 10, y: 10, width: 60, height: 20)) }
+
+    undoManager.beginUndoGrouping()
+    editor.add(batch, actionName: StampWorkflow.everyPageActionName)
+    undoManager.endUndoGrouping()
+    #expect(document.signaturePlacements == batch)
+    #expect(undoManager.undoActionName == "Place Initials on Every Page")
+
+    undoManager.undo()
+    #expect(document.signaturePlacements.isEmpty)
+    undoManager.redo()
+    #expect(document.signaturePlacements.count == 3)
+}
