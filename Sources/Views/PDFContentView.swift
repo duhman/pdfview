@@ -43,6 +43,8 @@ struct PDFContentView: View {
     @State private var showsSavedBanner = false
     /// Why the last action did nothing, or what it did when nothing else on screen shows it.
     @State private var notice = TransientNotice()
+    /// The progress banner waits a moment, so quick saves and prints do not flash it.
+    @State private var progressVisibility = DelayedVisibility()
 
     @State private var showSignatureSetupSheet = false
     @State private var isEditingSignature = false
@@ -67,6 +69,13 @@ struct PDFContentView: View {
                 reader.persist()
                 export.cancel()
                 printTask?.cancel()
+            }
+            .onChange(of: export.progress != nil) { _, isExporting in
+                if isExporting {
+                    progressVisibility.begin()
+                } else {
+                    progressVisibility.end()
+                }
             }
             .onChange(of: unsavedWork) { _, work in
                 closeGuard.isEdited = !work.isEmpty
@@ -128,7 +137,7 @@ struct PDFContentView: View {
 
     private var content: some View {
         VStack(spacing: 0) {
-            if let progress = export.progress {
+            if let progress = export.progress, progressVisibility.isVisible {
                 ExportProgressBanner(
                     progress: progress,
                     purpose: printTask == nil ? .signedCopy : .print,

@@ -70,3 +70,33 @@ import Testing
     #expect(ExportPurpose.print.feedback(for: DiskFull())
         == .alert(ErrorAlert(title: "Couldn’t Print PDF", error: DiskFull())))
 }
+
+// MARK: Progress banner delay
+
+@MainActor
+@Test func theProgressBannerWaitsBeforeAppearing() async throws {
+    let visibility = DelayedVisibility(delay: .milliseconds(40))
+    visibility.begin()
+    #expect(!visibility.isVisible)
+    for _ in 0 ..< 50 where !visibility.isVisible {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(visibility.isVisible)
+    visibility.end()
+    #expect(!visibility.isVisible)
+}
+
+@MainActor
+@Test func aSaveThatFinishesQuicklyNeverShowsTheProgressBanner() async throws {
+    let visibility = DelayedVisibility(delay: .milliseconds(40))
+    visibility.begin()
+    try await Task.sleep(for: .milliseconds(10))
+    visibility.end()
+    try await Task.sleep(for: .milliseconds(80))
+    #expect(!visibility.isVisible)
+}
+
+@MainActor
+@Test func progressAppearsAfterAboutThreeHundredMilliseconds() {
+    #expect(DelayedVisibility.progressDelay == .milliseconds(300))
+}

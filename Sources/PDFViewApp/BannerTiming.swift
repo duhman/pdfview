@@ -31,3 +31,36 @@ final class TransientNotice {
         text = nil
     }
 }
+
+/// Becomes visible only after `delay`, so a save or print that finishes quickly never flashes its
+/// progress banner (or announces it).
+@MainActor
+@Observable
+final class DelayedVisibility {
+    static let progressDelay: Duration = .milliseconds(300)
+
+    private(set) var isVisible = false
+    private let delay: Duration
+    private var task: Task<Void, Never>?
+
+    init(delay: Duration = progressDelay) {
+        self.delay = delay
+    }
+
+    /// Starts waiting; does nothing while already waiting or visible.
+    func begin() {
+        guard task == nil, !isVisible else { return }
+        task = Task { [weak self, delay] in
+            try? await Task.sleep(for: delay)
+            guard let self, !Task.isCancelled else { return }
+            isVisible = true
+            task = nil
+        }
+    }
+
+    func end() {
+        task?.cancel()
+        task = nil
+        isVisible = false
+    }
+}
