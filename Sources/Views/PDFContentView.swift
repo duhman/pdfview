@@ -214,7 +214,7 @@ extension PDFContentView {
                 }
                 if signingMode != .idle {
                     Divider()
-                    Button("Stop Signing", action: exitSigning)
+                    Button(StampWorkflow.signingToggleTitle(mode: signingMode, kind: stampKind), action: exitSigning)
                 }
             } label: {
                 Label("Sign", systemImage: "signature")
@@ -306,6 +306,9 @@ extension PDFContentView {
             onCancel: {
                 showSignatureSetupSheet = false
                 pendingAfterSetup = nil
+                if signingMode == .idle {
+                    stampKind = StampWorkflow.kindAfterPlacementOrExit(stampKind)
+                }
             },
             onSave: { profile in
                 do {
@@ -396,6 +399,7 @@ extension PDFContentView {
     private var signingActions: SigningCommandActions {
         SigningCommandActions(
             signingMode: signingMode,
+            stampKind: stampKind,
             canSign: canSign,
             hasSignatureFields: hasSignatureFields,
             canSaveSignedCopy: canSaveSignedCopy,
@@ -453,6 +457,7 @@ extension PDFContentView {
         )
         documentState = nil
         signingMode = .idle
+        stampKind = .signature
         pendingAfterSetup = nil
         showSignatureSetupSheet = false
         lastFieldIndex = nil
@@ -525,6 +530,7 @@ extension PDFContentView {
     private func exitSigning() {
         guard signingMode != .idle else { return }
         signingMode = SigningFlowLogic.exited(signingMode)
+        stampKind = StampWorkflow.kindAfterPlacementOrExit(stampKind)
         announce(SigningFlowLogic.exitedAnnouncement)
         // The Done button that may have had focus is gone; give focus back to the document.
         viewer.focusDocument()
@@ -591,7 +597,8 @@ extension PDFContentView {
         signingMode = SigningFlowLogic.afterPlacement(signingMode)
         viewer.select(placementID: placement.id)
         let location = viewer.location(of: bounds, onPageAt: pageIndex) ?? ""
-        announce(StampAccessibility.placedAnnouncement(pageIndex: pageIndex, location: location, kind: stampKind))
+        announce(StampAccessibility.placedAnnouncement(pageIndex: pageIndex, location: location, kind: artwork.kind))
+        stampKind = StampWorkflow.kindAfterPlacementOrExit(artwork.kind)
     }
 
     /// Select Next/Previous Signature: reveals the stamp, gives it keyboard focus and reads its label.
@@ -644,6 +651,7 @@ extension PDFContentView {
         do {
             try signatureStore.deleteProfile()
             signingMode = .idle
+            stampKind = .signature
         } catch {
             errorAlert = ErrorAlert(title: "Couldn’t Delete Signature", error: error)
         }

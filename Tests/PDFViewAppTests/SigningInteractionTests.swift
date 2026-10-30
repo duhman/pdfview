@@ -11,11 +11,11 @@ import Testing
 @Test func bannerTextOffersTheKeyboardPath() {
     #expect(
         SigningFlowLogic.statusText(mode: .freePlacement)
-            == "Click where you want to sign, or use Sign > Place on Current Page (⌥⌘P)."
+            == "Click where you want to sign, or use Sign > Place Signature on Current Page (⌥⌘P)."
     )
     #expect(
         SigningFlowLogic.statusText(mode: .fieldPlacement)
-            == "Click a signature field, choose Anywhere, or use Sign > Place in Next Field (⌥⌘N)."
+            == "Click a signature field, choose Anywhere, or use Sign > Place Signature in Next Field (⌥⌘N)."
     )
     #expect(SigningFlowLogic.enteredAnnouncement(mode: .freePlacement).hasSuffix("Press Escape to stop."))
     #expect(SigningFlowLogic.exitedAnnouncement == "Stopped signing.")

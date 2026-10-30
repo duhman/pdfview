@@ -98,10 +98,10 @@ enum SigningFlowLogic {
     static func statusText(mode: SigningMode, kind: StampKind = .signature) -> String {
         let instruction = kind == .signature ? "sign" : "place your \(kind.title.lowercased())"
         return mode == .fieldPlacement
-            ? "Click a signature field, choose Anywhere, or use Sign > Place in Next Field "
-            + "(\(SigningShortcut.placeInNextField))."
-            : "Click where you want to \(instruction), or use Sign > Place on Current Page "
-            + "(\(SigningShortcut.placeOnCurrentPage))."
+            ? "Click a signature field, choose Anywhere, or use Sign > "
+            + "\(StampWorkflow.placeInNextFieldTitle(kind: kind)) (\(SigningShortcut.placeInNextField))."
+            : "Click where you want to \(instruction), or use Sign > "
+            + "\(StampWorkflow.placeOnCurrentPageTitle(kind: kind)) (\(SigningShortcut.placeOnCurrentPage))."
     }
 
     static func enteredAnnouncement(mode: SigningMode, kind: StampKind = .signature) -> String {

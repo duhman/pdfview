@@ -29,7 +29,7 @@ struct ReaderCommands: Commands {
             Button(reader?.sidebarVisible == true ? "Hide Sidebar" : "Show Sidebar") {
                 reader?.sidebarVisible.toggle()
             }
-            .keyboardShortcut("s", modifiers: [.control, .command])
+            .keyboardShortcut(MenuShortcuts.toggleSidebar)
             .disabled(reader == nil)
         }
         CommandGroup(after: .toolbar) {
@@ -51,10 +51,10 @@ struct ReaderCommands: Commands {
         // Replacing .printItem removes the standard Page Setup… too, so it is put back here.
         CommandGroup(replacing: .printItem) {
             Button("Page Setup…") { actions?.pageSetup() }
-                .keyboardShortcut("p", modifiers: [.command, .shift])
+                .keyboardShortcut(MenuShortcuts.pageSetup)
                 .disabled(actions == nil)
             Button("Print…") { actions?.printDocument() }
-                .keyboardShortcut("p")
+                .keyboardShortcut(MenuShortcuts.print)
                 .disabled(reader?.canPrint != true || actions?.isBusy == true)
             if let reason = reader?.printDisabledReason {
                 Text(reason)
@@ -64,32 +64,32 @@ struct ReaderCommands: Commands {
 
     @ViewBuilder private var navigationItems: some View {
         Button("Next Page") { reader?.view?.goToNextPage(nil) }
-            .keyboardShortcut(.downArrow, modifiers: [.option])
+            .keyboardShortcut(MenuShortcuts.nextPage)
             .disabled(reader?.canGoNext != true)
         Button("Previous Page") { reader?.view?.goToPreviousPage(nil) }
-            .keyboardShortcut(.upArrow, modifiers: [.option])
+            .keyboardShortcut(MenuShortcuts.previousPage)
             .disabled(reader?.canGoPrevious != true)
         Button("First Page") { reader?.view?.goToFirstPage(nil) }
-            .keyboardShortcut(.upArrow, modifiers: [.command, .option])
+            .keyboardShortcut(MenuShortcuts.firstPage)
             .disabled(reader?.canRead != true)
         Button("Last Page") { reader?.view?.goToLastPage(nil) }
-            .keyboardShortcut(.downArrow, modifiers: [.command, .option])
+            .keyboardShortcut(MenuShortcuts.lastPage)
             .disabled(reader?.canRead != true)
         Divider()
         Button("Go to Page…") { reader?.showGoToPage = true }
-            .keyboardShortcut("g", modifiers: [.command, .option])
+            .keyboardShortcut(MenuShortcuts.goToPage)
             .disabled(reader?.canRead != true)
     }
 
     @ViewBuilder private var findItems: some View {
         Button("Find…") { reader?.find.show() }
-            .keyboardShortcut("f")
+            .keyboardShortcut(MenuShortcuts.find)
             .disabled(reader?.canRead != true)
         Button("Find Next") { reader?.find.advance() }
-            .keyboardShortcut("g")
+            .keyboardShortcut(MenuShortcuts.findNext)
             .disabled(reader?.find.state.isEmpty == true || reader == nil)
         Button("Find Previous") { reader?.find.advance(backwards: true) }
-            .keyboardShortcut("g", modifiers: [.command, .shift])
+            .keyboardShortcut(MenuShortcuts.findPrevious)
             .disabled(reader?.find.state.isEmpty == true || reader == nil)
     }
 }

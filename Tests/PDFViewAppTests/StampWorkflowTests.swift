@@ -156,3 +156,37 @@ func makeStampPNG(width: Int, height: Int) throws -> Data {
     #expect(StampAccessibility.moveInstructions(for: .initials).hasPrefix("Use the arrow keys to move the initials"))
     #expect(StampAccessibility.moveInstructions(for: .signature).contains("the signature"))
 }
+
+// MARK: Active kind and shortcuts
+
+@Test func placingOrStoppingReturnsToTheSignatureKind() {
+    for kind in StampKind.allCases {
+        #expect(StampWorkflow.kindAfterPlacementOrExit(kind) == .signature)
+    }
+}
+
+@Test func signMenuTitlesNameTheActiveKind() {
+    #expect(StampWorkflow.signingToggleTitle(mode: .idle, kind: .signature) == "Start Signing")
+    #expect(StampWorkflow.signingToggleTitle(mode: .freePlacement, kind: .signature) == "Stop Signing")
+    #expect(StampWorkflow.signingToggleTitle(mode: .freePlacement, kind: .initials) == "Stop Placing Initials")
+    #expect(StampWorkflow.placeInNextFieldTitle(kind: .signature) == "Place Signature in Next Field")
+    #expect(StampWorkflow.placeOnCurrentPageTitle(kind: .date) == "Place Date on Current Page")
+}
+
+@Test func signingBannerNamesTheMenuItemsForTheActiveKind() {
+    let text = SigningFlowLogic.statusText(mode: .freePlacement, kind: .initials)
+    #expect(text.contains(StampWorkflow.placeOnCurrentPageTitle(kind: .initials)))
+    let fieldText = SigningFlowLogic.statusText(mode: .fieldPlacement, kind: .signature)
+    #expect(fieldText.contains(StampWorkflow.placeInNextFieldTitle(kind: .signature)))
+}
+
+@Test func menuShortcutsAreUniqueAndAvoidStandardMenuChords() {
+    let all = MenuShortcuts.all
+    #expect(Set(all.map(MenuShortcuts.Chord.init)).count == all.count)
+    let standard = Set(MenuShortcuts.standardChords)
+    for shortcut in MenuShortcuts.appSpecific {
+        #expect(!standard.contains(MenuShortcuts.Chord(shortcut)), "\(shortcut) collides with a standard chord")
+    }
+    #expect(MenuShortcuts.appSpecific
+        .contains { MenuShortcuts.Chord($0) == MenuShortcuts.Chord(MenuShortcuts.placeSignature) })
+}

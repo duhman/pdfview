@@ -44,3 +44,24 @@ final class StampSizeMemory {
         widths[kind] = max(width, PlacementGeometry.minimumWidth)
     }
 }
+
+/// Stamp-kind rules and titles for the Sign menu, the toolbar and the signing banner.
+enum StampWorkflow {
+    /// One stamp per use: initials or a date never become the default for the next placement.
+    static func kindAfterPlacementOrExit(_: StampKind) -> StampKind {
+        .signature
+    }
+
+    static func signingToggleTitle(mode: SigningMode, kind: StampKind) -> String {
+        guard mode != .idle else { return "Start Signing" }
+        return kind == .signature ? "Stop Signing" : "Stop Placing \(kind.title)"
+    }
+
+    static func placeInNextFieldTitle(kind: StampKind) -> String {
+        "Place \(kind.title) in Next Field"
+    }
+
+    static func placeOnCurrentPageTitle(kind: StampKind) -> String {
+        "Place \(kind.title) on Current Page"
+    }
+}
