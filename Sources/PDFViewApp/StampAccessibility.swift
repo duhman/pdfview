@@ -72,16 +72,19 @@ enum StampAccessibility {
         return "\(subject), page \(pageIndex + 1), \(place)"
     }
 
+    /// The new stamp is selected, so the announcement says how to adjust it and how to finish.
     static func placedAnnouncement(pageIndex: Int, location: String, kind: StampKind = .signature) -> String {
-        "\(kind.title) placed on page \(pageIndex + 1), \(location)"
+        "\(kind.title) placed on page \(pageIndex + 1), \(location). Arrow keys move it, Escape when done."
     }
 
     static func movedAnnouncement(pageIndex: Int, location: String) -> String {
         "Moved, page \(pageIndex + 1), \(location)"
     }
 
-    static let moveInstructions = "Use the arrow keys to move the signature: Shift moves 10 points, "
-        + "Option moves 50. Option-Shift arrows resize it. Delete removes it."
+    static func moveInstructions(for kind: StampKind) -> String {
+        "Use the arrow keys to move the \(kind.title.lowercased()): Shift moves 10 points. "
+            + "Option-Shift arrows resize it. Delete removes it. Escape when done."
+    }
 
     @MainActor
     static func announce(_ message: String, in window: NSWindow?, priority: NSAccessibilityPriorityLevel = .high) {
@@ -101,14 +104,14 @@ final class StampAccessibilityElement: NSAccessibilityElement {
     // swiftlint:disable:next modifier_order
     private nonisolated(unsafe) weak var overlay: PageOverlayView?
 
-    init(stampID: UUID, overlay: PageOverlayView) {
+    init(stampID: UUID, kind: StampKind = .signature, overlay: PageOverlayView) {
         self.stampID = stampID
         self.overlay = overlay
         super.init()
         setAccessibilityRole(.button)
         setAccessibilityParent(overlay)
         setAccessibilityCustomActions([
-            NSAccessibilityCustomAction(name: "Remove Signature from Page") { [weak self] in
+            NSAccessibilityCustomAction(name: kind.actionName(.remove)) { [weak self] in
                 self?.perform { $0.removeStampFromAccessibility($1) } ?? false
             },
             NSAccessibilityCustomAction(name: "Move") { [weak self] in

@@ -8,11 +8,13 @@ struct PDFViewApp: App {
     private var appDelegate
     /// One signature for the whole app, so editing it in one window updates every window.
     @StateObject private var signatureStore = SignatureStore()
+    @State private var stampSizes = StampSizeMemory()
 
     var body: some Scene {
         DocumentGroup(viewing: PDFViewerDocument.self) { file in
             PDFContentView(document: file.$document, fileURL: file.fileURL)
                 .environmentObject(signatureStore)
+                .environment(stampSizes)
         }
         .defaultSize(width: 1000, height: 800)
         .windowStyle(.titleBar)

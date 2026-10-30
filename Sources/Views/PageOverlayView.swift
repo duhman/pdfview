@@ -40,6 +40,40 @@ enum StopSigningMenu {
     }
 }
 
+/// Line widths and colours for the overlay's outlines, heavier when Increase Contrast is on.
+struct OverlayStyle: Equatable {
+    var fieldLineWidth: CGFloat
+    var fieldFillAlpha: CGFloat
+    /// Selection outline width in screen points, drawn over a white halo so it shows on dark ink too.
+    var selectionLineWidth: CGFloat
+    var handleLineWidth: CGFloat
+    /// How far the accent colour is darkened towards black for outlines on the white page.
+    var strokeDarkening: CGFloat
+
+    init(increaseContrast: Bool) {
+        if increaseContrast {
+            fieldLineWidth = 3
+            fieldFillAlpha = 0.2
+            selectionLineWidth = 3.5
+            handleLineWidth = 2.5
+            strokeDarkening = 0.6
+        } else {
+            fieldLineWidth = 2
+            fieldFillAlpha = 0.12
+            selectionLineWidth = 2.5
+            handleLineWidth = 1.5
+            // 0.35 left a yellow accent at 2.8:1; 0.45 measures 3.7:1 and 0.6 (above) 5.7:1.
+            strokeDarkening = 0.45
+        }
+    }
+
+    /// PDF pages are white in light and dark mode, so the outline is darkened from the accent colour
+    /// until it keeps 3:1 non-text contrast (4.5:1 with Increase Contrast) even with a yellow accent.
+    func strokeColor(accent: NSColor = .controlAccentColor) -> NSColor {
+        accent.blended(withFraction: strokeDarkening, of: .black) ?? accent
+    }
+}
+
 /// Draws one page's signature stamps, detected signature fields and the hover ghost, and handles
 /// selecting, moving and resizing stamps. PDFKit sizes and rotates this view with its page, so
 /// drawing in page space keeps everything aligned at any zoom or rotation.
@@ -54,6 +88,7 @@ final class PageOverlayView: NSView {
         let image: CGImage
         /// What VoiceOver reads for this stamp, e.g. "Signature by Jane Doe, page 2, in field Buyer".
         var accessibilityLabel = ""
+        var kind: StampKind = .signature
     }
 
     struct Content {
@@ -64,6 +99,7 @@ final class PageOverlayView: NSView {
         /// Signature fields to outline; empty unless signing.
         var fields: [CGRect] = []
         var ghostImage: CGImage?
+        var ghostWidth = PlacementGeometry.defaultWidth
     }
 
     private enum DragTarget {
@@ -79,14 +115,6 @@ final class PageOverlayView: NSView {
 
     /// Handle edge length in screen points.
     static let handleSize: CGFloat = 11
-    /// Selection outline width in screen points, drawn over a white halo so it shows on dark ink too.
-    static let selectionLineWidth: CGFloat = 2.5
-
-    /// PDF pages are white in light and dark mode, so the field outline is darkened from the accent
-    /// colour until it keeps 3:1 non-text contrast even with a light accent such as yellow.
-    private static var fieldStrokeColor: NSColor {
-        NSColor.controlAccentColor.blended(withFraction: 0.35, of: .black) ?? .controlAccentColor
-    }
 
     private(set) weak var page: PDFPage?
     weak var delegate: PageOverlayViewDelegate?
@@ -108,9 +136,27 @@ final class PageOverlayView: NSView {
     private var stampElements: [UUID: StampAccessibilityElement] = [:]
     private var liveBounds: (id: UUID, bounds: CGRect)?
 
+    private var style = OverlayStyle(increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
+
     init(page: PDFPage?) {
         self.page = page
         super.init(frame: .zero)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(displayOptionsChanged(_:)),
+            name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil
+        )
+    }
+
+    deinit {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+    }
+
+    @objc
+    private func displayOptionsChanged(_: Notification) {
+        style = OverlayStyle(increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
+        needsDisplay = true
     }
 
     @available(*, unavailable)
@@ -168,7 +214,12 @@ final class PageOverlayView: NSView {
             )
         }
         guard content.signingMode == .freePlacement else { return nil }
-        return PlacementGeometry.defaultRect(centeredAt: point, imageSize: imageSize, pageBounds: content.cropBox)
+        return PlacementGeometry.defaultRect(
+            centeredAt: point,
+            imageSize: imageSize,
+            pageBounds: content.cropBox,
+            width: content.ghostWidth
+        )
     }
 
     // MARK: Drawing
@@ -180,11 +231,11 @@ final class PageOverlayView: NSView {
         let point = onePoint
 
         for field in content.fields {
-            context.setFillColor(NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor)
+            context.setFillColor(NSColor.controlAccentColor.withAlphaComponent(style.fieldFillAlpha).cgColor)
             context.fill(field)
-            context.setStrokeColor(Self.fieldStrokeColor.cgColor)
-            context.setLineWidth(2 * point)
-            context.stroke(field.insetBy(dx: point, dy: point))
+            context.setStrokeColor(style.strokeColor().cgColor)
+            context.setLineWidth(style.fieldLineWidth * point)
+            context.stroke(field.insetBy(dx: style.fieldLineWidth / 2 * point, dy: style.fieldLineWidth / 2 * point))
         }
 
         for stamp in content.stamps {
@@ -202,27 +253,6 @@ final class PageOverlayView: NSView {
         }
 
         context.restoreGState()
-    }
-
-    private func drawSelection(around rect: CGRect, in context: CGContext, onePoint point: CGFloat) {
-        let accent = Self.fieldStrokeColor.cgColor
-        context.setStrokeColor(NSColor.white.cgColor)
-        context.setLineWidth((Self.selectionLineWidth + 2) * point)
-        context.stroke(rect)
-        context.setStrokeColor(accent)
-        context.setLineWidth(Self.selectionLineWidth * point)
-        context.stroke(rect)
-
-        let handle = Self.handleSize * point
-        context.setLineWidth(1.5 * point)
-        for corner in PlacementGeometry.Corner.allCases {
-            let center = corner.point(in: rect)
-            let square = CGRect(x: center.x - handle / 2, y: center.y - handle / 2, width: handle, height: handle)
-            context.setFillColor(NSColor.white.cgColor)
-            context.fill(square)
-            context.setStrokeColor(accent)
-            context.stroke(square.insetBy(dx: 0.75 * point, dy: 0.75 * point))
-        }
     }
 
     // MARK: Mouse
@@ -301,24 +331,11 @@ final class PageOverlayView: NSView {
         needsDisplay = true
         guard latest != stamp.bounds else { return }
         let actionName = if case .resize = target {
-            "Resize Signature"
+            stamp.kind.actionName(.resize)
         } else {
-            "Move Signature"
+            stamp.kind.actionName(.move)
         }
         delegate?.overlay(self, didChange: stamp.id, to: latest, actionName: actionName)
-    }
-
-    private func draggedBounds(of target: DragTarget, from start: CGPoint, to point: CGPoint) -> CGRect {
-        switch target {
-        case let .move(stamp):
-            PlacementGeometry.moved(
-                stamp.bounds,
-                by: CGVector(dx: point.x - start.x, dy: point.y - start.y),
-                within: content.cropBox
-            )
-        case let .resize(stamp, corner):
-            PlacementGeometry.resized(stamp.bounds, dragging: corner, to: point, within: content.cropBox)
-        }
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
@@ -335,7 +352,7 @@ final class PageOverlayView: NSView {
 
         let menu = NSMenu()
         let item = NSMenuItem(
-            title: "Remove Signature from Page",
+            title: stamp.kind.actionName(.remove),
             action: #selector(deleteFromMenu(_:)),
             keyEquivalent: ""
         )
@@ -357,7 +374,8 @@ final class PageOverlayView: NSView {
         let ids = Set(content.stamps.map(\.id))
         stampElements = stampElements.filter { ids.contains($0.key) }
         return content.stamps.map { stamp in
-            let element = stampElements[stamp.id] ?? StampAccessibilityElement(stampID: stamp.id, overlay: self)
+            let element = stampElements[stamp.id]
+                ?? StampAccessibilityElement(stampID: stamp.id, kind: stamp.kind, overlay: self)
             element.setAccessibilityLabel(stamp.accessibilityLabel)
             stampElements[stamp.id] = element
             return element
@@ -418,5 +436,42 @@ extension PageOverlayView {
 
     func moveStampFromAccessibility(_ id: UUID) {
         delegate?.overlay(self, didRequestMove: id)
+    }
+}
+
+/// Drawing and drag geometry helpers, kept out of the class body.
+extension PageOverlayView {
+    private func drawSelection(around rect: CGRect, in context: CGContext, onePoint point: CGFloat) {
+        let accent = style.strokeColor().cgColor
+        context.setStrokeColor(NSColor.white.cgColor)
+        context.setLineWidth((style.selectionLineWidth + 2) * point)
+        context.stroke(rect)
+        context.setStrokeColor(accent)
+        context.setLineWidth(style.selectionLineWidth * point)
+        context.stroke(rect)
+
+        let handle = Self.handleSize * point
+        context.setLineWidth(style.handleLineWidth * point)
+        for corner in PlacementGeometry.Corner.allCases {
+            let center = corner.point(in: rect)
+            let square = CGRect(x: center.x - handle / 2, y: center.y - handle / 2, width: handle, height: handle)
+            context.setFillColor(NSColor.white.cgColor)
+            context.fill(square)
+            context.setStrokeColor(accent)
+            context.stroke(square.insetBy(dx: style.handleLineWidth / 2 * point, dy: style.handleLineWidth / 2 * point))
+        }
+    }
+
+    private func draggedBounds(of target: DragTarget, from start: CGPoint, to point: CGPoint) -> CGRect {
+        switch target {
+        case let .move(stamp):
+            PlacementGeometry.moved(
+                stamp.bounds,
+                by: CGVector(dx: point.x - start.x, dy: point.y - start.y),
+                within: content.cropBox
+            )
+        case let .resize(stamp, corner):
+            PlacementGeometry.resized(stamp.bounds, dragging: corner, to: point, within: content.cropBox)
+        }
     }
 }

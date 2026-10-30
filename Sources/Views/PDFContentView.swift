@@ -13,6 +13,8 @@ struct PDFContentView: View {
     @Environment(\.undoManager)
     private var undoManager
     @EnvironmentObject private var signatureStore: SignatureStore
+    @Environment(StampSizeMemory.self)
+    private var stampSizes
 
     @State private var reader = ReaderController()
     @State private var export = SignedCopyOperation()
@@ -41,7 +43,8 @@ struct PDFContentView: View {
     @State private var showSignatureSetupSheet = false
     @State private var isEditingSignature = false
     @State private var pendingAfterSetup: PendingSigningAction?
-    @State private var showDeleteSignatureAlert = false
+    /// The saved profile the Delete Saved Signature/Initials… alert is asking about.
+    @State private var profileToDelete: SignatureKind?
     @State private var errorAlert: ErrorAlert?
 
     var body: some View {
@@ -71,7 +74,12 @@ struct PDFContentView: View {
             .focusedSceneValue(\.signingActions, signingActions)
             .focusedSceneValue(\.zoomActions, zoomActions)
             .focusedSceneValue(\.readerActions, ReaderCommandActions(
-                reader: reader, isBusy: export.isBusy, printDocument: printDocument, pageSetup: runPageSetup
+                reader: reader,
+                isBusy: export.isBusy,
+                printDocument: printDocument,
+                pageSetup: runPageSetup,
+                hasFormFields: formValues?.isEmpty == false,
+                moveToFormField: moveToFormField
             ))
     }
 
@@ -92,6 +100,7 @@ struct PDFContentView: View {
                         onUnlock: {
                             protectionSession.refresh()
                             reader.refresh()
+                            viewer.focusDocumentWhenShown()
                         },
                         onCancel: { protectionSession.showsUnlock = false }
                     )
@@ -100,20 +109,28 @@ struct PDFContentView: View {
             .sheet(isPresented: $showSignatureSetupSheet) {
                 signatureSetupSheet
             }
-            .alert("Delete your saved signature?", isPresented: $showDeleteSignatureAlert) {
-                Button("Delete", role: .destructive, action: deleteSignatureProfile)
+            .alert(
+                StampWorkflow.deleteAlertTitle(profileToDelete ?? .signature),
+                isPresented: deleteAlertIsPresented,
+                presenting: profileToDelete
+            ) { kind in
+                Button("Delete", role: .destructive) { deleteProfile(kind) }
                 Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("It will be removed from this Mac. Signatures already placed in documents are not affected.")
+            } message: { kind in
+                Text(StampWorkflow.deleteAlertMessage(kind))
             }
     }
 
     private var content: some View {
         VStack(spacing: 0) {
             if let progress = export.progress {
-                ExportProgressBanner(progress: progress, cancel: cancelExport)
+                ExportProgressBanner(
+                    progress: progress,
+                    purpose: printTask == nil ? .signedCopy : .print,
+                    cancel: cancelExport
+                )
             }
-            if protectionSession.protection?.isLocked == true {
+            if isLocked {
                 HStack {
                     Text("This PDF is locked. Unlock it to read, sign, save a signed copy, or print.")
                     Spacer()
@@ -125,15 +142,16 @@ struct PDFContentView: View {
             }
             if signingMode != .idle {
                 signingBanner
-            } else if showsSavedBanner, let lastSavedURL {
+            } else if isSavedBannerVisible, let lastSavedURL {
                 savedBanner(for: lastSavedURL)
             }
 
             if reader.find.isVisible {
                 FindBar(find: reader.find, onEscape: closeFind)
             }
-            if let reason = reader.printDisabledReason {
-                Text(reason).font(.caption).foregroundStyle(.secondary).padding(4)
+            // The locked banner already says printing needs the password.
+            if !isLocked, let reason = reader.printDisabledReason {
+                Text(reason).font(.callout).foregroundStyle(.secondary).padding(4)
             }
             HSplitView {
                 if reader.sidebarVisible {
@@ -146,27 +164,43 @@ struct PDFContentView: View {
 
     private var pdfView: some View {
         PDFKitView(
-            document: document.pdfDocument,
+            document: Self.documentForPageView(document.pdfDocument, protection: protectionSession.protection),
             signaturePlacements: document.signaturePlacements,
             zoom: $zoom,
             signingMode: signingMode,
             stampPNGData: signingMode == .idle ? nil : activeArtwork?.pngData,
+            stampWidth: stampSizes.width(for: stampKind),
             viewer: viewer,
             reader: reader,
             fileURL: fileURL,
             onEscape: handleEscape,
             onStopSigning: exitSigning,
             isExporting: export.progress != nil,
+            isShowingSavedBanner: isSavedBannerVisible,
             onWindow: attachCloseGuard,
             onPlaceSignature: placeSignature,
-            onUpdatePlacementBounds: { id, bounds, actionName in
-                configuredEditor().setBounds(id: id, to: bounds, actionName: actionName)
-            },
+            onUpdatePlacementBounds: updatePlacementBounds,
             onDeletePlacement: { configuredEditor().delete(id: $0) },
             onDocumentStateChange: applyDocumentState,
             onFormValuesChange: applyFormValues
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay {
+            if isLocked {
+                ContentUnavailableView(
+                    "This PDF Is Locked",
+                    systemImage: "lock",
+                    description: Text("Unlock it to see its pages.")
+                )
+            }
+        }
+    }
+
+    /// PDFKit shows its own password field for a locked document, which would give the window two
+    /// unlock surfaces; it gets no document until the unlock sheet has opened it.
+    static func documentForPageView(_ document: PDFDocument?, protection: DocumentProtection?) -> PDFDocument? {
+        let isLocked = protection?.isLocked ?? document?.isLocked ?? false
+        return isLocked ? nil : document
     }
 }
 
@@ -213,14 +247,15 @@ extension PDFContentView {
                 }
                 if signingMode != .idle {
                     Divider()
-                    Button("Stop Signing", action: exitSigning)
+                    Button(StampWorkflow.signingToggleTitle(mode: signingMode, kind: stampKind), action: exitSigning)
                 }
             } label: {
-                Label("Sign", systemImage: "signature")
+                Label("Sign", systemImage: StampWorkflow.signToolbarSymbol(mode: signingMode))
             }
             .foregroundStyle(signingMode == .idle ? Color.primary : Color.accentColor)
             .disabled(!canSign)
             .help("Place a signature, initials, or today's date")
+            .accessibilityValue(StampWorkflow.signToolbarValue(mode: signingMode))
             .accessibilityHint("Choose Signature, Initials, or Date, then click to place. Done stops signing.")
 
             Button {
@@ -279,7 +314,7 @@ extension PDFContentView {
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Close")
-            .help("Close. File > Share Signed Copy… and Show Signed Copy in Finder stay available.")
+            .help("Close (Esc). File > Share Signed Copy… (⌥⇧⌘E) and Show Signed Copy in Finder (⇧⌘R) stay available.")
         }
         .font(.callout)
         .padding(.horizontal, 12)
@@ -305,6 +340,9 @@ extension PDFContentView {
             onCancel: {
                 showSignatureSetupSheet = false
                 pendingAfterSetup = nil
+                if signingMode == .idle {
+                    stampKind = StampWorkflow.kindAfterPlacementOrExit(stampKind)
+                }
             },
             onSave: { profile in
                 do {
@@ -316,6 +354,7 @@ extension PDFContentView {
                     case let .enter(mode)?: enterSigning(mode)
                     case .placeInNextField?: placeInNextField()
                     case .placeOnCurrentPage?: placeOnCurrentPage()
+                    case .placeInitialsOnEveryPage?: placeInitialsOnEveryPage()
                     case nil: break
                     }
                 } catch {
@@ -338,6 +377,17 @@ extension PDFContentView {
         )
     }
 
+    private var deleteAlertIsPresented: Binding<Bool> {
+        Binding(
+            get: { profileToDelete != nil },
+            set: {
+                if !$0 {
+                    profileToDelete = nil
+                }
+            }
+        )
+    }
+
     private var anywhereSelection: Binding<Bool> {
         Binding(
             get: { signingMode == .freePlacement },
@@ -347,6 +397,14 @@ extension PDFContentView {
 
     private var signatureFields: [SignatureField] {
         documentState?.signatureFields ?? []
+    }
+
+    private var isSavedBannerVisible: Bool {
+        showsSavedBanner && lastSavedURL != nil && signingMode == .idle
+    }
+
+    private var isLocked: Bool {
+        protectionSession.protection?.isLocked ?? document.pdfDocument?.isLocked ?? false
     }
 
     private var hasSignatureFields: Bool {
@@ -395,12 +453,14 @@ extension PDFContentView {
     private var signingActions: SigningCommandActions {
         SigningCommandActions(
             signingMode: signingMode,
+            stampKind: stampKind,
             canSign: canSign,
             hasSignatureFields: hasSignatureFields,
             canSaveSignedCopy: canSaveSignedCopy,
             toggleSigning: toggleSigning,
             placeInNextField: placeInNextField,
             placeOnCurrentPage: placeOnCurrentPage,
+            placeInitialsOnEveryPage: placeInitialsOnEveryPage,
             setAnywhere: setAnywhere,
             hasPlacements: !document.signaturePlacements.isEmpty,
             selectNextSignature: { selectAdjacentSignature(forward: true) },
@@ -409,7 +469,7 @@ extension PDFContentView {
             lastSavedURL: lastSavedURL,
             shareSignedCopy: { url in viewer.showSharingPicker(for: url) },
             editSignature: editSignature,
-            deleteSignature: confirmDeleteSignature,
+            deleteProfile: { profileToDelete = $0 },
             placeStamp: chooseStamp,
             editInitials: { editProfile(.initials) },
             canUnlock: protectionSession.protection?.isLocked == true,
@@ -452,6 +512,7 @@ extension PDFContentView {
         )
         documentState = nil
         signingMode = .idle
+        stampKind = .signature
         pendingAfterSetup = nil
         showSignatureSetupSheet = false
         lastFieldIndex = nil
@@ -524,6 +585,7 @@ extension PDFContentView {
     private func exitSigning() {
         guard signingMode != .idle else { return }
         signingMode = SigningFlowLogic.exited(signingMode)
+        stampKind = StampWorkflow.kindAfterPlacementOrExit(stampKind)
         announce(SigningFlowLogic.exitedAnnouncement)
         // The Done button that may have had focus is gone; give focus back to the document.
         viewer.focusDocument()
@@ -545,11 +607,16 @@ extension PDFContentView {
             requestSignatureSetup(then: .placeInNextField)
             return
         }
-        guard let index = SigningFlowLogic.nextFieldIndex(after: lastFieldIndex, count: signatureFields.count),
-              let page = document.pdfDocument?.page(at: signatureFields[index].pageIndex)
-        else {
+        guard let index = StampWorkflow.nextEmptyFieldIndex(
+            after: lastFieldIndex,
+            fields: signatureFields,
+            placements: document.signaturePlacements
+        ) else {
+            NSSound.beep()
+            announce(StampWorkflow.allFieldsFilledAnnouncement)
             return
         }
+        guard let page = document.pdfDocument?.page(at: signatureFields[index].pageIndex) else { return }
 
         let field = signatureFields[index]
         lastFieldIndex = index
@@ -576,10 +643,52 @@ extension PDFContentView {
         let bounds = PlacementGeometry.defaultRect(
             centeredAt: CGPoint(x: cropBox.midX, y: cropBox.midY),
             imageSize: imageSize,
-            pageBounds: cropBox
+            pageBounds: cropBox,
+            width: stampSizes.width(for: stampKind)
         )
         viewer.reveal(bounds, onPageAt: pageIndex)
         placeSignature(pageIndex: pageIndex, bounds: bounds)
+    }
+
+    /// One undoable step that initials every page that has none, at the position of the selected or
+    /// last initials, or in the bottom-right margin.
+    private func placeInitialsOnEveryPage() {
+        guard canSign, let pdf = document.pdfDocument else { return }
+        let artwork = StampArtwork.make(
+            kind: .initials,
+            signature: nil,
+            initials: signatureStore.profile(for: .initials)
+        )
+        guard let artwork, let imageSize = artwork.imageSize else {
+            setupKind = .initials
+            isEditingSignature = false
+            pendingAfterSetup = .placeInitialsOnEveryPage
+            showSignatureSetupSheet = true
+            return
+        }
+        let pages = (0 ..< pdf.pageCount).map { index in
+            pdf.page(at: index)
+                .map { StampWorkflow.PageFrame(cropBox: $0.bounds(for: .cropBox), rotation: $0.rotation) }
+                ?? StampWorkflow.PageFrame(cropBox: .zero)
+        }
+        let targets = StampWorkflow.initialsOnEveryPage(
+            reference: StampWorkflow.referenceInitials(
+                selectedID: viewer.selectedPlacementID,
+                placements: document.signaturePlacements
+            ),
+            pages: pages,
+            placements: document.signaturePlacements,
+            defaultSize: PlacementGeometry.defaultSize(imageSize: imageSize, width: stampSizes.width(for: .initials))
+        )
+        if targets.isEmpty {
+            NSSound.beep()
+        } else {
+            let placements = targets.map { artwork.placement(pageIndex: $0.pageIndex, bounds: $0.bounds) }
+            configuredEditor().add(placements, actionName: StampWorkflow.everyPageActionName)
+            signingMode = .idle
+            stampKind = StampWorkflow.kindAfterPlacementOrExit(stampKind)
+        }
+        announce(StampWorkflow.everyPageAnnouncement(count: targets.count))
     }
 
     private func placeSignature(pageIndex: Int, bounds: CGRect) {
@@ -589,7 +698,8 @@ extension PDFContentView {
         signingMode = SigningFlowLogic.afterPlacement(signingMode)
         viewer.select(placementID: placement.id)
         let location = viewer.location(of: bounds, onPageAt: pageIndex) ?? ""
-        announce(StampAccessibility.placedAnnouncement(pageIndex: pageIndex, location: location, kind: stampKind))
+        announce(StampAccessibility.placedAnnouncement(pageIndex: pageIndex, location: location, kind: artwork.kind))
+        stampKind = StampWorkflow.kindAfterPlacementOrExit(artwork.kind)
     }
 
     /// Select Next/Previous Signature: reveals the stamp, gives it keyboard focus and reads its label.
@@ -605,6 +715,15 @@ extension PDFContentView {
         if let label = viewer.label(for: placement) {
             announce(label)
         }
+    }
+
+    /// A resize also sets the size the next stamp of that kind is placed at.
+    private func updatePlacementBounds(id: UUID, to bounds: CGRect, actionName: String) {
+        let placement = document.signaturePlacements.first { $0.id == id }
+        if let placement, placement.bounds.width != bounds.width {
+            stampSizes.remember(width: bounds.width, for: placement.kind)
+        }
+        configuredEditor().setBounds(id: id, to: bounds, actionName: actionName)
     }
 
     private func configuredEditor() -> SignaturePlacementEditor {
@@ -625,16 +744,15 @@ extension PDFContentView {
         showSignatureSetupSheet = true
     }
 
-    private func confirmDeleteSignature() {
-        showDeleteSignatureAlert = true
-    }
-
-    private func deleteSignatureProfile() {
+    private func deleteProfile(_ kind: SignatureKind) {
         do {
-            try signatureStore.deleteProfile()
-            signingMode = .idle
+            try signatureStore.deleteProfile(for: kind)
+            if stampKind.profileKind == kind {
+                signingMode = .idle
+                stampKind = .signature
+            }
         } catch {
-            errorAlert = ErrorAlert(title: "Couldn’t Delete Signature", error: error)
+            errorAlert = ErrorAlert(title: "Couldn’t Delete \(kind.title)", error: error)
         }
     }
 
@@ -730,14 +848,26 @@ extension PDFContentView {
             isExporting: export.progress != nil,
             isSigning: signingMode != .idle,
             isFindVisible: reader.find.isVisible,
-            hasSelection: false
+            hasSelection: viewer.selectedPlacementID != nil,
+            isSavedBannerVisible: isSavedBannerVisible
         )
         switch action {
         case .cancelExport: cancelExport()
         case .stopSigning: exitSigning()
         case .closeFind: closeFind()
-        case .deselect, .none: break
+        case .deselect: viewer.select(placementID: nil)
+        case .closeSavedBanner: dismissSavedBanner()
+        case .none: break
         }
+    }
+
+    private func moveToFormField(forward: Bool) {
+        guard let message = viewer.moveToFormField(forward: forward) else {
+            NSSound.beep()
+            announce(FormFieldNavigation.noFieldsAnnouncement)
+            return
+        }
+        announce(message)
     }
 
     private func closeFind() {
@@ -772,11 +902,22 @@ final class SignaturePlacementEditor {
     weak var undoManager: UndoManager?
 
     func add(_ placement: PDFViewerDocument.SignaturePlacement) {
-        insert(placement, at: nil, actionName: "Add Signature")
+        insert(placement, at: nil, actionName: placement.kind.actionName(.add))
+    }
+
+    /// Several stamps as one undoable step, e.g. Place Initials on Every Page.
+    func add(_ placements: [PDFViewerDocument.SignaturePlacement], actionName: String) {
+        undoManager?.beginUndoGrouping()
+        for placement in placements {
+            insert(placement, at: nil, actionName: actionName)
+        }
+        undoManager?.endUndoGrouping()
+        undoManager?.setActionName(actionName)
     }
 
     func delete(id: UUID) {
-        remove(id: id, actionName: "Remove Signature from Page")
+        let kind = document?.wrappedValue.signaturePlacements.first { $0.id == id }?.kind ?? .signature
+        remove(id: id, actionName: kind.actionName(.remove))
     }
 
     func setBounds(id: UUID, to bounds: CGRect, actionName: String) {

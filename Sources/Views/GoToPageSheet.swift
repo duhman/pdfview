@@ -36,12 +36,12 @@ struct GoToPageSheet: View {
                 } icon: {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
                 }
-                .font(.caption)
+                .font(.callout)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("Error: \(message)")
             } else {
                 Text("Enter a page number from 1 to \(reader.pageCount).")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
             HStack {

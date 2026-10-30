@@ -49,6 +49,7 @@ enum EscapeAction: Equatable {
     case stopSigning
     case closeFind
     case deselect
+    case closeSavedBanner
     case none
 }
 
@@ -57,6 +58,7 @@ enum PendingSigningAction: Equatable {
     case enter(SigningMode)
     case placeInNextField
     case placeOnCurrentPage
+    case placeInitialsOnEveryPage
 }
 
 /// Key equivalents for the Sign menu, shown in the banner so the keyboard path is discoverable.
@@ -98,10 +100,10 @@ enum SigningFlowLogic {
     static func statusText(mode: SigningMode, kind: StampKind = .signature) -> String {
         let instruction = kind == .signature ? "sign" : "place your \(kind.title.lowercased())"
         return mode == .fieldPlacement
-            ? "Click a signature field, choose Anywhere, or use Sign > Place in Next Field "
-            + "(\(SigningShortcut.placeInNextField))."
-            : "Click where you want to \(instruction), or use Sign > Place on Current Page "
-            + "(\(SigningShortcut.placeOnCurrentPage))."
+            ? "Click a signature field, choose Anywhere, or use Sign > "
+            + "\(StampWorkflow.placeInNextFieldTitle(kind: kind)) (\(SigningShortcut.placeInNextField))."
+            : "Click where you want to \(instruction), or use Sign > "
+            + "\(StampWorkflow.placeOnCurrentPageTitle(kind: kind)) (\(SigningShortcut.placeOnCurrentPage))."
     }
 
     static func enteredAnnouncement(mode: SigningMode, kind: StampKind = .signature) -> String {
@@ -118,7 +120,8 @@ enum SigningFlowLogic {
         isExporting: Bool,
         isSigning: Bool,
         isFindVisible: Bool,
-        hasSelection: Bool
+        hasSelection: Bool,
+        isSavedBannerVisible: Bool = false
     ) -> EscapeAction {
         if isExporting {
             .cancelExport
@@ -128,6 +131,8 @@ enum SigningFlowLogic {
             .closeFind
         } else if hasSelection {
             .deselect
+        } else if isSavedBannerVisible {
+            .closeSavedBanner
         } else {
             .none
         }
@@ -157,12 +162,6 @@ enum SigningFlowLogic {
         }
         let next = (index + (forward ? 1 : -1) + ordered.count) % ordered.count
         return ordered[next].id
-    }
-
-    static func nextFieldIndex(after lastIndex: Int?, count: Int) -> Int? {
-        guard count > 0 else { return nil }
-        guard let lastIndex, lastIndex + 1 < count else { return 0 }
-        return lastIndex + 1
     }
 
     /// True while the window holds placements that differ from the last saved signed copy.

@@ -49,7 +49,7 @@ private enum Page {
     )
     #expect(
         StampAccessibility.placedAnnouncement(pageIndex: 1, location: "in field “Buyer”")
-            == "Signature placed on page 2, in field “Buyer”"
+            == "Signature placed on page 2, in field “Buyer”. Arrow keys move it, Escape when done."
     )
     #expect(StampAccessibility.movedAnnouncement(pageIndex: 0, location: "at center") == "Moved, page 1, at center")
 }
@@ -91,11 +91,12 @@ private enum Page {
     #expect(delegate.selected == [first.id])
 }
 
-@Test func nudgeDistanceFollowsModifiers() {
-    #expect(PlacementGeometry.nudgeDistance(shift: false, option: false) == 1)
-    #expect(PlacementGeometry.nudgeDistance(shift: true, option: false) == 10)
-    #expect(PlacementGeometry.nudgeDistance(shift: false, option: true) == 50)
-    #expect(PlacementGeometry.nudgeDistance(shift: true, option: true) == nil)
+@Test func arrowKeysMoveOrResizeAndLeaveOptionArrowsToPaging() {
+    #expect(PlacementGeometry.arrowAction(shift: false, option: false) == .move(1))
+    #expect(PlacementGeometry.arrowAction(shift: true, option: false) == .move(10))
+    #expect(PlacementGeometry.arrowAction(shift: true, option: true) == .resize)
+    // Option-Up/Down are Next/Previous Page in the Go menu, even while a stamp is selected.
+    #expect(PlacementGeometry.arrowAction(shift: false, option: true) == nil)
 }
 
 @Test func keyboardResizeKeepsAspectAndBottomLeftCorner() {
@@ -133,38 +134,6 @@ private enum Page {
     #expect(SigningFlowLogic.adjacentPlacement(after: nil, in: placements, forward: false) == page1.id)
     #expect(SigningFlowLogic.adjacentPlacement(after: upperOnPage0.id, in: placements, forward: false) == page1.id)
     #expect(SigningFlowLogic.adjacentPlacement(after: nil, in: [], forward: true) == nil)
-}
-
-@MainActor
-@Test func optionArrowsReachTheStampBeforeTheGoMenu() throws {
-    let pdfView = SigningPDFView(frame: CGRect(x: 0, y: 0, width: 200, height: 200))
-    let window = NSWindow(contentRect: pdfView.frame, styleMask: [.titled], backing: .buffered, defer: false)
-    window.contentView = pdfView
-    window.makeFirstResponder(pdfView)
-    var handled: [NSEvent] = []
-    pdfView.keyHandler = { event in
-        handled.append(event)
-        return true
-    }
-    let downArrow = try #require(UnicodeScalar(NSDownArrowFunctionKey))
-    let optionDown = try #require(NSEvent.keyEvent(
-        with: .keyDown,
-        location: .zero,
-        modifierFlags: [.option, .numericPad, .function],
-        timestamp: 0,
-        windowNumber: window.windowNumber,
-        context: nil,
-        characters: String(downArrow),
-        charactersIgnoringModifiers: String(downArrow),
-        isARepeat: false,
-        keyCode: 125
-    ))
-
-    pdfView.hasSelectedStamp = { false }
-    #expect(!pdfView.performKeyEquivalent(with: optionDown))
-    pdfView.hasSelectedStamp = { true }
-    #expect(pdfView.performKeyEquivalent(with: optionDown))
-    #expect(handled.count == 1)
 }
 
 @Test func fieldNamesFromTheDocumentAreCleanedBeforeVoiceOverReadsThem() {

@@ -16,15 +16,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Cache date artwork per local day, locale and time zone; remove unused signature-storage errors
 
 ### Added
-- Secure unlock on opening a locked PDF, Sign > Unlock… retry, and a locked-state banner after Cancel
+- Sign > Place Initials on Every Page: one undoable step at the selected or last initials' relative position, or the bottom-right margin; pages that already have initials are skipped and the count is announced
+- Go > Next / Previous Form Field (⌥⌘→ / ⌥⌘←) reveals each form widget in reading order, announces its name, kind and page, and opens text fields for typing
+- Delete Saved Initials… beside Delete Saved Signature…
+- Place Signature (⌃⇧⌘S), Share Signed Copy… (⌥⇧⌘E) and Show Signed Copy in Finder (⇧⌘R) shortcuts, with a test that every menu chord is unique and avoids standard macOS chords
+- VoiceOver announcements for Find results, the start of a save or print, and a wrong unlock password; the Sign toolbar menu reports Signing / Not signing
+- Secure unlock on opening a locked PDF, File > Unlock… retry, and a locked-state banner after Cancel
 - Sign menu and compact toolbar menu for Signature, Initials and Date; initials setup resumes pending placement
 - Place Initials (⌥⇧⌘I), Place Date (⌥⇧⌘D), and Create/Edit Initials… commands
 - Per-placement stamp kind, image and formatted date, including initials/date VoiceOver labels
 - Form entries count as unsaved work: the close prompt names them, and a filled form can be saved without a stamp
 - Quitting reviews every window with unsaved signatures or form entries (Review Changes / Discard Changes / Cancel)
 - File > Share Signed Copy… and Show Signed Copy in Finder for the window's last saved copy
-- Sign > Place in Next Field (⌥⌘N), Place on Current Page (⌥⌘P), Select Next / Previous Signature (⌥⌘] / ⌥⌘[)
-- Option-arrow 50 pt nudges and Option-Shift-arrow aspect-locked keyboard resizing for a selected stamp
+- Sign > Place Signature in Next Field (⌥⌘N), Place Signature on Current Page (⌥⌘P), Select Next / Previous Signature (⌥⌘] / ⌥⌘[)
+- Option-Shift-arrow aspect-locked keyboard resizing for a selected stamp
 - VoiceOver elements for placed stamps (signer, page, field or position) with Remove and Move actions, plus position announcements after placing and moving
 - Stop Signing context menu while signing; Go to Page explains invalid input inline
 - Document-scoped, memory-only password state, secure unlock sheet and save protection accessory
@@ -45,6 +50,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.github/SECURITY.md` vulnerability reporting policy
 
 ### Changed
+- Initials and date stamps start at 60 and 110 pt wide (signatures 180 pt), and the last resize of each kind becomes its size for the session
+- The stamp kind returns to Signature after each placement or Stop Signing; menu titles name the kind they will place
+- Place in Next Field skips fields that already hold a stamp and beeps and announces when none are left
+- Date stamps use the system font at medium weight instead of a script face
+- Save Signed Copy… and Unlock… moved to the File menu
+- Undo names, the stamp context menu and VoiceOver actions say Signature, Initials or Date; the print banner says “Preparing to print…”
+- Locked PDFs unlock only through the password sheet (PDFKit's own password field no longer appears); the print caption is hidden while the locked banner shows
+- The document takes keyboard focus when a window opens and after unlocking; the unlock sheet focuses its password field
+- A selected stamp no longer takes Option-arrows (formerly a 50 pt move), so Option-Up/Down keep turning pages; Escape deselects the stamp, then closes the saved banner
+- Overlay outlines and handles thicken and darken with Increase Contrast; message text is at least 12 pt
 - Save Signed Copy configures protection and original-file safety before opening the save panel
 - Protected signed printing unlocks its temporary copy in memory and cleans it after use
 - One signature-field scan preserves field names and restarts safely on unlock or document replacement
@@ -52,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The saved banner stays until closed and names the folder; the signing banner names the keyboard path
 - Escape closes Find first when the Find field has focus; leaving signing is announced and focus returns to the document
 - Placing before a signature exists runs the placement after setup; Place on Current Page scrolls to the stamp
-- Menu names: Create Signature… (when none exists), Delete Saved Signature…, Remove Signature from Page
+- Menu names: Create Signature… (when none exists), Delete Saved Signature…, Remove Signature/Initials/Date from Page
 - Thicker selection outline, larger handles and higher-contrast signature field outlines
 - File > Page Setup… is back alongside Print…
 - Reader sidebar uses a top segmented control, native outline selection and full-height thumbnails
@@ -72,6 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions workflows (`ci.yml`, `quality.yml`, `release.yml`); checks and releases run locally
 
 ### Fixed
+- Signature-field outlines with a yellow accent measured 2.8:1 against the page; they now reach 3.7:1 (5.7:1 with Increase Contrast)
+- Long date stamps in the system font could overflow the stamp after one fit pass
 - Async exports freeze form/page state before yielding, including unlocked encrypted sources
 - Signed-copy destination checks reject the original by path, symlink and hard-link identity
 - Finalize yields between writing, geometry repair and validation; pure geometry work runs off the main actor
@@ -155,6 +172,8 @@ First downloadable build. The app is unchanged from the 2026-09-29 modernization
 - Features removed in this version
 
 ### Fixed
+- Signature-field outlines with a yellow accent measured 2.8:1 against the page; they now reach 3.7:1 (5.7:1 with Increase Contrast)
+- Long date stamps in the system font could overflow the stamp after one fit pass
 - Bug fixes
 
 ### Security
