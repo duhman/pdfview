@@ -25,6 +25,7 @@ enum FormFieldNavigation {
         let bounds: CGRect
         let name: String?
         let kind: Kind
+        var isReadOnly = false
     }
 
     static func kind(of widget: PDFAnnotation) -> Kind {
@@ -46,12 +47,13 @@ enum FormFieldNavigation {
         return StampAccessibility.fieldDisplayName(userName) ?? StampAccessibility.fieldDisplayName(widget.fieldName)
     }
 
-    /// Indices of `fields` in reading order: page, then top to bottom, then left to right.
+    /// Indices of `fields` in reading order: page, then top to bottom, then left to right. Read-only
+    /// fields are left out, because nothing can be done with them from the keyboard.
     static func readingOrder(_ fields: [Field]) -> [Int] {
         func key(_ field: Field) -> (Int, CGFloat, CGFloat) {
             (field.pageIndex, -field.bounds.maxY, field.bounds.minX)
         }
-        return fields.indices.sorted { key(fields[$0]) < key(fields[$1]) }
+        return fields.indices.filter { !fields[$0].isReadOnly }.sorted { key(fields[$0]) < key(fields[$1]) }
     }
 
     /// The position after (or before) `current` in a list of `count`, wrapping; the first or last
@@ -66,5 +68,5 @@ enum FormFieldNavigation {
         "\(field.name ?? "Unnamed field"), \(field.kind.spokenName), page \(field.pageIndex + 1)"
     }
 
-    static let noFieldsAnnouncement = "This document has no form fields."
+    static let noFieldsAnnouncement = "This document has no form fields you can fill in."
 }

@@ -69,3 +69,34 @@ import Testing
     #expect(!SigningFlowLogic.anywhereIsEnabled(mode: .freePlacement, canSign: true, hasSignatureFields: false))
     #expect(!SigningFlowLogic.anywhereIsEnabled(mode: .fieldPlacement, canSign: false, hasSignatureFields: true))
 }
+
+// MARK: Read-only form fields
+
+@Test func readingOrderSkipsReadOnlyFields() {
+    let fields = [
+        FormFieldNavigation.Field(
+            pageIndex: 0,
+            bounds: CGRect(x: 0, y: 700, width: 10, height: 10),
+            name: "A",
+            kind: .text
+        ),
+        FormFieldNavigation.Field(
+            pageIndex: 0,
+            bounds: CGRect(x: 0, y: 500, width: 10, height: 10),
+            name: "Locked",
+            kind: .checkbox,
+            isReadOnly: true
+        ),
+        FormFieldNavigation.Field(
+            pageIndex: 0,
+            bounds: CGRect(x: 0, y: 300, width: 10, height: 10),
+            name: "B",
+            kind: .text
+        ),
+    ]
+    #expect(FormFieldNavigation.readingOrder(fields).map { fields[$0].name } == ["A", "B"])
+}
+
+@Test func aDocumentWithOnlyReadOnlyFieldsSaysThereIsNothingToFillIn() {
+    #expect(FormFieldNavigation.noFieldsAnnouncement == "This document has no form fields you can fill in.")
+}
