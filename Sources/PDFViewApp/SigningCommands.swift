@@ -146,7 +146,14 @@ struct SigningCommandMenu: Commands {
     @ObservedObject var signatureStore: SignatureStore
 
     var body: some Commands {
+        // File menu: the signed copy is this app's save, so it sits with Save and Share.
         CommandGroup(after: .saveItem) {
+            Button("Save Signed Copy…") {
+                actions?.saveSignedCopy()
+            }
+            .keyboardShortcut(MenuShortcuts.saveSignedCopy)
+            .disabled(!(actions?.canSaveSignedCopy ?? false))
+
             let url = actions?.lastSavedURL
             Button("Share Signed Copy…") {
                 if let url {
@@ -160,6 +167,11 @@ struct SigningCommandMenu: Commands {
                 }
             }
             .disabled(url == nil)
+
+            Divider()
+
+            Button("Unlock…") { actions?.unlock() }
+                .disabled(actions?.canUnlock != true)
         }
         CommandMenu("Sign") {
             let canSign = actions?.canSign ?? false
@@ -225,14 +237,6 @@ struct SigningCommandMenu: Commands {
 
             Divider()
 
-            Button("Save Signed Copy…") {
-                actions?.saveSignedCopy()
-            }
-            .keyboardShortcut(MenuShortcuts.saveSignedCopy)
-            .disabled(!(actions?.canSaveSignedCopy ?? false))
-
-            Divider()
-
             Button(SigningFlowLogic.signatureMenuTitle(hasProfile: signatureStore.profile != nil)) {
                 actions?.editSignature()
             }
@@ -240,9 +244,6 @@ struct SigningCommandMenu: Commands {
 
             Button("Create/Edit Initials…") { actions?.editInitials() }
                 .disabled(actions == nil)
-
-            Button("Unlock…") { actions?.unlock() }
-                .disabled(actions?.canUnlock != true)
 
             ForEach(SignatureKind.allCases, id: \.self) { kind in
                 Button(StampWorkflow.deleteMenuTitle(kind)) {
