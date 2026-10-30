@@ -90,3 +90,29 @@ private func widget(_ type: PDFAnnotationWidgetSubtype, bounds: CGRect, name: St
     #expect(coordinator.moveToFormField(forward: true) == "Name, text field, page 1")
     #expect(coordinator.moveToFormField(forward: false) == "Name, text field, page 1")
 }
+
+@MainActor
+@Test func widgetIsClickedOnlyWhenNothingElseCanReceiveTheClick() throws {
+    let document = try makeSignableForm()
+    let page = try #require(document.page(at: 0))
+    let field = try #require(page.annotations.first { $0.widgetFieldType == .text })
+    let pdfView = SigningPDFView(frame: CGRect(x: 0, y: 0, width: 400, height: 600))
+    #expect(pdfView.widgetClickPoint(field, on: page) == nil)
+
+    let window = NSWindow(contentRect: pdfView.frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = pdfView
+    pdfView.document = document
+    pdfView.layoutDocumentView()
+    pdfView.go(to: field.bounds, on: page)
+    #expect(pdfView.widgetClickPoint(field, on: page) != nil)
+
+    pdfView.isSigning = { true }
+    #expect(pdfView.widgetClickPoint(field, on: page) == nil)
+    pdfView.isSigning = { false }
+
+    // A link the document stacks over the field must not be triggered by a click meant for the field.
+    let link = PDFAnnotation(bounds: field.bounds, forType: .link, withProperties: nil)
+    link.url = URL(string: "https://example.com")
+    page.addAnnotation(link)
+    #expect(pdfView.widgetClickPoint(field, on: page) == nil)
+}

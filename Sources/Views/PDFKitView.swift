@@ -404,7 +404,7 @@ extension PDFKitView {
             lastFormFieldID = ObjectIdentifier(widget)
             pdfView.go(to: widget.bounds.insetBy(dx: -40, dy: -40), on: page)
             if fields[order[position]].kind == .text, !widget.isReadOnly {
-                // PDFKit has no API to start editing a widget, so click it once it has scrolled into view.
+                // Once it has scrolled into view.
                 DispatchQueue.main.async { [weak pdfView] in
                     pdfView?.clickWidget(widget, on: page)
                 }
@@ -686,12 +686,27 @@ final class SigningPDFView: PDFView {
         onUserInteraction?()
     }
 
-    /// Posts a click at the widget's centre so PDFKit opens its text editor there.
+    /// Where a click would open this widget's text editor, in window coordinates. Nil unless the click
+    /// can reach nothing else: not while signing, the widget is the topmost annotation at its centre
+    /// (so a link the document stacked over it cannot be triggered), and the point is on screen with
+    /// this view, not another control or a stamp overlay, under it.
+    func widgetClickPoint(_ widget: PDFAnnotation, on page: PDFPage) -> CGPoint? {
+        guard window != nil, !isSigning(), widget.page === page else { return nil }
+        let pagePoint = CGPoint(x: widget.bounds.midX, y: widget.bounds.midY)
+        guard page.annotation(at: pagePoint) === widget else { return nil }
+        let viewPoint = convert(pagePoint, from: page)
+        guard visibleRect.contains(viewPoint), let superview else { return nil }
+        let hit = superview.hitTest(convert(viewPoint, to: superview))
+        guard let hit, hit === self || (hit.isDescendant(of: self) && !(hit is PageOverlayView)) else { return nil }
+        return convert(viewPoint, to: nil)
+    }
+
+    /// PDFKit has no API to start editing a widget, so this clicks its centre. The press goes straight
+    /// to PDFKit rather than through the window; the release is queued for PDFKit's tracking loop.
     func clickWidget(_ widget: PDFAnnotation, on page: PDFPage) {
-        guard let window, widget.page === page else { return }
-        let point = convert(convert(CGPoint(x: widget.bounds.midX, y: widget.bounds.midY), from: page), to: nil)
-        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-            if let event = NSEvent.mouseEvent(
+        guard let window, let point = widgetClickPoint(widget, on: page) else { return }
+        let events = [NSEvent.EventType.leftMouseDown, .leftMouseUp].compactMap { type in
+            NSEvent.mouseEvent(
                 with: type,
                 location: point,
                 modifierFlags: [],
@@ -701,10 +716,12 @@ final class SigningPDFView: PDFView {
                 eventNumber: 0,
                 clickCount: 1,
                 pressure: type == .leftMouseDown ? 1 : 0
-            ) {
-                window.postEvent(event, atStart: false)
-            }
+            )
         }
+        guard events.count == 2 else { return }
+        window.postEvent(events[1], atStart: false)
+        super.mouseDown(with: events[0])
+        onUserInteraction?()
     }
 
     override func viewDidMoveToWindow() {
