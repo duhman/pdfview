@@ -28,6 +28,8 @@ struct PDFContentView: View {
     @State private var stampKind: StampKind = .signature
     @State private var setupKind: SignatureKind = .signature
     @State private var signingMode: SigningMode = .idle
+    /// Fields or Anywhere, per stamp kind, for this window.
+    @State private var placementChoices = PlacementChoices()
     /// Nil until the PDF view has scanned the document.
     @State private var documentState: PDFKitView.DocumentState?
     @State private var lastFieldIndex: Int?
@@ -544,7 +546,7 @@ extension PDFContentView {
 
     private func toggleSigning() {
         if signingMode == .idle {
-            startSigning(SigningFlowLogic.toggled(signingMode, hasSignatureFields: hasSignatureFields))
+            startSigning(placementChoices.entryMode(for: stampKind, hasSignatureFields: hasSignatureFields))
         } else {
             exitSigning()
         }
@@ -553,7 +555,7 @@ extension PDFContentView {
     private func chooseStamp(_ kind: StampKind) {
         guard canSign else { return }
         stampKind = kind
-        startSigning(SigningFlowLogic.entryMode(hasSignatureFields: hasSignatureFields))
+        startSigning(placementChoices.entryMode(for: kind, hasSignatureFields: hasSignatureFields))
     }
 
     /// Enters signing, first asking the user to create a signature if there is none yet.
@@ -592,6 +594,7 @@ extension PDFContentView {
     }
 
     private func setAnywhere(_ anywhere: Bool) {
+        placementChoices.remember(anywhere: anywhere, for: stampKind)
         let mode = SigningFlowLogic.mode(anywhere: anywhere, hasSignatureFields: hasSignatureFields)
         if signingMode == .idle {
             startSigning(mode)
@@ -603,6 +606,13 @@ extension PDFContentView {
     /// Keyboard path to field signing: each use fills the next detected signature field.
     private func placeInNextField() {
         guard canSign else { return }
+        if let reason = SigningFlowLogic.nextFieldUnavailableReason(
+            kind: stampKind,
+            hasSignatureFields: hasSignatureFields
+        ) {
+            announce(reason)
+            return
+        }
         guard let imageSize = signatureImageSize else {
             requestSignatureSetup(then: .placeInNextField)
             return

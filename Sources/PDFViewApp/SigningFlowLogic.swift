@@ -68,16 +68,21 @@ enum SigningShortcut {
     static let placeOnCurrentPage = "⌥⌘P"
 }
 
+/// The Fields/Anywhere choice per stamp kind, remembered for one window. Signatures default to the
+/// PDF's signature fields; initials and dates usually go elsewhere on the page, so they start in Anywhere.
+struct PlacementChoices: Equatable {
+    private var anywhere: [StampKind: Bool] = [:]
+
+    func entryMode(for kind: StampKind, hasSignatureFields: Bool) -> SigningMode {
+        SigningFlowLogic.mode(anywhere: anywhere[kind] ?? (kind != .signature), hasSignatureFields: hasSignatureFields)
+    }
+
+    mutating func remember(anywhere: Bool, for kind: StampKind) {
+        self.anywhere[kind] = anywhere
+    }
+}
+
 enum SigningFlowLogic {
-    static func entryMode(hasSignatureFields: Bool) -> SigningMode {
-        hasSignatureFields ? .fieldPlacement : .freePlacement
-    }
-
-    /// The Sign toolbar toggle and Start/Stop Signing menu item.
-    static func toggled(_ mode: SigningMode, hasSignatureFields: Bool) -> SigningMode {
-        mode == .idle ? entryMode(hasSignatureFields: hasSignatureFields) : .idle
-    }
-
     /// Done, Escape, or Stop Signing.
     static func exited(_: SigningMode) -> SigningMode {
         .idle
@@ -99,11 +104,27 @@ enum SigningFlowLogic {
 
     static func statusText(mode: SigningMode, kind: StampKind = .signature) -> String {
         let instruction = kind == .signature ? "sign" : "place your \(kind.title.lowercased())"
-        return mode == .fieldPlacement
-            ? "Click a signature field, choose Anywhere, or use Sign > "
-            + "\(StampWorkflow.placeInNextFieldTitle(kind: kind)) (\(SigningShortcut.placeInNextField))."
-            : "Click where you want to \(instruction), or use Sign > "
-            + "\(StampWorkflow.placeOnCurrentPageTitle(kind: kind)) (\(SigningShortcut.placeOnCurrentPage))."
+        return switch (mode, kind) {
+        case (.fieldPlacement, .signature):
+            "Click a signature field, choose Anywhere, or use Sign > "
+                + "\(StampWorkflow.placeInNextFieldTitle(kind: kind)) (\(SigningShortcut.placeInNextField))."
+        case (.fieldPlacement, _):
+            "Click a signature field, or choose Anywhere to \(instruction) elsewhere on the page."
+        default:
+            "Click where you want to \(instruction), or use Sign > "
+                + "\(StampWorkflow.placeOnCurrentPageTitle(kind: kind)) (\(SigningShortcut.placeOnCurrentPage))."
+        }
+    }
+
+    /// Why Sign > Place Signature in Next Field is unavailable, or nil when it can be used. It fills
+    /// signature fields, so it never places initials or a date.
+    static func nextFieldUnavailableReason(kind: StampKind, hasSignatureFields: Bool) -> String? {
+        switch kind {
+        case _ where !hasSignatureFields: "This PDF has no signature fields."
+        case .signature: nil
+        case .initials: "Place in Next Field places signatures. Click a field or the page to place initials."
+        case .date: "Place in Next Field places signatures. Click a field or the page to place the date."
+        }
     }
 
     static func enteredAnnouncement(mode: SigningMode, kind: StampKind = .signature) -> String {

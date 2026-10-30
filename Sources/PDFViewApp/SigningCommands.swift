@@ -203,12 +203,16 @@ struct SigningCommandMenu: Commands {
                 .keyboardShortcut(MenuShortcuts.placeDate)
                 .disabled(!canSign)
 
-            // Keys mirror SigningShortcut, which the signing banner shows.
-            Button(StampWorkflow.placeInNextFieldTitle(kind: kind)) {
+            // Keys mirror SigningShortcut, which the signing banner shows. Fields take signatures only.
+            let nextFieldReason = SigningFlowLogic.nextFieldUnavailableReason(kind: kind, hasSignatureFields: hasFields)
+            Button(StampWorkflow.placeInNextFieldTitle(kind: .signature)) {
                 actions?.placeInNextField()
             }
             .keyboardShortcut(MenuShortcuts.placeInNextField)
-            .disabled(!(canSign && hasFields))
+            .disabled(!canSign || nextFieldReason != nil)
+            if hasFields, let nextFieldReason {
+                Text(nextFieldReason)
+            }
 
             Button(StampWorkflow.placeOnCurrentPageTitle(kind: kind)) {
                 actions?.placeOnCurrentPage()

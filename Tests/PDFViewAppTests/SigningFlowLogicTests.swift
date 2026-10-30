@@ -3,21 +3,6 @@ import AppKit
 import Testing
 @testable import PDFViewApp
 
-@Test func entryModeUsesFieldPlacementWhenFieldsExist() {
-    #expect(SigningFlowLogic.entryMode(hasSignatureFields: true) == .fieldPlacement)
-}
-
-@Test func entryModeUsesFreePlacementWhenNoFields() {
-    #expect(SigningFlowLogic.entryMode(hasSignatureFields: false) == .freePlacement)
-}
-
-@Test func signToggleStartsAndStopsSigning() {
-    #expect(SigningFlowLogic.toggled(.idle, hasSignatureFields: true) == .fieldPlacement)
-    #expect(SigningFlowLogic.toggled(.idle, hasSignatureFields: false) == .freePlacement)
-    #expect(SigningFlowLogic.toggled(.fieldPlacement, hasSignatureFields: true) == .idle)
-    #expect(SigningFlowLogic.toggled(.freePlacement, hasSignatureFields: false) == .idle)
-}
-
 @Test func doneAndEscapeReturnToIdleFromEverySigningMode() {
     for mode in [SigningMode.idle, .fieldPlacement, .freePlacement] {
         #expect(SigningFlowLogic.exited(mode) == .idle)
