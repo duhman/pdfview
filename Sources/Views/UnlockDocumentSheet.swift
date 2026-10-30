@@ -6,14 +6,30 @@ struct UnlockDocumentSheet: View {
     let onCancel: () -> Void
     @State private var password = ""
     @State private var error: String?
+    @FocusState private var isPasswordFocused: Bool
+
+    /// Nil when the password opened the document; otherwise the message to show and announce.
+    static func attempt(_ password: String, with protection: DocumentProtection) -> String? {
+        protection.unlock(withPassword: password) ? nil : "Incorrect password. Try again."
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Unlock PDF").font(.headline)
             Text("Enter this PDF's password to read and sign it.")
-            SecureField("Password", text: $password).onSubmit(unlock)
+            SecureField("Password", text: $password)
+                .focused($isPasswordFocused)
+                .onSubmit(unlock)
             if let error {
-                Text(error).foregroundStyle(.red).accessibilityLabel(error)
+                // Red marks the problem; the words stay in the primary colour so they keep full contrast.
+                Label {
+                    Text(error)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.red)
+                }
+                .font(.callout)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Error: \(error)")
             }
             HStack {
                 Spacer()
@@ -28,16 +44,20 @@ struct UnlockDocumentSheet: View {
         }
         .padding(24)
         .frame(width: 360)
+        .onAppear { isPasswordFocused = true }
     }
 
     private func unlock() {
-        guard protection.unlock(withPassword: password) else {
-            error = "Incorrect password. Try again."
-            password.removeAll()
+        let failure = Self.attempt(password, with: protection)
+        password.removeAll()
+        guard let failure else {
+            onUnlock()
             return
         }
-        password.removeAll()
-        onUnlock()
+        error = failure
+        isPasswordFocused = true
+        // Posted every time, so a second wrong password is announced too.
+        StampAccessibility.announce(failure, in: NSApp.keyWindow)
     }
 }
 

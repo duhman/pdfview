@@ -364,3 +364,17 @@ private func initials(page: Int, bounds: CGRect) -> PDFViewerDocument.SignatureP
     #expect(protection.unlock(withPassword: "reader"))
     #expect(PDFContentView.documentForPageView(locked, protection: protection) === locked)
 }
+
+@MainActor
+@Test func unlockSheetReportsAWrongPasswordAndAcceptsTheRightOne() throws {
+    let source = try #require(PDFDocument(data: makeBlankPDF(pages: 1)))
+    let data = try #require(source.dataRepresentation(options: [
+        PDFDocumentWriteOption.userPasswordOption: "reader", PDFDocumentWriteOption.ownerPasswordOption: "owner",
+    ]))
+    let protection = try DocumentProtection(document: #require(PDFDocument(data: data)))
+
+    #expect(UnlockDocumentSheet.attempt("wrong", with: protection) == "Incorrect password. Try again.")
+    #expect(protection.isLocked)
+    #expect(UnlockDocumentSheet.attempt("reader", with: protection) == nil)
+    #expect(!protection.isLocked)
+}
