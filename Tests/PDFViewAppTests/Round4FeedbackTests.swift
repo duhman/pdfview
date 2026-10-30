@@ -100,3 +100,11 @@ import Testing
 @Test func progressAppearsAfterAboutThreeHundredMilliseconds() {
     #expect(DelayedVisibility.progressDelay == .milliseconds(300))
 }
+
+// MARK: Unlock sheet
+
+@Test func theUnlockSheetAnnouncesItsTitleAndInstruction() {
+    #expect(UnlockDocumentSheet.title == "Unlock PDF")
+    #expect(UnlockDocumentSheet.instruction == "Enter this PDF’s password to read and sign it.")
+    #expect(UnlockDocumentSheet.openingAnnouncement == "Unlock PDF. Enter this PDF’s password to read and sign it.")
+}

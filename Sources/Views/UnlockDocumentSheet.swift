@@ -8,6 +8,11 @@ struct UnlockDocumentSheet: View {
     @State private var error: String?
     @FocusState private var isPasswordFocused: Bool
 
+    static let title = "Unlock PDF"
+    static let instruction = "Enter this PDF’s password to read and sign it."
+    /// VoiceOver lands on the password field, so the sheet says what it is for as it opens.
+    static let openingAnnouncement = "\(title). \(instruction)"
+
     /// Nil when the password opened the document; otherwise the message to show and announce.
     static func attempt(_ password: String, with protection: DocumentProtection) -> String? {
         protection.unlock(withPassword: password) ? nil : "Incorrect password. Try again."
@@ -15,8 +20,9 @@ struct UnlockDocumentSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Unlock PDF").font(.headline)
-            Text("Enter this PDF's password to read and sign it.")
+            Text(Self.title).font(.headline)
+                .accessibilityAddTraits(.isHeader)
+            Text(Self.instruction)
             SecureField("Password", text: $password)
                 .focused($isPasswordFocused)
                 .onSubmit(unlock)
@@ -44,7 +50,13 @@ struct UnlockDocumentSheet: View {
         }
         .padding(24)
         .frame(width: 360)
-        .onAppear { isPasswordFocused = true }
+        .onAppear {
+            isPasswordFocused = true
+            // On the next turn, once the sheet's window is key and the field has focus.
+            DispatchQueue.main.async {
+                StampAccessibility.announce(Self.openingAnnouncement, in: NSApp.keyWindow)
+            }
+        }
     }
 
     private func unlock() {
