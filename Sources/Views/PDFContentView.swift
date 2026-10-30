@@ -31,7 +31,9 @@ struct PDFContentView: View {
     @State private var formValues: [FormFieldValue]?
     @State private var originalFormValues: [FormFieldValue]?
     @State private var savedFormValues: [FormFieldValue]?
-    @State private var savedURL: URL?
+    /// The last signed copy saved from this window; File menu sharing stays bound to it.
+    @State private var lastSavedURL: URL?
+    @State private var showsSavedBanner = false
 
     @State private var showSignatureSetupSheet = false
     @State private var isEditingSignature = false
@@ -89,8 +91,8 @@ struct PDFContentView: View {
             }
             if signingMode != .idle {
                 signingBanner
-            } else if let savedURL {
-                savedBanner(for: savedURL)
+            } else if showsSavedBanner, let lastSavedURL {
+                savedBanner(for: lastSavedURL)
             }
 
             if reader.find.isVisible {
@@ -223,7 +225,7 @@ extension PDFContentView {
             Image(systemName: "checkmark.circle.fill")
                 .foregroundStyle(.green)
                 .accessibilityHidden(true)
-            Text("Saved “\(url.lastPathComponent)”")
+            Text(SigningFlowLogic.savedText(for: url))
             Spacer()
             Button("Show in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -231,13 +233,12 @@ extension PDFContentView {
             ShareLink(item: url) {
                 Label("Share…", systemImage: "square.and.arrow.up")
             }
-            Button {
-                savedURL = nil
-            } label: {
+            Button(action: dismissSavedBanner) {
                 Image(systemName: "xmark")
             }
             .buttonStyle(.borderless)
-            .accessibilityLabel("Dismiss")
+            .accessibilityLabel("Close")
+            .help("Close. File > Share Signed Copy… and Show Signed Copy in Finder stay available.")
         }
         .font(.callout)
         .padding(.horizontal, 12)
@@ -246,12 +247,13 @@ extension PDFContentView {
         .overlay(alignment: .bottom) {
             Divider()
         }
-        .task(id: url) {
-            try? await Task.sleep(for: .seconds(8))
-            if !Task.isCancelled, savedURL == url {
-                savedURL = nil
-            }
-        }
+        // The banner stays until closed, so there is time to read it and to reach its buttons.
+        .onExitCommand(perform: dismissSavedBanner)
+    }
+
+    private func dismissSavedBanner() {
+        showsSavedBanner = false
+        viewer.focusDocument()
     }
 
     private var signatureSetupSheet: some View {
@@ -359,6 +361,8 @@ extension PDFContentView {
             placeOnCurrentPage: placeOnCurrentPage,
             setAnywhere: setAnywhere,
             saveSignedCopy: { saveSignedCopy() },
+            lastSavedURL: lastSavedURL,
+            shareSignedCopy: { url in viewer.showSharingPicker(for: url) },
             editSignature: editSignature,
             deleteSignature: confirmDeleteSignature
         )
@@ -552,8 +556,9 @@ extension PDFContentView {
                 case .success:
                     exportedPlacements = placements
                     savedFormValues = values
-                    savedURL = url
-                    announce(SigningFlowLogic.savedAnnouncement(fileName: url.lastPathComponent))
+                    lastSavedURL = url
+                    showsSavedBanner = true
+                    announce(SigningFlowLogic.savedAnnouncement(for: url))
                     completion(document.signaturePlacements == placements)
                 case let .failure(error):
                     if !(error is CancellationError) {

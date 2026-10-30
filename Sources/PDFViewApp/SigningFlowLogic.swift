@@ -85,8 +85,13 @@ enum SigningFlowLogic {
         "Signature placed on page \(pageIndex + 1)"
     }
 
-    static func savedAnnouncement(fileName: String) -> String {
-        "Saved \(fileName)"
+    /// The saved banner names the folder too, so the copy can be found after the banner is closed.
+    static func savedText(for url: URL) -> String {
+        "Saved “\(url.lastPathComponent)” to \(url.deletingLastPathComponent().lastPathComponent)"
+    }
+
+    static func savedAnnouncement(for url: URL) -> String {
+        "Saved \(url.lastPathComponent) to \(url.deletingLastPathComponent().lastPathComponent)"
     }
 
     static func nextFieldIndex(after lastIndex: Int?, count: Int) -> Int? {

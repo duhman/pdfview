@@ -68,6 +68,19 @@ final class PDFViewerProxy {
         coordinator?.checkFormValues()
     }
 
+    /// Returns keyboard focus to the document, e.g. after a banner or the Find bar closes.
+    func focusDocument() {
+        guard let pdfView, let window = pdfView.window else { return }
+        window.makeFirstResponder(pdfView)
+    }
+
+    /// Opens the share menu from the top of the document, for File > Share Signed Copy….
+    func showSharingPicker(for url: URL) {
+        guard let pdfView else { return }
+        let anchor = CGRect(x: pdfView.bounds.midX, y: pdfView.bounds.maxY - 1, width: 1, height: 1)
+        NSSharingServicePicker(items: [url]).show(relativeTo: anchor, of: pdfView, preferredEdge: .minY)
+    }
+
     /// Selects a stamp and gives the PDF view keyboard focus so arrow keys nudge it.
     func select(placementID: UUID?) {
         coordinator?.selectedPlacementID = placementID

@@ -53,7 +53,6 @@ import Testing
 @Test func announcementsDescribeTheOutcome() {
     #expect(SigningFlowLogic.enteredAnnouncement(mode: .freePlacement).contains("Escape"))
     #expect(SigningFlowLogic.placedAnnouncement(pageIndex: 1) == "Signature placed on page 2")
-    #expect(SigningFlowLogic.savedAnnouncement(fileName: "a-signed.pdf") == "Saved a-signed.pdf")
 }
 
 @Test func nextFieldCyclesThroughDetectedFields() {

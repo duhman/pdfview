@@ -11,6 +11,9 @@ struct SigningCommandActions {
     var placeOnCurrentPage: () -> Void
     var setAnywhere: (Bool) -> Void
     var saveSignedCopy: () -> Void
+    /// The last signed copy this window saved, for the File menu's Share and Show in Finder.
+    var lastSavedURL: URL?
+    var shareSignedCopy: (URL) -> Void
     var editSignature: () -> Void
     var deleteSignature: () -> Void
 }
@@ -49,6 +52,21 @@ struct SigningCommandMenu: Commands {
     @ObservedObject var signatureStore: SignatureStore
 
     var body: some Commands {
+        CommandGroup(after: .saveItem) {
+            let url = actions?.lastSavedURL
+            Button("Share Signed Copy…") {
+                if let url {
+                    actions?.shareSignedCopy(url)
+                }
+            }
+            .disabled(url == nil)
+            Button("Show Signed Copy in Finder") {
+                if let url {
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
+                }
+            }
+            .disabled(url == nil)
+        }
         CommandMenu("Sign") {
             let canSign = actions?.canSign ?? false
             let hasFields = actions?.hasSignatureFields ?? false
