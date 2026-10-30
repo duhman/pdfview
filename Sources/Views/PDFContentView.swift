@@ -307,6 +307,11 @@ extension PDFContentView {
                 Label(message, systemImage: "exclamationmark.circle")
             } else {
                 Text(SigningFlowLogic.statusText(mode: signingMode, kind: stampKind))
+                    .help(SigningFlowLogic.statusHelp(kind: stampKind) ?? "")
+                if let location = fieldLocationText {
+                    Text(location)
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer()
             if hasSignatureFields {
@@ -444,6 +449,16 @@ extension PDFContentView {
 
     private var signatureFields: [SignatureField] {
         documentState?.signatureFields ?? []
+    }
+
+    /// Where the next empty signature field is, while placing into fields and none is on this page.
+    private var fieldLocationText: String? {
+        guard signingMode == .fieldPlacement else { return nil }
+        return SigningFlowLogic.fieldLocationText(
+            fields: signatureFields,
+            placements: document.signaturePlacements,
+            currentPageIndex: reader.pageIndex
+        )
     }
 
     private var isSavedBannerVisible: Bool {
@@ -650,7 +665,7 @@ extension PDFContentView {
         guard canSign else { return }
         viewer.select(placementID: nil)
         signingMode = mode
-        announce(SigningFlowLogic.enteredAnnouncement(mode: mode, kind: stampKind))
+        announce(SigningFlowLogic.enteredAnnouncement(mode: mode, kind: stampKind, fieldLocation: fieldLocationText))
     }
 
     private func exitSigning() {

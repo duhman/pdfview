@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - View > Zoom to Fit (⌘9) shows the whole current page; before, it fit only the page width in continuous mode and cut off the bottom. The old behaviour is View > Fit Width (⌥⌘9)
 - Place Initials on Every Page scrolls to the new initials on the current page (or the next page that got some), so you can see where they went; the "Placed initials on N pages." notice stays
+- The initials signing banner fits on one line at a 1000 pt window: the Place Initials on Every Page (⌥⌘I) hint moved to the banner's help tag, and VoiceOver still hears it when signing starts
 - Next / Previous Form Field skips read-only fields; a form with nothing editable says "This document has no form fields you can fill in."
 - Landing on a checkbox, radio button, pop-up, list or button with Next / Previous Form Field gives the document keyboard focus and ends any text edit, so Space and Return act on that field instead of typing into the text field just left
 - Sign > Anywhere is available only while signing; choosing it no longer starts signing
@@ -18,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Activate Form Field on a push button says it can't be pressed from the keyboard, instead of asking for a click
 
 ### Added
+- While placing into signature fields, the signing banner says where the next empty field is when none is on the current page ("Next field: page 3."), and VoiceOver hears it when signing starts
 - After a stamp is placed, the banner says how to select it and move it with the arrow keys, matching the VoiceOver announcement; after the first initials on a multi-page PDF whose other pages have none, both also point to Place Initials on Every Page (⌥⌘I)
 - VoiceOver announces a successful unlock with the page count ("Unlocked, 12 pages")
 - The disabled Save Signed Copy toolbar button's help tag and VoiceOver hint say what is missing ("Place a signature or fill a field first.", or that the PDF is locked or a save is running)

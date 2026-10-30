@@ -89,3 +89,80 @@ import Testing
     #expect(StampWorkflow.targetToReveal(targets, currentPageIndex: nil)?.pageIndex == 0)
     #expect(StampWorkflow.targetToReveal([], currentPageIndex: 0) == nil)
 }
+
+// MARK: The signing banner says where the fields are
+
+private func field(page: Int, x: CGFloat = 100) -> SignatureField {
+    SignatureField(pageIndex: page, bounds: CGRect(x: x, y: 100, width: 200, height: 50))
+}
+
+private func stamp(page: Int, in field: SignatureField) -> PDFViewerDocument.SignaturePlacement {
+    PDFViewerDocument.SignaturePlacement(
+        pageIndex: page,
+        bounds: field.bounds.insetBy(dx: 10, dy: 10),
+        signaturePNGData: Data([1]),
+        signerName: "Tester"
+    )
+}
+
+@Test func theBannerPointsToTheFieldWhenItIsOnAnotherPage() {
+    #expect(SigningFlowLogic.fieldLocationText(
+        fields: [field(page: 2)], placements: [], currentPageIndex: 0
+    ) == "Next field: page 3.")
+}
+
+@Test func theBannerSaysNothingExtraWhenAnEmptyFieldIsOnThisPage() {
+    #expect(SigningFlowLogic.fieldLocationText(
+        fields: [field(page: 0), field(page: 2)], placements: [], currentPageIndex: 0
+    ) == nil)
+}
+
+@Test func theBannerPointsPastFilledFieldsAndWrapsAround() {
+    let filled = field(page: 1)
+    let fields = [field(page: 0), filled, field(page: 1, x: 300)]
+    // Past the last empty field (page 2's second one), it wraps to page 1.
+    #expect(SigningFlowLogic.fieldLocationText(
+        fields: fields, placements: [stamp(page: 1, in: filled)], currentPageIndex: 2
+    ) == "Next field: page 1.")
+    #expect(SigningFlowLogic.fieldLocationText(
+        fields: [filled], placements: [stamp(page: 1, in: filled)], currentPageIndex: 0
+    ) == nil)
+    #expect(SigningFlowLogic.fieldLocationText(fields: [], placements: [], currentPageIndex: 0) == nil)
+    #expect(SigningFlowLogic.fieldLocationText(
+        fields: [field(page: 0), field(page: 3)], placements: [], currentPageIndex: 1
+    ) == "Next field: page 4.")
+}
+
+@Test func enteringSigningAlsoSaysWhereTheFieldIs() {
+    let text = SigningFlowLogic.enteredAnnouncement(
+        mode: .fieldPlacement, kind: .signature, fieldLocation: "Next field: page 3."
+    )
+    #expect(text.contains("Next field: page 3."))
+    #expect(text.hasSuffix("Press Escape to stop."))
+}
+
+// MARK: The initials banner fits on one line
+
+@MainActor
+@Test func everySigningBannerInstructionFitsOneLineAtA1000PointWindow() {
+    let font = NSFont.preferredFont(forTextStyle: .callout)
+    for kind in StampKind.allCases {
+        for mode in [SigningMode.freePlacement, .fieldPlacement] {
+            let text = SigningFlowLogic.statusText(mode: mode, kind: kind) + " Next field: page 10."
+            let width = (text as NSString).size(withAttributes: [.font: font]).width
+            // 1000 pt less the icon, Fields/Anywhere picker, Done button, spacing and padding.
+            #expect(width < 680, "\(kind) \(mode): \(width) pt")
+        }
+    }
+}
+
+@Test func theInitialsBannerLeavesEveryPageToHelpAndVoiceOver() {
+    for mode in [SigningMode.freePlacement, .fieldPlacement] {
+        #expect(!SigningFlowLogic.statusText(mode: mode, kind: .initials).contains("Every Page"))
+        #expect(SigningFlowLogic.statusHelp(kind: .initials)?
+            .contains("Sign > Place Initials on Every Page (⌥⌘I)") == true)
+        #expect(SigningFlowLogic.enteredAnnouncement(mode: mode, kind: .initials)
+            .contains("Sign > Place Initials on Every Page (⌥⌘I) initials every page at once."))
+    }
+    #expect(SigningFlowLogic.statusHelp(kind: .signature) == nil)
+}

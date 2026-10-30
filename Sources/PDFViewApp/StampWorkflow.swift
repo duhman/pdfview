@@ -78,15 +78,14 @@ enum StampWorkflow {
         let start = lastIndex.map { $0 + 1 } ?? 0
         return (0 ..< fields.count).lazy
             .map { (start + $0) % fields.count }
-            .first { index in
-                let field = fields[index]
-                return !placements.contains {
-                    $0.pageIndex == field.pageIndex && field.bounds.contains(CGPoint(
-                        x: $0.bounds.midX,
-                        y: $0.bounds.midY
-                    ))
-                }
-            }
+            .first { !isFilled(fields[$0], by: placements) }
+    }
+
+    /// A field holds a stamp when a stamp's centre is inside it.
+    static func isFilled(_ field: SignatureField, by placements: [PDFViewerDocument.SignaturePlacement]) -> Bool {
+        placements.contains {
+            $0.pageIndex == field.pageIndex && field.bounds.contains(CGPoint(x: $0.bounds.midX, y: $0.bounds.midY))
+        }
     }
 
     // MARK: Initials on every page

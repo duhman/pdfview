@@ -128,9 +128,10 @@ enum SigningFlowLogic {
         mode == .fieldPlacement && !hasSignatureFields ? .freePlacement : mode
     }
 
+    /// The banner's one-line instruction. Longer hints go to its help tag and to VoiceOver.
     static func statusText(mode: SigningMode, kind: StampKind = .signature) -> String {
         let instruction = kind == .signature ? "sign" : "place your \(kind.title.lowercased())"
-        let text = switch (mode, kind) {
+        return switch (mode, kind) {
         case (.fieldPlacement, .signature):
             "Click a signature field, choose Anywhere, or use Sign > "
                 + "\(StampWorkflow.placeInNextFieldTitle(kind: kind)) (\(SigningShortcut.placeInNextField))."
@@ -140,9 +141,27 @@ enum SigningFlowLogic {
             "Click where you want to \(instruction), or use Sign > "
                 + "\(StampWorkflow.placeOnCurrentPageTitle(kind: kind)) (\(SigningShortcut.placeOnCurrentPage))."
         }
-        guard kind == .initials else { return text }
-        return text + " Sign > \(StampWorkflow.everyPageActionName) (\(SigningShortcut.placeInitialsOnEveryPage)) "
+    }
+
+    /// What does not fit on the banner's line: shown as its help tag and read when signing starts.
+    static func statusHelp(kind: StampKind) -> String? {
+        guard kind == .initials else { return nil }
+        return "Sign > \(StampWorkflow.everyPageActionName) (\(SigningShortcut.placeInitialsOnEveryPage)) "
             + "initials every page at once."
+    }
+
+    /// Where the next empty signature field is, when none is on the current page; nil when one is on
+    /// screen already or every field holds a stamp.
+    static func fieldLocationText(
+        fields: [SignatureField],
+        placements: [PDFViewerDocument.SignaturePlacement],
+        currentPageIndex: Int?
+    ) -> String? {
+        let emptyPages = fields.filter { !StampWorkflow.isFilled($0, by: placements) }.map(\.pageIndex).sorted()
+        let current = currentPageIndex ?? 0
+        guard !emptyPages.isEmpty, !emptyPages.contains(current) else { return nil }
+        let next = emptyPages.first { $0 > current } ?? emptyPages[0]
+        return "Next field: page \(next + 1)."
     }
 
     /// Why Sign > Place Signature in Next Field is unavailable, or nil when it can be used. It fills
@@ -184,8 +203,13 @@ enum SigningFlowLogic {
     /// Select Next/Previous Stamp before anything has been placed.
     static let noStampsNotice = "There are no stamps to select. Place a signature, initials or a date first."
 
-    static func enteredAnnouncement(mode: SigningMode, kind: StampKind = .signature) -> String {
-        "Placing \(kind.title.lowercased()). \(statusText(mode: mode, kind: kind)) Press Escape to stop."
+    static func enteredAnnouncement(
+        mode: SigningMode,
+        kind: StampKind = .signature,
+        fieldLocation: String? = nil
+    ) -> String {
+        let parts = [statusText(mode: mode, kind: kind), statusHelp(kind: kind), fieldLocation].compactMap(\.self)
+        return "Placing \(kind.title.lowercased()). \(parts.joined(separator: " ")) Press Escape to stop."
     }
 
     static let exitedAnnouncement = "Stopped signing."
