@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Thumbnail and recursive outline sidebar, page labels, Go menu and validated Go to Page sheet
+- Asynchronous Find with match count, highlights, next/previous commands and Escape dismissal
+- Signed printing with PDF permission checks, auto-rotation, temporary-file cleanup and a sandbox print entitlement
+- View layout commands for single/two-page and continuous modes, with separate cover-page support
+- Remembered page, destination point and zoom using a hashed-path store bounded to 200 files
+- Cancellable signed-copy export with page progress, main-actor yielding and duplicate-save protection
+- Reader logic, PDFKit integration, print preparation and async export regression tests
 - Procedurally drawn macOS app icon, bundled with PDFView, and a Swift regeneration script
 - Restored `PDFViewAppTests` Swift Testing target in `Package.swift`
 - Committed `Resources/PDFView.entitlements` sandbox template
@@ -17,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Verification runs locally: `scripts/ci-local.sh` builds debug and release bundles with stock `/bin/bash`, runs the tests, checks the bundle and runs pinned SwiftLint 0.65.1 / SwiftFormat 0.64.4 on the untouched checkout
 - Building requires Xcode 27.1 or later (Swift 6.4), the toolchain the app is tested with
 - README and CONTRIBUTING now use the real repository URL and accurate test claims
-- README positions PDFView as a full native reader with offline visual signing and labels the feature list as the release target
+- README documents shipped reader/signing features and shortcuts, while distinguishing older downloads
 - Architecture and contributor documentation describe the release target and reproducible local commands
 - `build_app.sh` uses `Resources/Info.plist`, patches metadata, signs the executable with entitlements
 - ARCHITECTURE.md aligned with current signing modes and test layout

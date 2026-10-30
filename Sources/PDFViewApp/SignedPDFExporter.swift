@@ -56,6 +56,74 @@ enum SignedPDFExporter {
         }
     }
 
+    /// PDFKit stays on the main actor. Each rendered page is a cancellation and UI-yield boundary.
+    static func writeAsync(
+        _ source: PDFDocument,
+        placements: [PDFViewerDocument.SignaturePlacement],
+        to destination: URL,
+        progress: (ExportProgress) -> Void
+    ) async throws {
+        guard destination.isFileURL else { throw ExportError.invalidDestinationURL }
+        guard !source.isLocked else { throw ExportError.documentLocked }
+        try Task.checkCancellation()
+        let sourcePages = try pages(in: source)
+        defer { withExtendedLifetime(sourcePages) {} }
+        let stamps = try decode(placements, pageCount: source.pageCount)
+        let manager = FileManager.default
+        let staging = try manager.url(
+            for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: destination, create: true
+        )
+        defer { try? manager.removeItem(at: staging) }
+        let rendered = staging.appendingPathComponent("rendered.pdf")
+        let completed = staging.appendingPathComponent("completed.pdf")
+        try await renderAsync(sourcePages, stamps: stamps, to: rendered, progress: progress)
+        try Task.checkCancellation()
+        try finalize(rendered, from: source, to: completed)
+        // Allow an Escape queued during final serialization to cancel before committing the file.
+        await Task.yield()
+        try Task.checkCancellation()
+        _ = try validatedDocument(at: completed, pageCount: sourcePages.count)
+        await Task.yield()
+        try Task.checkCancellation()
+        if manager.fileExists(atPath: destination.path) {
+            _ = try manager.replaceItemAt(destination, withItemAt: completed)
+        } else {
+            try manager.moveItem(at: completed, to: destination)
+        }
+    }
+
+    private static func renderAsync(
+        _ pages: [PDFPage], stamps: [Int: [Stamp]], to url: URL, progress: (ExportProgress) -> Void
+    ) async throws {
+        guard let context = CGContext(url as CFURL, mediaBox: nil, nil) else {
+            throw ExportError.cannotCreatePDFContext
+        }
+        defer { context.closePDF() }
+        progress(ExportProgress(completedPages: 0, totalPages: pages.count))
+        await Task.yield()
+        for (index, page) in pages.enumerated() {
+            try Task.checkCancellation()
+            renderPage(page, stamps: stamps[index] ?? [], in: context)
+            progress(ExportProgress(completedPages: index + 1, totalPages: pages.count))
+            await Task.yield()
+        }
+    }
+
+    private static func renderPage(_ page: PDFPage, stamps: [Stamp], in context: CGContext) {
+        autoreleasepool {
+            let media = page.bounds(for: .mediaBox)
+            context.beginPDFPage([
+                kCGPDFContextMediaBox as String: boxData(media),
+                kCGPDFContextCropBox as String: boxData(page.bounds(for: .cropBox)),
+            ] as CFDictionary)
+            defer { context.endPDFPage() }
+            draw(page, media: media, in: context)
+            for stamp in stamps {
+                context.draw(stamp.image, in: stamp.bounds)
+            }
+        }
+    }
+
     private static func pages(in document: PDFDocument) throws -> [PDFPage] {
         try (0 ..< document.pageCount).map { index in
             guard let page = document.page(at: index) else { throw ExportError.cannotReadPage(index: index) }
@@ -107,18 +175,7 @@ enum SignedPDFExporter {
         defer { context.closePDF() }
         for index in 0 ..< source.pageCount {
             guard let page = source.page(at: index) else { throw ExportError.cannotReadPage(index: index) }
-            autoreleasepool {
-                let media = page.bounds(for: .mediaBox)
-                context.beginPDFPage([
-                    kCGPDFContextMediaBox as String: boxData(media),
-                    kCGPDFContextCropBox as String: boxData(page.bounds(for: .cropBox)),
-                ] as CFDictionary)
-                defer { context.endPDFPage() }
-                draw(page, media: media, in: context)
-                for stamp in stamps[index] ?? [] {
-                    context.draw(stamp.image, in: stamp.bounds)
-                }
-            }
+            renderPage(page, stamps: stamps[index] ?? [], in: context)
         }
     }
 
@@ -420,5 +477,17 @@ private struct PDFExportGeometry {
 
     private static func stream(_ commands: String) -> String {
         "<< /Length \(commands.utf8.count) >>\nstream\n\(commands)endstream"
+    }
+}
+
+struct ExportProgress: Equatable {
+    var completedPages: Int
+    var totalPages: Int
+    var fraction: Double {
+        totalPages > 0 ? Double(completedPages) / Double(totalPages) : 0
+    }
+
+    var text: String {
+        "Saving signed copy… \(completedPages) of \(totalPages) pages"
     }
 }

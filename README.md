@@ -9,7 +9,7 @@ A full native Mac PDF reader with private, offline visual signing.
 
 ## Install
 
-Requires **macOS 14.2 or later**. Download the universal ZIP for Apple silicon and Intel from the [latest release](https://github.com/duhman/pdfview/releases/latest), unzip it, and move `PDFView.app` to Applications. The feature list below is the target for this release; older downloads may not include all of it.
+Requires **macOS 14.2 or later**. Download the universal ZIP for Apple silicon and Intel from the [latest release](https://github.com/duhman/pdfview/releases/latest), unzip it, and move `PDFView.app` to Applications. The features below describe the current source; older downloads may not include all of them.
 
 The downloadable build is ad-hoc signed and not notarized. For the first launch:
 
@@ -28,16 +28,15 @@ If you have `duti` installed, you can also run:
 duti -s com.bigmac.pdfview com.adobe.pdf all
 ```
 
-## Features — target for this release
-
-These are the release targets being integrated and verified, not a claim about every existing download.
+## Features
 
 ### Read
 
-- Page indicator and Go to Page.
+- Page indicator with PDF page labels and a validated Go to Page sheet.
 - Thumbnails and document outline (bookmarks) in the sidebar.
-- Find text and Print.
-- Remember your place when reopening a document.
+- Asynchronous text search with match highlights and previous/next navigation.
+- Print the PDF with any placed signatures included; document print permissions are respected.
+- Remember your page, scroll position and zoom for the 200 most recently read file paths.
 - Single-page and two-page layouts, continuous scrolling, and full screen.
 - Actual Size, Zoom to Fit, and manual zoom.
 
@@ -47,18 +46,25 @@ These are the release targets being integrated and verified, not a claim about e
 - Place it in the PDF's own signature fields or anywhere on a page.
 - Select, move, resize, delete, undo, and redo signature placements.
 - Save a flattened signed copy while keeping page sizes, links, and bookmarks; the original stays separate.
+- Follow page-by-page save progress and cancel before the destination changes.
 - Keep the signature profile locally in the app's sandbox, shared across document windows.
 
 Signatures are **visual stamps, not certificate-based digital signatures**. They do not provide certificate identity verification or cryptographic tamper detection. Flattening puts the visible signature into the page content; it does not make the PDF tamper-proof.
 
-### Keyboard shortcuts — release target
+### Keyboard shortcuts
 
 | Shortcut | Action |
 | --- | --- |
 | ⌥⌘S | Start/Stop Signing |
 | ⇧⌘E | Save Signed Copy… |
-| Esc | Finish signing |
+| Esc | Cancel an export, finish signing, or close Find |
+| ⌃⌘S | Show/Hide Sidebar |
+| ⌥⌘G | Go to Page… |
+| ⌥↓ / ⌥↑ | Next / Previous Page |
+| ⌥⌘↑ / ⌥⌘↓ | First / Last Page |
 | ⌘F | Find |
+| ⌘G / ⇧⌘G | Next / Previous Match |
+| ⌃⌘F | Enter/Exit Full Screen |
 | ⌘P | Print |
 | ⌘0 | Actual Size |
 | ⌘9 | Zoom to Fit |
