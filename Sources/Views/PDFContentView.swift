@@ -118,7 +118,11 @@ struct PDFContentView: View {
     private var content: some View {
         VStack(spacing: 0) {
             if let progress = export.progress {
-                ExportProgressBanner(progress: progress, cancel: cancelExport)
+                ExportProgressBanner(
+                    progress: progress,
+                    purpose: printTask == nil ? .signedCopy : .print,
+                    cancel: cancelExport
+                )
             }
             if protectionSession.protection?.isLocked == true {
                 HStack {

@@ -333,3 +333,15 @@ private func initials(page: Int, bounds: CGRect) -> PDFViewerDocument.SignatureP
     #expect(StampWorkflow.deleteAlertMessage(.signature)
         == "It will be removed from this Mac. Signatures already placed in documents are not affected.")
 }
+
+// MARK: Progress banner purpose
+
+@Test func printProgressSaysPreparingToPrint() {
+    let rendering = ExportProgress(completedPages: 2, totalPages: 5)
+    let writing = ExportProgress(completedPages: 5, totalPages: 5, stage: .writing)
+    #expect(ExportPurpose.print.text(for: rendering) == "Preparing to print… 2 of 5 pages")
+    #expect(ExportPurpose.print.text(for: writing) == "Preparing to print…")
+    #expect(ExportPurpose.print.title == "Preparing to print")
+    #expect(ExportPurpose.signedCopy.text(for: rendering) == rendering.text)
+    #expect(ExportPurpose.signedCopy.title == "Saving signed copy")
+}
