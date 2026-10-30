@@ -6,22 +6,21 @@ struct KeyboardShortcutsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            // One grid for every section, so the key column lines up from File down to the document keys.
+            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
                 ForEach(Self.menus, id: \.self) { menu in
-                    section(menu) {
-                        ForEach(MenuShortcuts.entries.filter { $0.menu == menu }, id: \.title) { entry in
-                            row(
-                                keys: MenuShortcuts.display(entry.shortcut),
-                                action: entry.title,
-                                spokenKeys: MenuShortcuts.spoken(entry.shortcut)
-                            )
-                        }
+                    heading(menu)
+                    ForEach(MenuShortcuts.entries.filter { $0.menu == menu }, id: \.title) { entry in
+                        row(
+                            keys: MenuShortcuts.display(entry.shortcut),
+                            action: entry.title,
+                            spokenKeys: MenuShortcuts.spoken(entry.shortcut)
+                        )
                     }
                 }
-                section("In the Document") {
-                    ForEach(MenuShortcuts.documentKeys, id: \.keys) { key in
-                        row(keys: key.keys, action: key.action, spokenKeys: key.keys)
-                    }
+                heading("In the Document")
+                ForEach(MenuShortcuts.documentKeys, id: \.keys) { key in
+                    row(keys: key.keys, action: key.action, spokenKeys: key.keys)
                 }
             }
             .padding(24)
@@ -29,14 +28,14 @@ struct KeyboardShortcutsView: View {
         .frame(minWidth: 460, idealWidth: 520, minHeight: 360, idealHeight: 640)
     }
 
-    private func section(_ title: String, @ViewBuilder rows: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    private func heading(_ title: String) -> some View {
+        GridRow {
             Text(title)
                 .font(.headline)
                 .accessibilityAddTraits(.isHeader)
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
-                rows()
-            }
+                .padding(.top, title == Self.menus.first ? 0 : 14)
+                .padding(.bottom, 2)
+                .gridCellColumns(2)
         }
     }
 
@@ -45,6 +44,10 @@ struct KeyboardShortcutsView: View {
             Text(keys)
                 .monospaced()
                 .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+                // The longest key list wraps instead of pushing every action far to the right.
+                .frame(maxWidth: 110, alignment: .trailing)
+                .fixedSize(horizontal: false, vertical: true)
                 .gridColumnAlignment(.trailing)
             Text(action)
                 .fixedSize(horizontal: false, vertical: true)

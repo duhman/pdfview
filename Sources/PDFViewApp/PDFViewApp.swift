@@ -32,6 +32,8 @@ struct PDFViewApp: App {
         Window("Keyboard Shortcuts", id: "keyboard-shortcuts") {
             KeyboardShortcutsView()
         }
+        // The view's ideal height is ignored for a new window, which opened at 450 pt and cut off Go and Sign.
+        .defaultSize(width: 520, height: 720)
         .commandsRemoved()
 
         Window("About PDFView", id: "about") {
