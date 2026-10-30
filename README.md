@@ -4,7 +4,7 @@ A full native Mac PDF reader with private, offline visual signing.
 
 - Native and fast, built with SwiftUI and Apple's PDFKit.
 - Sign into the PDF's own signature fields or anywhere on a page, then move and resize your signature.
-- Save a flattened signed copy that keeps page sizes, links, and bookmarks.
+- Save a flattened signed copy that keeps page sizes, rotation, links, bookmarks, document info, form entries, and existing annotations such as another party’s signature.
 - Private: no network access, cloud services, or telemetry; your saved signature stays only on this Mac.
 
 <picture>
