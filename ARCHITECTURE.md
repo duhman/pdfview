@@ -40,10 +40,10 @@ The app is sandboxed with user-selected read/write file access and no network en
 
 `scripts/make-icon.swift` draws the icon procedurally with Core Graphics, exports the standard iconset resolutions, and invokes `iconutil`. The committed `Resources/AppIcon.icns` is the packaging input; regeneration requires only Swift and the macOS SDK.
 
-Ad-hoc signing is the default. Optional Developer ID notarization submits a `ditto` ZIP, checks for Accepted, staples and validates the app, and rebuilds the ZIP with the ticket. The tag release workflow currently distributes an ad-hoc signed app and documents the appropriate Gatekeeper override for each macOS version.
+Ad-hoc signing is the default. Optional Developer ID notarization submits a `ditto` ZIP, checks for Accepted, staples and validates the app, and rebuilds the ZIP with the ticket. Releases are built locally and currently distribute an ad-hoc signed app; the README documents the Gatekeeper override for each macOS version.
 
 ## Verification
 
-Swift Testing covers document/export behavior, signature rendering/storage, and interaction logic as the corresponding slices land. Bundle checks cover Bash compatibility, resources, architectures, metadata, and signature integrity. CI and release use the same pinned SwiftLint/SwiftFormat workflow; lint never rewrites the checkout.
+Swift Testing covers document/export behavior, signature rendering/storage, and interaction logic as the corresponding slices land. Bundle checks cover Bash compatibility, resources, architectures, metadata, and signature integrity. `scripts/ci-local.sh` runs every check locally (there is no hosted CI); lint never rewrites the checkout.
 
 On-screen verification remains necessary for menu routing, scrolling/zoom overlays, accessibility, multiwindow behavior, and first-launch Gatekeeper dialogs. Local builds and rendered bitmap checks do not establish that these UI flows or Apple's live notarization service succeeded.

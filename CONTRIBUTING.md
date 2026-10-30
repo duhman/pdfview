@@ -5,7 +5,7 @@ PDFView is a sandboxed, macOS-only SwiftUI and PDFKit app: a full PDF reader wit
 ## Prerequisites
 
 - macOS 14.2 or later.
-- Xcode 16+ or a Swift 6 toolchain with the macOS SDK.
+- Xcode 27.1 or later (Swift 6.4), the toolchain PDFView is built and tested with.
 - Git.
 
 The commands below work with stock macOS `/bin/bash` 3.2. Linux cannot build the AppKit target.
@@ -35,7 +35,7 @@ ARCHES="arm64 x86_64" /bin/bash ./build_app.sh release
 
 ## Install the pinned quality tools
 
-CI uses SwiftLint **0.65.1** and SwiftFormat **0.64.4**, downloaded from versioned release URLs. Install the same binaries outside the checkout:
+The checks use SwiftLint **0.65.1** and SwiftFormat **0.64.4**. Homebrew's `swiftlint` and `swiftformat` work if they are these versions; otherwise install the pinned binaries outside the checkout and put them on your `PATH`:
 
 ```bash
 PDFVIEW_TOOLS="$HOME/Library/Caches/PDFView-tools"
@@ -50,19 +50,28 @@ unzip -oq "$PDFVIEW_TOOLS/swiftformat.zip" -d "$PDFVIEW_TOOLS/swiftformat"
 
 ## Quality checks
 
-Run these from the repository root before submitting a change:
+PDFView has no hosted CI. Run the full gate from the repository root before pushing:
 
 ```bash
-PDFVIEW_TOOLS="$HOME/Library/Caches/PDFView-tools"
-"$PDFVIEW_TOOLS/swiftlint/swiftlint" lint --strict Sources Tests scripts
-"$PDFVIEW_TOOLS/swiftformat/swiftformat" Sources Tests scripts --lint
-swift build
-swift test --parallel
-/bin/bash ./build_app.sh debug
-/bin/bash ./build_app.sh release
+/bin/bash scripts/ci-local.sh
 ```
 
-To fix formatting, invoke SwiftFormat with just the files you changed, then rerun the checks. Do not format another contributor's files during parallel work. CI checks the untouched checkout; it does not apply formatting before checking it. The release workflow requires the same quality gates and passing tests before packaging the release artifact.
+It builds the debug and release bundles with stock `/bin/bash`, runs `swift test --parallel`, verifies the bundle (icon, minimum macOS, code signature), checks the SwiftLint and SwiftFormat versions, runs `swiftlint lint --strict` and `swiftformat --lint` on `Sources Tests scripts`, and checks documentation and resources. It exits non-zero if any step fails and lists the failed steps.
+
+To fix formatting, invoke SwiftFormat with just the files you changed, then rerun the checks. Do not format another contributor's files during parallel work. The lint steps check the untouched checkout; they never rewrite it.
+
+## Publish a release
+
+Releases are built on a Mac, not by a hosted workflow:
+
+```bash
+/bin/bash scripts/ci-local.sh
+ARCHES="arm64 x86_64" VERSION="0.2.0" BUILD_NUMBER="2" /bin/bash ./build_app.sh release
+ditto -c -k --keepParent PDFView.app PDFView-0.2.0-universal.zip
+gh release create v0.2.0 PDFView-0.2.0-universal.zip --title "PDFView 0.2.0" --notes-file <notes.md>
+```
+
+Without a Developer ID the app is ad-hoc signed; the release notes must give the Gatekeeper steps from the README.
 
 ## Regenerate the app icon
 

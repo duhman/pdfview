@@ -66,7 +66,7 @@ Signatures are **visual stamps, not certificate-based digital signatures**. They
 
 ## Development
 
-Use a Mac with Xcode 16+ or a Swift 6 toolchain with the macOS SDK. No Homebrew Bash is needed.
+Use a Mac with Xcode 27.1 or later (Swift 6.4); that is the toolchain PDFView is built and tested with. No Homebrew Bash is needed.
 
 ```bash
 git clone https://github.com/duhman/pdfview.git
@@ -83,7 +83,7 @@ To build a release bundle:
 /bin/bash ./build_app.sh release
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the pinned SwiftLint and SwiftFormat setup, quality checks, icon generation, and manual verification. CI checks the unmodified checkout and builds both bundle configurations with `/bin/bash`.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the pinned SwiftLint and SwiftFormat setup, quality checks, icon generation, and manual verification. There is no hosted CI: run `/bin/bash scripts/ci-local.sh` before pushing. It builds both bundle configurations with `/bin/bash`, runs the tests, checks the bundle, and lints the unmodified checkout.
 
 ### Signing and notarization
 

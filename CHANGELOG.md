@@ -14,14 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.github/SECURITY.md` vulnerability reporting policy
 
 ### Changed
+- Verification runs locally: `scripts/ci-local.sh` builds debug and release bundles with stock `/bin/bash`, runs the tests, checks the bundle and runs pinned SwiftLint 0.65.1 / SwiftFormat 0.64.4 on the untouched checkout
+- Building requires Xcode 27.1 or later (Swift 6.4), the toolchain the app is tested with
+- README and CONTRIBUTING now use the real repository URL and accurate test claims
 - README positions PDFView as a full native reader with offline visual signing and labels the feature list as the release target
-- CI and release share pinned SwiftLint 0.65.1 and SwiftFormat 0.64.4 gates that check the untouched checkout
-- CI builds debug and release app bundles with stock macOS `/bin/bash`; release packaging uses the same script for universal builds
 - Architecture and contributor documentation describe the release target and reproducible local commands
-- README and CONTRIBUTING now use the real repository URL and accurate CI/test claims
-- CI uses Xcode on `macos-15` (no overlapping Swift toolchain install)
 - `build_app.sh` uses `Resources/Info.plist`, patches metadata, signs the executable with entitlements
 - ARCHITECTURE.md aligned with current signing modes and test layout
+
+### Removed
+- GitHub Actions workflows (`ci.yml`, `quality.yml`, `release.yml`); checks and releases run locally
 
 ### Fixed
 - Debug packaging works with Bash 3.2; configuration parsing no longer uses Bash 4-only syntax
