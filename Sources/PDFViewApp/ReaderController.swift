@@ -27,6 +27,7 @@ final class ReaderController: NSObject {
     private(set) weak var observedClipView: NSClipView?
     private var outlineByPage: [Int: ObjectIdentifier] = [:]
     private var resolvedOutlinePages: Set<Int> = []
+    private var outlineDestinations: [(pageIndex: Int, id: ObjectIdentifier)] = []
     private weak var attachedDocument: PDFDocument?
     private var fileURL: URL?
     private var restored = false
@@ -96,6 +97,7 @@ final class ReaderController: NSObject {
         observedClipView = nil
         outlineByPage.removeAll()
         resolvedOutlinePages.removeAll()
+        outlineDestinations.removeAll()
         view = nil
         attachedDocument = nil
     }
@@ -121,6 +123,8 @@ final class ReaderController: NSObject {
         guard let document = attachedDocument else { return }
         pageCount = document.pageCount
         outline = ReaderOutlineNode.children(of: document.outlineRoot) ?? []
+        outlineDestinations = outlineDestinations(in: outline, document: document)
+            .sorted { $0.pageIndex < $1.pageIndex }
         outlineByPage.removeAll()
         resolvedOutlinePages.removeAll()
         printDisabledReason = document.isLocked ? "Unlock this PDF to print." :
@@ -134,11 +138,21 @@ final class ReaderController: NSObject {
         pageIndex = index == NSNotFound ? nil : index
         pageLabel = page.label
         if resolvedOutlinePages.insert(index).inserted {
-            outlineByPage[index] = page.selection(for: page.bounds(for: .cropBox))
-                .flatMap { document.outlineItem(for: $0) }
-                .map(ObjectIdentifier.init)
+            outlineByPage[index] = outlineDestinations.last { $0.pageIndex <= index }?.id
         }
         currentOutlineID = outlineByPage[index]
+    }
+
+    /// Traversal order breaks same-page ties in favour of the last, deepest section.
+    private func outlineDestinations(
+        in nodes: [ReaderOutlineNode], document: PDFDocument
+    ) -> [(pageIndex: Int, id: ObjectIdentifier)] {
+        nodes.flatMap { node in
+            let destination = (node.item.action as? PDFActionGoTo)?.destination ?? node.item.destination
+            let index = destination?.page.map { document.index(for: $0) } ?? NSNotFound
+            let own = index == NSNotFound ? [] : [(pageIndex: index, id: node.id)]
+            return own + outlineDestinations(in: node.children ?? [], document: document)
+        }
     }
 
     private func observeScrollView() {

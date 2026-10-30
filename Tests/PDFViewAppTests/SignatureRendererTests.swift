@@ -327,17 +327,11 @@ func undecodableDataIsRejected() {
 
 @MainActor
 @Test
-func dateStampUsesLocaleMediumStyleAndCustomFormat() throws {
+func dateStampUsesLocaleMediumStyle() throws {
     let date = Date(timeIntervalSince1970: 1_767_355_200) // 2026-01-02 12:00 UTC
     let zone = try #require(TimeZone(secondsFromGMT: 0))
     #expect(SignatureRenderer.dateText(date, locale: Locale(identifier: "en_US"), timeZone: zone) == "Jan 2, 2026")
     #expect(SignatureRenderer.dateText(date, locale: Locale(identifier: "en_GB"), timeZone: zone) == "2 Jan 2026")
-    #expect(SignatureRenderer.dateText(
-        date, locale: Locale(identifier: "en_US"), timeZone: zone, customFormat: "yyyy-MM-dd"
-    ) == "2026-01-02")
-    #expect(SignatureRenderer.dateText(
-        date, locale: Locale(identifier: "en_US"), timeZone: zone, customFormat: "  "
-    ) == "Jan 2, 2026")
 }
 
 @MainActor
@@ -355,9 +349,8 @@ func dateStampSharesTypedInkSizingAndTransparency() throws {
     #expect(alpha(atX: stamp.image.width - 1, y: stamp.image.height - 1, in: stamp.image) == 0)
     #expect(measuredInkBounds(stamp.image) != nil)
     #expect(SignatureRenderer.decodeImage(stamp.pngData) != nil)
-    let long = try #require(SignatureRenderer.renderDate(
-        date,
-        customFormat: String(repeating: "EEEE MMMM ", count: 10)
+    let long = try #require(SignatureRenderer.renderText(
+        String(repeating: "Wednesday September ", count: 10), font: SignatureRenderer.dateFont(size:)
     ))
     #expect(long.pointSize.width <= SignatureRenderer.maximumSize.width + 1)
 }

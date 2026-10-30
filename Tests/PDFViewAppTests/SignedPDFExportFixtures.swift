@@ -131,3 +131,16 @@ enum ExportFixture {
         )
     }
 }
+
+/// Test convenience only; production saves use SignedCopyOperation.
+@MainActor
+extension PDFViewerDocument {
+    /// Writes through the same snapshot/export path used by Save Signed Copy.
+    @discardableResult
+    func writeSignedCopy(to destinationURL: URL, password: String? = nil) async throws -> ExportedState {
+        guard let pdfDocument else { throw ExportError.missingDocument }
+        return try await SignedPDFExporter.writeAsync(
+            pdfDocument, placements: signaturePlacements, to: destinationURL, password: password
+        ) { _ in }
+    }
+}
