@@ -1,92 +1,105 @@
 # Contributing to PDFView
 
-Thank you for contributing. PDFView is a sandboxed, macOS-only SwiftUI + PDFKit app.
+PDFView is a sandboxed, macOS-only SwiftUI and PDFKit app: a full PDF reader with offline visual signing.
 
 ## Prerequisites
 
-- macOS 14.2+
-- Xcode 16+ (recommended) or Swift 6 with Apple SDKs
-- Git
+- macOS 14.2 or later.
+- Xcode 27.1 or later (Swift 6.4), the toolchain PDFView is built and tested with.
+- Git.
 
-## Setup
+The commands below work with stock macOS `/bin/bash` 3.2. Linux cannot build the AppKit target.
+
+## Build and run
 
 ```bash
 git clone https://github.com/duhman/pdfview.git
 cd pdfview
 swift build
 swift test
-./build_app.sh debug
+/bin/bash ./build_app.sh debug
+open PDFView.app
 ```
 
-Linux hosts cannot link the AppKit target; use a Mac or rely on GitHub Actions for build/test.
+Package a release locally with:
 
-## Architecture overview
-
-```
-Sources/
-├── PDFViewApp/
-│   ├── PDFViewApp.swift
-│   ├── PDFViewerDocument.swift
-│   ├── SignatureProfile.swift
-│   ├── SignatureStore.swift
-│   ├── SigningCommands.swift
-│   ├── SigningFlowLogic.swift
-│   └── SigningMode.swift
-└── Views/
-    ├── PDFContentView.swift
-    ├── PDFKitView.swift
-    ├── SignatureSetupSheet.swift
-    └── AboutView.swift
+```bash
+/bin/bash ./build_app.sh release
 ```
 
-Patterns:
+Both modes produce an ad-hoc signed `PDFView.app`. For a universal build:
 
-- `DocumentGroup` + `FileDocument` for PDF documents
-- `FocusedValues` for menu commands
-- `SignatureStore` for local profile persistence
-- `SigningMode` state for placement workflow
+```bash
+ARCHES="arm64 x86_64" /bin/bash ./build_app.sh release
+```
+
+## Install the pinned quality tools
+
+The checks use SwiftLint **0.65.1** and SwiftFormat **0.64.4**. Homebrew's `swiftlint` and `swiftformat` work if they are these versions; otherwise install the pinned binaries outside the checkout and put them on your `PATH`:
+
+```bash
+PDFVIEW_TOOLS="$HOME/Library/Caches/PDFView-tools"
+mkdir -p "$PDFVIEW_TOOLS/swiftlint" "$PDFVIEW_TOOLS/swiftformat"
+curl -fsSL https://github.com/realm/SwiftLint/releases/download/0.65.1/portable_swiftlint.zip -o "$PDFVIEW_TOOLS/swiftlint.zip"
+unzip -oq "$PDFVIEW_TOOLS/swiftlint.zip" -d "$PDFVIEW_TOOLS/swiftlint"
+curl -fsSL https://github.com/nicklockwood/SwiftFormat/releases/download/0.64.4/swiftformat.zip -o "$PDFVIEW_TOOLS/swiftformat.zip"
+unzip -oq "$PDFVIEW_TOOLS/swiftformat.zip" -d "$PDFVIEW_TOOLS/swiftformat"
+"$PDFVIEW_TOOLS/swiftlint/swiftlint" version
+"$PDFVIEW_TOOLS/swiftformat/swiftformat" --version
+```
 
 ## Quality checks
 
+PDFView has no hosted CI. Run the full gate from the repository root before pushing:
+
 ```bash
-swiftformat .
-swiftlint
-swift build --configuration release
-swift test
-./build_app.sh debug
+/bin/bash scripts/ci-local.sh
 ```
 
-CI (`.github/workflows/ci.yml`) runs build, test, app bundle packaging, SwiftLint, and SwiftFormat on `macos-15`.
+It builds the debug and release bundles with stock `/bin/bash`, runs `swift test --parallel`, verifies the bundle (icon, minimum macOS, code signature), checks the SwiftLint and SwiftFormat versions, runs `swiftlint lint --strict` and `swiftformat --lint` on `Sources Tests scripts`, and checks documentation and resources. It exits non-zero if any step fails and lists the failed steps.
 
-## Tests
+To fix formatting, invoke SwiftFormat with just the files you changed, then rerun the checks. Do not format another contributor's files during parallel work. The lint steps check the untouched checkout; they never rewrite it.
 
-Unit tests live in `Tests/PDFViewAppTests/` and use [Swift Testing](https://developer.apple.com/documentation/testing). They cover document export helpers, signing flow logic, and signature profile storage.
+## Publish a release
 
-UI and PDF rendering still require manual smoke testing on macOS.
+Releases are built on a Mac, not by a hosted workflow:
 
-## Commits
+```bash
+/bin/bash scripts/ci-local.sh
+ARCHES="arm64 x86_64" VERSION="0.2.0" BUILD_NUMBER="2" /bin/bash ./build_app.sh release
+ditto -c -k --keepParent PDFView.app PDFView-0.2.0-universal.zip
+gh release create v0.2.0 PDFView-0.2.0-universal.zip --title "PDFView 0.2.0" --notes-file <notes.md>
+```
 
-We prefer [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `test:`, `chore:`).
+Without a Developer ID the app is ad-hoc signed; the release notes must give the Gatekeeper steps from the README.
 
-## Security
+## Regenerate the app icon
 
-- Keep App Sandbox entitlements minimal (`Resources/PDFView.entitlements`).
-- Use security-scoped resource access when reading imported signature images or writing exported PDFs.
-- Do not add network entitlements without an explicit product decision.
-- Report vulnerabilities via [GitHub Security Advisories](https://github.com/duhman/pdfview/security/advisories/new).
+```bash
+swift scripts/make-icon.swift
+open .build/AppIcon.iconset/icon_512x512@2x.png
+```
+
+The script creates all standard iconset sizes in `.build/AppIcon.iconset` and writes `Resources/AppIcon.icns`. Inspect the 1024-pixel master and small sizes. Commit the script and `.icns` together when the design changes; do not commit the generated iconset.
+
+## Architecture and tests
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the release target and sections still in progress. Swift Testing tests live in `Tests/PDFViewAppTests`. Generate PDF fixtures in test code so tests do not depend on local files.
+
+For reader or signing changes, verify the affected flows on a Mac:
+
+- Open PDFs, navigate, search, change zoom/layout, and reopen to check reading position.
+- Create or edit a signature, place it in a field and on a page, move/resize, and undo/redo.
+- Save and reopen a signed copy; check page dimensions, rotation, links, bookmarks, and form content.
+- Check multiwindow state, keyboard commands, VoiceOver, and Print.
+
+Report which checks ran and what remains unverified. A successful build is not evidence that the on-screen flow works.
 
 ## Pull requests
 
-1. Branch from `main`
-2. Keep changes focused
-3. Update `CHANGELOG.md` (Unreleased) for user-visible changes
-4. Ensure `swift test` passes on macOS
-5. Describe manual Mac verification if UI or signing behavior changed
+1. Branch from `main` and keep changes focused.
+2. Use Conventional Commits and describe the problem the change solves.
+3. Update `CHANGELOG.md` under Unreleased for user-visible changes.
+4. Run the local checks and document relevant manual verification.
 
-## Resources
-
-- [DocumentGroup](https://developer.apple.com/documentation/swiftui/documentgroup)
-- [FileDocument](https://developer.apple.com/documentation/swiftui/filedocument)
-- [PDFKit](https://developer.apple.com/documentation/pdfkit)
-- [App Sandbox](https://developer.apple.com/documentation/security/app_sandbox)
-- [Swift Testing](https://developer.apple.com/documentation/testing)
+Keep sandbox entitlements minimal and secrets out of source control. Report vulnerabilities through [GitHub Security Advisories](https://github.com/duhman/pdfview/security/advisories/new).

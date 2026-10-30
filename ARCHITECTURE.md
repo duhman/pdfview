@@ -1,350 +1,49 @@
-# PDFView Architecture
-
-This document describes the technical architecture, design decisions, and implementation details of PDFView.
-
-## 🏗️ Overview
-
-PDFView is a native macOS PDF reader with visual signature capabilities, built using SwiftUI and PDFKit. The architecture emphasizes security, performance, and maintainability.
-
-## 🎯 Design Goals
-
-### Primary Goals
-- **Security**: App Sandbox compliance, secure PDF handling
-- **Performance**: Efficient PDF rendering, memory management
-- **Usability**: Native macOS experience, intuitive workflow
-- **Reliability**: Robust error handling, data integrity
-
-### Non-Goals
-- Cross-platform support (macOS-only)
-- Cloud sync or remote services
-- Certificate-based digital signatures
-- Advanced PDF editing beyond signing
-
-## 📁 Architecture Layers
-
-### 1. Application Layer (`Sources/PDFViewApp/`)
-
-#### `PDFViewApp.swift`
-Main application entry point using `DocumentGroup` for native document-based app architecture.
-
-```swift
-@main
-struct PDFViewApp: App {
-    var body: some Scene {
-        DocumentGroup(viewing: PDFViewerDocument.self) { file in
-            PDFContentView(document: file.$document)
-        }
-    }
-}
-```
-
-**Key Features:**
-- Native document handling with recent documents support
-- Window management and restoration
-- Menu system with keyboard shortcuts
-
-#### `PDFViewerDocument.swift`
-Core document model conforming to `FileDocument` protocol.
-
-```swift
-struct PDFViewerDocument: FileDocument {
-    var pdfDocument: PDFDocument?
-    private var originalPDFData: Data?
-    var signaturePlacements: [SignaturePlacement] = []
-}
-```
-
-**Responsibilities:**
-- PDF loading and validation
-- Signature placement tracking
-- Signed copy export with flattening
-- Immutable baseline preservation
-
-### 2. View Layer (`Sources/Views/`)
-
-#### `PDFContentView.swift`
-Main SwiftUI content view coordinating the entire user interface.
-
-**State Management:**
-- `@StateObject` for signature store and undo controller
-- `@State` for UI state (zoom, signing mode, alerts)
-- `@Environment` for system services (undo manager)
-
-#### `PDFKitView.swift`
-`NSViewRepresentable` bridge connecting SwiftUI to PDFKit.
-
-```swift
-struct PDFKitView: NSViewRepresentable {
-    func makeNSView(context: Context) -> PDFView {
-        let pdfView = PDFView()
-        // Configuration...
-        return pdfView
-    }
-}
-```
-
-**Responsibilities:**
-- PDF rendering and display
-- User interaction handling (clicks, gestures)
-- Coordinate system translation
-- Performance optimization
-
-#### `SignatureSetupSheet.swift`
-Modal sheet for signature profile creation and editing.
-
-**Features:**
-- Drawing canvas for signature creation
-- Text-based signature generation
-- Image import functionality
-- Profile management
-
-### 3. Business Logic Layer
-
-#### `SigningFlowLogic.swift`
-Pure functions for signing mode transitions and user-facing status text. UI state (`signingMode`, `hasSignatureFields`) lives in `PDFContentView`.
-
-**Signing modes (`SigningMode`):**
-- `idle`: Normal viewing
-- `fieldPlacement`: Prefer taps on PDF signature widget annotations
-- `freePlacement`: Allow taps anywhere on the page
-
-#### `SignatureStore.swift`
-Signature profile persistence and management.
-
-**Security Features:**
-- Local-only storage in app container
-- Secure data encoding
-- No keychain storage (user preference)
-
-#### `SigningCommands.swift`
-FocusedValue-based command system for menu integration.
-
-### 4. Data Models
-
-#### `SignatureProfile.swift`
-```swift
-struct SignatureProfile: Codable {
-    let id: UUID
-    var name: String
-    var pngData: Data
-    let createdDate: Date
-    var lastUsedDate: Date
-}
-```
-
-#### `SigningMode.swift`
-```swift
-enum SigningMode {
-    case idle
-    case fieldPlacement
-    case freePlacement
-}
-```
-
-## 🔄 Data Flow
-
-### PDF Loading Flow
-1. User selects PDF via DocumentGroup
-2. `PDFViewerDocument.init(configuration:)` loads file
-3. Original data preserved for export integrity
-4. PDFKit document created for display
-
-### Signature Placement Flow
-1. User initiates signing via toolbar/menu
-2. `SigningFlowLogic` transitions to signing mode
-3. Profile selection or creation via `SignatureSetupSheet`
-4. Click handling in `PDFKitView` captures placement coordinates
-5. `SignaturePlacement` added to document model
-6. Visual feedback updated in real-time
-
-### Export Flow
-1. User triggers "Save Signed Copy"
-2. `PDFViewerDocument.writeSignedCopy()` called
-3. Original PDF used as baseline
-4. Signature placements rendered via CoreGraphics
-5. Flattened PDF written to user-selected location
-
-## 🔧 Technical Decisions
-
-### SwiftUI + PDFKit Integration
-
-**Decision**: Use `NSViewRepresentable` to bridge PDFKit into SwiftUI rather than pure SwiftUI PDF rendering.
-
-**Rationale**:
-- PDFKit provides mature PDF rendering optimizations
-- Hardware-accelerated display
-- Built-in zoom, scroll, selection handling
-- Apple's recommended approach for PDF apps
-
-**Trade-offs**:
-- More complex coordinate system handling
-- Imperative updates in reactive environment
-- Platform-specific code
-
-### Document Architecture
-
-**Decision**: Use `FileDocument` with `DocumentGroup` rather than custom document handling.
-
-**Rationale**:
-- Native macOS document app experience
-- Automatic recent documents, window restoration
-- System integration (Versions, Auto Save)
-- Reduced boilerplate code
-
-**Trade-offs**:
-- Less control over document lifecycle
-- SwiftUI-specific (not AppKit compatible)
-
-### Signature Storage
-
-**Decision**: Local-only storage in app container rather than keychain or cloud sync.
+# PDFView architecture
 
-**Rationale**:
-- Simplified privacy model
-- No network dependencies
-- User control over data location
-- App Sandbox compliance
+PDFView is a native macOS PDF reader with offline visual signing, built with Swift 6, SwiftUI, AppKit, and PDFKit. It targets macOS 14.2 and later.
 
-**Trade-offs**:
-- No cross-device sync
-- Data lost on app deletion
-- No enterprise management
+This document describes the **target architecture for the release in progress**. The export, signature creation, and reader interaction changes are being integrated separately; names and responsibilities below are targets until those changes land.
 
-### Export Strategy
+## Document model and export — in progress
 
-**Decision**: Flatten signatures into immutable PDF rather than PDF form fields or annotations.
+`PDFViewerDocument` owns the document's live PDFKit document and signature placements in PDF page coordinates. The live, unlocked document is the export source so edits to forms survive. The viewing document lifecycle keeps opening and reading separate from the explicit Save Signed Copy action.
 
-**Rationale**:
-- Guaranteed compatibility across PDF viewers
-- Cannot be accidentally removed or modified
-- Simpler implementation
-- Clear visual signature intent
+`SignedPDFExporter` renders page content and visual signature stamps into a flattened copy. It preserves media/crop boxes and rotation, restores link annotations and the outline by page index, and copies document attributes. Signature images fit within their placement bounds without changing aspect ratio. Export writes to a temporary sibling, validates the result, then replaces the destination atomically. An image-rendering or write failure must not silently produce an incomplete copy.
 
-**Trade-offs**:
-- Cannot remove signatures after export
-- Larger file sizes
-- No metadata preservation for signatures
+Flattened stamps are page artwork. This is not certificate signing, identity verification, or tamper protection.
 
-## 🔒 Security Architecture
+## PDFKit bridge and interaction — in progress
 
-### App Sandbox
+`PDFKitView` bridges PDFKit into SwiftUI. A `PDFPageOverlayViewProvider` draws signature overlays that follow each page during scrolling and zooming. Placement, selection, moving, and aspect-locked resizing use page coordinates; the document model remains the source of truth. Undo and redo operate on model changes.
 
-PDFView runs in App Sandbox with minimal entitlements:
+Signing mode consumes placement clicks while normal reading retains PDFKit's selection and navigation behavior. Only signature widgets are treated as signature fields; detection refreshes when a protected document is unlocked. Keyboard placement, focus, and accessibility announcements accompany pointer interaction.
 
-```xml
-<key>com.apple.security.app-sandbox</key>
-<true/>
-<key>com.apple.security.files.user-selected.read-write</key>
-<true/>
-```
+`PDFContentView` coordinates the toolbar, sidebar, signing setup, and document status. `SigningCommands` routes app menu commands to the focused document. Unsaved placements require a close confirmation; saving reports success only after export finishes.
 
-**Implications**:
-- Only user-selected files accessible
-- No network access
-- No arbitrary file system access
-- Enhanced security posture
+## Signature creation and storage — in progress
 
-### Memory Safety
+One app-wide `SignatureStore` is injected into document windows. It persists a signature profile locally in the sandbox's Application Support directory and validates that stored image data decodes. It does not upload or sync signatures.
 
-- Swift's memory safety eliminates buffer overflows
-- PDF data validation on load
-- Bounds checking for signature placement
-- Error handling prevents crashes
+`SignatureRenderer` handles drawn, typed, and imported artwork. Drawing uses a paper-white surface with black ink, smooth strokes, single-tap dots, uniform scaling, and crop-to-ink bounds. Typed signatures fit their names; imported images can remove white backgrounds. Editing restores existing artwork instead of discarding it.
 
-### Input Validation
+## Reader features — in progress
 
-```swift
-// Example: PDF data validation
-guard let document = PDFDocument(data: data) else {
-    throw CocoaError(.fileReadCorruptFile)
-}
+The reader provides a page indicator, Go to Page, thumbnails and outline sidebar, Find, Print, remembered position, single/two-page layouts, and full screen. Zoom tracks fit and manual modes separately so view updates do not reset the user's zoom. Printing includes the visible signature placements through the export path.
 
-// Coordinate clamping for signature placement
-let clampedRect = CGRect(
-    x: max(mediaBox.minX, min(placement.bounds.origin.x, mediaBox.maxX)),
-    y: max(mediaBox.minY, min(placement.bounds.origin.y, mediaBox.maxY)),
-    width: min(placement.bounds.width, mediaBox.width),
-    height: min(placement.bounds.height, mediaBox.height)
-)
-```
+## Privacy and file access
 
-## ⚡ Performance Considerations
+The app is sandboxed with user-selected read/write file access and no network entitlement. User-selected import/export URLs use security-scoped access where needed. Signature profiles remain on this Mac. PDF data and signature images still require validation at their input boundaries; using Swift does not eliminate risks in document parsing.
 
-### PDF Rendering
+## Packaging and distribution
 
-- PDFKit handles rendering optimization automatically
-- Page-based rendering for large documents
-- Memory pressure handling via system
-- Hardware acceleration where available
+`build_app.sh` builds with SwiftPM using stock macOS Bash 3.2, locates the executable through SwiftPM, and packages `PDFView.app`. It copies the Info.plist template, app icon, and sandbox entitlements, patches version metadata, and signs the executable and bundle. `ARCHES="arm64 x86_64"` produces a universal executable before signing.
 
-### Memory Management
+`scripts/make-icon.swift` draws the icon procedurally with Core Graphics, exports the standard iconset resolutions, and invokes `iconutil`. The committed `Resources/AppIcon.icns` is the packaging input; regeneration requires only Swift and the macOS SDK.
 
-- Weak references in delegates and coordinators
-- Immediate release of large data structures
-- Signature image compression for storage
-- Original PDF data preserved efficiently
+Ad-hoc signing is the default. Optional Developer ID notarization submits a `ditto` ZIP, checks for Accepted, staples and validates the app, and rebuilds the ZIP with the ticket. Releases are built locally and currently distribute an ad-hoc signed app; the README documents the Gatekeeper override for each macOS version.
 
-### Threading
+## Verification
 
-- UI updates on main queue via `@MainActor`
-- PDF operations on background queues where possible
-- Swift Concurrency for async operations
-- `@preconcurrency` imports for legacy APIs
+Swift Testing covers document/export behavior, signature rendering/storage, and interaction logic as the corresponding slices land. Bundle checks cover Bash compatibility, resources, architectures, metadata, and signature integrity. `scripts/ci-local.sh` runs every check locally (there is no hosted CI); lint never rewrites the checkout.
 
-## 🧪 Testing Strategy
-
-### Automated tests (`Tests/PDFViewAppTests`)
-
-Swift Testing targets that run on macOS CI:
-
-- `PDFViewerDocument` placement and export helpers
-- `SignatureStore` persistence
-- `SigningFlowLogic` mode and copy
-
-### Manual testing (required for releases)
-
-- Open PDFs via DocumentGroup and Finder association
-- Signature draw/type/import and placement accuracy
-- Save signed copy and re-open in Preview/Acrobat
-- Sandbox behavior for import/export paths
-- Accessibility (VoiceOver labels on toolbar)
-
-## 🚀 Build and Distribution
-
-### Build Process
-
-1. **Swift Package Manager**: builds the `PDFView` executable target
-2. **build_app.sh**: copies `Resources/Info.plist`, applies version metadata, signs with `Resources/PDFView.entitlements`
-3. **Code signing**: Developer ID or ad-hoc (`SIGNING_IDENTITY=-`)
-4. **Notarization**: optional via `notarytool` when distributing outside the Mac App Store
-
-### Distribution Channels
-
-- **Development**: Ad-hoc signed for local testing
-- **Beta**: Developer ID signed, TestFlight alternative
-- **Production**: Developer ID + notarized for public release
-
-## 🔮 Future Considerations
-
-### Scalability
-
-- Plugin architecture for extended functionality
-- Document format support beyond PDF
-- Advanced signing features (timestamps, certificates)
-
-### Performance
-
-- Lazy loading for large documents
-- Signature caching and optimization
-- Memory usage profiling and optimization
-
-### Features
-
-- Batch signing workflows
-- Form field auto-detection
-- Accessibility improvements
-- Localization support
-
----
-
-This architecture provides a solid foundation for a secure, performant, and maintainable PDF signing application while leaving room for future enhancements.
+On-screen verification remains necessary for menu routing, scrolling/zoom overlays, accessibility, multiwindow behavior, and first-launch Gatekeeper dialogs. Local builds and rendered bitmap checks do not establish that these UI flows or Apple's live notarization service succeeded.
