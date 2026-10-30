@@ -170,6 +170,17 @@ enum SigningFlowLogic {
         }
     }
 
+    /// The first initials on a multi-page PDF: the other pages probably need them too, and Place
+    /// Initials on Every Page does that in one step.
+    static func offersInitialsOnEveryPage(
+        placed: PDFViewerDocument.SignaturePlacement,
+        pageCount: Int,
+        placements: [PDFViewerDocument.SignaturePlacement]
+    ) -> Bool {
+        placed.kind == .initials && pageCount > 1
+            && !placements.contains { $0.kind == .initials && $0.pageIndex != placed.pageIndex }
+    }
+
     /// Select Next/Previous Stamp before anything has been placed.
     static let noStampsNotice = "There are no stamps to select. Place a signature, initials or a date first."
 

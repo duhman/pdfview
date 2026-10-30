@@ -73,11 +73,28 @@ enum StampAccessibility {
     }
 
     /// The new stamp is selected but leaves plain arrows to scrolling, so the announcement says how
-    /// to take it for moving.
-    static func placedAnnouncement(pageIndex: Int, location: String, kind: StampKind = .signature) -> String {
-        "\(kind.title) placed on page \(pageIndex + 1), \(location). To move it, choose Sign > "
-            + "\(SignMenuTitles.selectNextStamp) (\(SigningShortcut.selectNextStamp)), then use the arrow keys."
+    /// to take it for moving; with `offersEveryPage` it also offers initials on the other pages.
+    static func placedAnnouncement(
+        pageIndex: Int,
+        location: String,
+        kind: StampKind = .signature,
+        offersEveryPage: Bool = false
+    ) -> String {
+        let text = "\(kind.title) placed on page \(pageIndex + 1), \(location). \(moveAfterPlacingInstruction)"
+        return offersEveryPage ? "\(text) \(everyPageOffer)" : text
     }
+
+    /// The banner's version of `placedAnnouncement`: the page and position are on screen already.
+    static func placedNotice(kind: StampKind, offersEveryPage: Bool = false) -> String {
+        let text = "\(kind.title) placed. \(moveAfterPlacingInstruction)"
+        return offersEveryPage ? "\(text) \(everyPageOffer)" : text
+    }
+
+    static let moveAfterPlacingInstruction = "To move it, choose Sign > \(SignMenuTitles.selectNextStamp) "
+        + "(\(SigningShortcut.selectNextStamp)), then use the arrow keys."
+
+    static let everyPageOffer = "To initial the other pages too, choose Sign > "
+        + "\(StampWorkflow.everyPageActionName) (\(SigningShortcut.placeInitialsOnEveryPage))."
 
     static let deselectedAnnouncement = "Stamp deselected."
 

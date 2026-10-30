@@ -182,3 +182,55 @@ private func makeTextThenCheckboxForm() throws -> PDFDocument {
     #expect(FormFieldNavigation.unavailableNotice(isLocked: false, isScanned: true)
         == FormFieldNavigation.noFieldsAnnouncement)
 }
+
+// MARK: After placing a stamp
+
+private func stamp(_ kind: StampKind, page: Int) -> PDFViewerDocument.SignaturePlacement {
+    PDFViewerDocument.SignaturePlacement(
+        pageIndex: page,
+        bounds: CGRect(x: 40, y: 40, width: 60, height: 20),
+        signaturePNGData: Data([1]),
+        signerName: "Ada",
+        kind: kind
+    )
+}
+
+@Test func thePlacementNoticeSaysHowToAdjustTheStampAsVoiceOverDoes() {
+    let move = "To move it, choose Sign > Select Next Stamp (⌥⌘]), then use the arrow keys."
+    #expect(StampAccessibility.placedNotice(kind: .signature) == "Signature placed. \(move)")
+    #expect(StampAccessibility.placedAnnouncement(pageIndex: 0, location: "at center").hasSuffix(move))
+}
+
+@Test func initialsOnOnePageOfSeveralOfferPlaceInitialsOnEveryPage() {
+    let first = stamp(.initials, page: 0)
+    #expect(SigningFlowLogic.offersInitialsOnEveryPage(placed: first, pageCount: 3, placements: [first]))
+    // One page, a signature, or initials already on another page: nothing to offer.
+    #expect(!SigningFlowLogic.offersInitialsOnEveryPage(placed: first, pageCount: 1, placements: [first]))
+    let signature = stamp(.signature, page: 0)
+    #expect(!SigningFlowLogic.offersInitialsOnEveryPage(placed: signature, pageCount: 3, placements: [signature]))
+    let other = stamp(.initials, page: 2)
+    #expect(!SigningFlowLogic.offersInitialsOnEveryPage(placed: first, pageCount: 3, placements: [other, first]))
+    // Another stamp kind on the other pages does not count as initials.
+    #expect(SigningFlowLogic.offersInitialsOnEveryPage(
+        placed: first, pageCount: 3, placements: [stamp(.date, page: 1), first]
+    ))
+}
+
+@Test func theEveryPageOfferIsShownAndReadAfterTheFirstInitials() {
+    let offer = "To initial the other pages too, choose Sign > Place Initials on Every Page (⌥⌘I)."
+    let move = "To move it, choose Sign > Select Next Stamp (⌥⌘]), then use the arrow keys."
+    #expect(StampAccessibility.placedNotice(kind: .initials, offersEveryPage: true)
+        == "Initials placed. \(move) \(offer)")
+    let announcement = StampAccessibility.placedAnnouncement(
+        pageIndex: 0, location: "at bottom right", kind: .initials, offersEveryPage: true
+    )
+    #expect(announcement.hasSuffix(offer))
+}
+
+@MainActor
+@Test func aNoticeCanStayLongerThanTheDefault() async throws {
+    let notice = TransientNotice(duration: .milliseconds(20))
+    notice.show("Signature placed.", for: .milliseconds(400))
+    try await Task.sleep(for: .milliseconds(80))
+    #expect(notice.text == "Signature placed.")
+}

@@ -774,7 +774,23 @@ extension PDFContentView {
         signingMode = SigningFlowLogic.afterPlacement(signingMode)
         viewer.select(placementID: placement.id)
         let location = viewer.location(of: bounds, onPageAt: pageIndex) ?? ""
-        announce(StampAccessibility.placedAnnouncement(pageIndex: pageIndex, location: location, kind: artwork.kind))
+        let offersEveryPage = SigningFlowLogic.offersInitialsOnEveryPage(
+            placed: placement,
+            pageCount: document.pdfDocument?.pageCount ?? 0,
+            placements: document.signaturePlacements
+        )
+        // The banner and VoiceOver say the same: how to adjust the stamp, and for the first initials on a
+        // multi-page PDF, how to initial the other pages. Shown without `showNotice`, which would announce twice.
+        notice.show(
+            StampAccessibility.placedNotice(kind: artwork.kind, offersEveryPage: offersEveryPage),
+            for: TransientNotice.instructionDuration
+        )
+        announce(StampAccessibility.placedAnnouncement(
+            pageIndex: pageIndex,
+            location: location,
+            kind: artwork.kind,
+            offersEveryPage: offersEveryPage
+        ))
         stampKind = StampWorkflow.kindAfterPlacementOrExit(artwork.kind)
     }
 
