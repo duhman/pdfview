@@ -28,6 +28,8 @@ struct PDFContentView: View {
     @State private var stampKind: StampKind = .signature
     @State private var setupKind: SignatureKind = .signature
     @State private var signingMode: SigningMode = .idle
+    /// Fields or Anywhere, per stamp kind, for this window.
+    @State private var placementChoices = PlacementChoices()
     /// Nil until the PDF view has scanned the document.
     @State private var documentState: PDFKitView.DocumentState?
     @State private var lastFieldIndex: Int?
@@ -39,10 +41,15 @@ struct PDFContentView: View {
     /// The last signed copy saved from this window; File menu sharing stays bound to it.
     @State private var lastSavedURL: URL?
     @State private var showsSavedBanner = false
+    /// Why the last action did nothing, or what it did when nothing else on screen shows it.
+    @State private var notice = TransientNotice()
+    /// The progress banner waits a moment, so quick saves and prints do not flash it.
+    @State private var progressVisibility = DelayedVisibility()
 
     @State private var showSignatureSetupSheet = false
     @State private var isEditingSignature = false
-    @State private var pendingAfterSetup: PendingSigningAction?
+    /// Why the setup sheet is open on the way to a stamp, and what Cancel goes back to.
+    @State private var setupRequest: SetupRequest?
     /// The saved profile the Delete Saved Signature/Initials… alert is asking about.
     @State private var profileToDelete: SignatureKind?
     @State private var errorAlert: ErrorAlert?
@@ -63,6 +70,13 @@ struct PDFContentView: View {
                 export.cancel()
                 printTask?.cancel()
             }
+            .onChange(of: export.progress != nil) { _, isExporting in
+                if isExporting {
+                    progressVisibility.begin()
+                } else {
+                    progressVisibility.end()
+                }
+            }
             .onChange(of: unsavedWork) { _, work in
                 closeGuard.isEdited = !work.isEmpty
             }
@@ -79,7 +93,8 @@ struct PDFContentView: View {
                 printDocument: printDocument,
                 pageSetup: runPageSetup,
                 hasFormFields: formValues?.isEmpty == false,
-                moveToFormField: moveToFormField
+                moveToFormField: moveToFormField,
+                activateFormField: viewer.activateFormField
             ))
     }
 
@@ -123,7 +138,7 @@ struct PDFContentView: View {
 
     private var content: some View {
         VStack(spacing: 0) {
-            if let progress = export.progress {
+            if let progress = export.progress, progressVisibility.isVisible {
                 ExportProgressBanner(
                     progress: progress,
                     purpose: printTask == nil ? .signedCopy : .print,
@@ -142,8 +157,13 @@ struct PDFContentView: View {
             }
             if signingMode != .idle {
                 signingBanner
-            } else if isSavedBannerVisible, let lastSavedURL {
-                savedBanner(for: lastSavedURL)
+            } else {
+                if let message = notice.text {
+                    noticeBanner(message)
+                }
+                if isSavedBannerVisible, let lastSavedURL {
+                    savedBanner(for: lastSavedURL)
+                }
             }
 
             if reader.find.isVisible {
@@ -182,7 +202,8 @@ struct PDFContentView: View {
             onUpdatePlacementBounds: updatePlacementBounds,
             onDeletePlacement: { configuredEditor().delete(id: $0) },
             onDocumentStateChange: applyDocumentState,
-            onFormValuesChange: applyFormValues
+            onFormValuesChange: applyFormValues,
+            onNotice: showNotice
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay {
@@ -274,7 +295,12 @@ extension PDFContentView {
             Image(systemName: "signature")
                 .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
-            Text(SigningFlowLogic.statusText(mode: signingMode, kind: stampKind))
+            // A notice stands in for the instruction while it shows, so the banner does not grow.
+            if let message = notice.text {
+                Label(message, systemImage: "exclamationmark.circle")
+            } else {
+                Text(SigningFlowLogic.statusText(mode: signingMode, kind: stampKind))
+            }
             Spacer()
             if hasSignatureFields {
                 Picker("Place stamp in", selection: anywhereSelection) {
@@ -286,6 +312,20 @@ extension PDFContentView {
                 .fixedSize()
             }
             Button("Done", action: exitSigning)
+        }
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+    }
+
+    private func noticeBanner(_ message: String) -> some View {
+        HStack(spacing: 12) {
+            Label(message, systemImage: "exclamationmark.circle")
+            Spacer()
         }
         .font(.callout)
         .padding(.horizontal, 12)
@@ -339,17 +379,17 @@ extension PDFContentView {
             fullName: signatureStore.profile?.fullName ?? signatureStore.profile(for: .initials)?.fullName ?? "",
             onCancel: {
                 showSignatureSetupSheet = false
-                pendingAfterSetup = nil
-                if signingMode == .idle {
-                    stampKind = StampWorkflow.kindAfterPlacementOrExit(stampKind)
-                }
+                let restored = (setupRequest ?? SetupRequest(restoring: currentSigningState)).stateAfterCancel
+                setupRequest = nil
+                stampKind = restored.kind
+                signingMode = restored.mode
             },
             onSave: { profile in
                 do {
                     try signatureStore.saveProfile(profile, for: setupKind)
                     showSignatureSetupSheet = false
-                    let pending = pendingAfterSetup
-                    pendingAfterSetup = nil
+                    let pending = setupRequest?.pending
+                    setupRequest = nil
                     switch pending {
                     case let .enter(mode)?: enterSigning(mode)
                     case .placeInNextField?: placeInNextField()
@@ -464,8 +504,8 @@ extension PDFContentView {
             placeInitialsOnEveryPage: placeInitialsOnEveryPage,
             setAnywhere: setAnywhere,
             hasPlacements: !document.signaturePlacements.isEmpty,
-            selectNextSignature: { selectAdjacentSignature(forward: true) },
-            selectPreviousSignature: { selectAdjacentSignature(forward: false) },
+            selectNextStamp: { selectAdjacentStamp(forward: true) },
+            selectPreviousStamp: { selectAdjacentStamp(forward: false) },
             saveSignedCopy: { saveSignedCopy() },
             lastSavedURL: lastSavedURL,
             shareSignedCopy: { url in viewer.showSharingPicker(for: url) },
@@ -514,7 +554,7 @@ extension PDFContentView {
         documentState = nil
         signingMode = .idle
         stampKind = .signature
-        pendingAfterSetup = nil
+        setupRequest = nil
         showSignatureSetupSheet = false
         lastFieldIndex = nil
         exportedPlacements = nil
@@ -545,7 +585,7 @@ extension PDFContentView {
 
     private func toggleSigning() {
         if signingMode == .idle {
-            startSigning(SigningFlowLogic.toggled(signingMode, hasSignatureFields: hasSignatureFields))
+            startSigning(placementChoices.entryMode(for: stampKind, hasSignatureFields: hasSignatureFields))
         } else {
             exitSigning()
         }
@@ -553,26 +593,36 @@ extension PDFContentView {
 
     private func chooseStamp(_ kind: StampKind) {
         guard canSign else { return }
+        let previous = currentSigningState
         stampKind = kind
-        startSigning(SigningFlowLogic.entryMode(hasSignatureFields: hasSignatureFields))
+        startSigning(placementChoices.entryMode(for: kind, hasSignatureFields: hasSignatureFields), restoring: previous)
     }
 
     /// Enters signing, first asking the user to create a signature if there is none yet.
-    private func startSigning(_ mode: SigningMode) {
+    /// `previous` is what cancelling that setup returns to, when the caller already changed the kind.
+    private func startSigning(_ mode: SigningMode, restoring previous: SigningState? = nil) {
         guard canSign else { return }
         guard activeArtwork != nil else {
-            requestSignatureSetup(then: .enter(mode))
+            requestSignatureSetup(then: .enter(mode), restoring: previous)
             return
         }
         enterSigning(mode)
     }
 
+    private var currentSigningState: SigningState {
+        SigningState(kind: stampKind, mode: signingMode)
+    }
+
     /// Asks for a signature first; the requested action runs once the sheet saves.
-    private func requestSignatureSetup(then action: PendingSigningAction) {
-        guard let kind = stampKind.profileKind else { return }
+    private func requestSignatureSetup(
+        then action: PendingSigningAction,
+        restoring previous: SigningState? = nil,
+        kind: SignatureKind? = nil
+    ) {
+        guard let kind = kind ?? stampKind.profileKind else { return }
         setupKind = kind
         isEditingSignature = false
-        pendingAfterSetup = action
+        setupRequest = SetupRequest(pending: action, restoring: previous ?? currentSigningState)
         showSignatureSetupSheet = true
     }
 
@@ -587,12 +637,14 @@ extension PDFContentView {
         guard signingMode != .idle else { return }
         signingMode = SigningFlowLogic.exited(signingMode)
         stampKind = StampWorkflow.kindAfterPlacementOrExit(stampKind)
+        notice.dismiss()
         announce(SigningFlowLogic.exitedAnnouncement)
         // The Done button that may have had focus is gone; give focus back to the document.
         viewer.focusDocument()
     }
 
     private func setAnywhere(_ anywhere: Bool) {
+        placementChoices.remember(anywhere: anywhere, for: stampKind)
         let mode = SigningFlowLogic.mode(anywhere: anywhere, hasSignatureFields: hasSignatureFields)
         if signingMode == .idle {
             startSigning(mode)
@@ -604,6 +656,13 @@ extension PDFContentView {
     /// Keyboard path to field signing: each use fills the next detected signature field.
     private func placeInNextField() {
         guard canSign else { return }
+        if let reason = SigningFlowLogic.nextFieldUnavailableReason(
+            kind: stampKind,
+            hasSignatureFields: hasSignatureFields
+        ) {
+            showNotice(reason)
+            return
+        }
         guard let imageSize = signatureImageSize else {
             requestSignatureSetup(then: .placeInNextField)
             return
@@ -613,8 +672,7 @@ extension PDFContentView {
             fields: signatureFields,
             placements: document.signaturePlacements
         ) else {
-            NSSound.beep()
-            announce(StampWorkflow.allFieldsFilledAnnouncement)
+            showNotice(StampWorkflow.allFieldsFilledAnnouncement)
             return
         }
         guard let page = document.pdfDocument?.page(at: signatureFields[index].pageIndex) else { return }
@@ -661,10 +719,7 @@ extension PDFContentView {
             initials: signatureStore.profile(for: .initials)
         )
         guard let artwork, let imageSize = artwork.imageSize else {
-            setupKind = .initials
-            isEditingSignature = false
-            pendingAfterSetup = .placeInitialsOnEveryPage
-            showSignatureSetupSheet = true
+            requestSignatureSetup(then: .placeInitialsOnEveryPage, kind: .initials)
             return
         }
         let pages = (0 ..< pdf.pageCount).map { index in
@@ -681,15 +736,13 @@ extension PDFContentView {
             placements: document.signaturePlacements,
             defaultSize: PlacementGeometry.defaultSize(imageSize: imageSize, width: stampSizes.width(for: .initials))
         )
-        if targets.isEmpty {
-            NSSound.beep()
-        } else {
+        if !targets.isEmpty {
             let placements = targets.map { artwork.placement(pageIndex: $0.pageIndex, bounds: $0.bounds) }
             configuredEditor().add(placements, actionName: StampWorkflow.everyPageActionName)
             signingMode = .idle
             stampKind = StampWorkflow.kindAfterPlacementOrExit(stampKind)
         }
-        announce(StampWorkflow.everyPageAnnouncement(count: targets.count))
+        showNotice(StampWorkflow.everyPageAnnouncement(count: targets.count))
     }
 
     private func placeSignature(pageIndex: Int, bounds: CGRect) {
@@ -703,16 +756,17 @@ extension PDFContentView {
         stampKind = StampWorkflow.kindAfterPlacementOrExit(artwork.kind)
     }
 
-    /// Select Next/Previous Signature: reveals the stamp, gives it keyboard focus and reads its label.
-    private func selectAdjacentSignature(forward: Bool) {
+    /// Select Next/Previous Stamp: reveals the stamp, gives it keyboard focus and reads its label.
+    private func selectAdjacentStamp(forward: Bool) {
         let placements = document.signaturePlacements
-        guard let id = SigningFlowLogic.adjacentPlacement(
+        guard let id = SigningFlowLogic.stampToSelect(
             after: viewer.selectedPlacementID,
+            ownsArrowKeys: viewer.stampOwnsArrowKeys,
             in: placements,
             forward: forward
         ), let placement = placements.first(where: { $0.id == id }) else { return }
         viewer.reveal(placement.bounds, onPageAt: placement.pageIndex)
-        viewer.select(placementID: id)
+        viewer.select(placementID: id, ownsArrowKeys: true)
         if let label = viewer.label(for: placement) {
             announce(label)
         }
@@ -741,7 +795,7 @@ extension PDFContentView {
     private func editProfile(_ kind: SignatureKind) {
         setupKind = kind
         isEditingSignature = signatureStore.profile(for: kind) != nil
-        pendingAfterSetup = nil
+        setupRequest = nil
         showSignatureSetupSheet = true
     }
 
@@ -795,16 +849,17 @@ extension PDFContentView {
                     )
                     completion(!closeGuard.isEdited)
                 case let .failure(error):
-                    reportSaveFailure(error)
+                    reportExportEnd(error, purpose: .signedCopy)
                     completion(false)
                 }
             }
         }
     }
 
-    private func reportSaveFailure(_ error: Error) {
-        if !(error is CancellationError) {
-            errorAlert = ErrorAlert(title: "Couldn’t Save Signed Copy", error: error)
+    private func reportExportEnd(_ error: Error, purpose: ExportPurpose) {
+        switch purpose.feedback(for: error) {
+        case let .notice(message): showNotice(message)
+        case let .alert(alert): errorAlert = alert
         }
     }
 
@@ -826,9 +881,7 @@ extension PDFContentView {
                 try Task.checkCancellation()
                 try printing.run()
             } catch {
-                if !(error is CancellationError) {
-                    errorAlert = ErrorAlert(title: "Couldn’t Print PDF", error: error)
-                }
+                reportExportEnd(error, purpose: .print)
             }
         }
     }
@@ -856,7 +909,9 @@ extension PDFContentView {
         case .cancelExport: cancelExport()
         case .stopSigning: exitSigning()
         case .closeFind: closeFind()
-        case .deselect: viewer.select(placementID: nil)
+        case .deselect:
+            viewer.select(placementID: nil)
+            announce(StampAccessibility.deselectedAnnouncement)
         case .closeSavedBanner: dismissSavedBanner()
         case .none: break
         }
@@ -864,8 +919,7 @@ extension PDFContentView {
 
     private func moveToFormField(forward: Bool) {
         guard let message = viewer.moveToFormField(forward: forward) else {
-            NSSound.beep()
-            announce(FormFieldNavigation.noFieldsAnnouncement)
+            showNotice(FormFieldNavigation.noFieldsAnnouncement)
             return
         }
         announce(message)
@@ -884,6 +938,12 @@ extension PDFContentView {
         }
         closeGuard.install(on: window)
         closeGuard.isEdited = !unsavedWork.isEmpty
+    }
+
+    /// Shows a message in the banner for a few seconds and reads it to VoiceOver, instead of a beep.
+    private func showNotice(_ message: String) {
+        notice.show(message)
+        announce(message)
     }
 
     private func announce(_ message: String) {

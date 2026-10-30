@@ -113,14 +113,20 @@ enum PlacementGeometry {
         case resize
     }
 
-    /// What an arrow key does to the selected stamp: move 1 pt, Shift 10 pt, Option-Shift resize.
-    /// Option alone is nil so Option-Up/Down keep turning pages through the Go menu.
-    static func arrowAction(shift: Bool, option: Bool) -> ArrowAction? {
-        switch (shift, option) {
-        case (false, false): .move(1)
-        case (true, false): .move(10)
-        case (true, true): .resize
-        case (false, true): nil
+    /// Coarse keyboard step, for crossing a page quickly before the fine steps.
+    static let coarseStep: CGFloat = 50
+
+    /// What an arrow key does to the selected stamp: move 1 pt, Shift 10 pt, Command 50 pt,
+    /// Option-Shift resize. Option and Option-Command are nil so the Go menu keeps its page and form
+    /// field commands; Control is nil because Control-arrows switch Spaces and open Mission Control.
+    static func arrowAction(shift: Bool, option: Bool, command: Bool = false, control: Bool = false) -> ArrowAction? {
+        guard !control else { return nil }
+        return switch (shift, option, command) {
+        case (false, false, false): .move(1)
+        case (true, false, false): .move(10)
+        case (false, false, true): .move(coarseStep)
+        case (true, true, false): .resize
+        default: nil
         }
     }
 

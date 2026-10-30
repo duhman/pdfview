@@ -99,12 +99,15 @@ final class PDFViewerProxy {
         NSSharingServicePicker(items: [url]).show(relativeTo: anchor, of: pdfView, preferredEdge: .minY)
     }
 
-    /// Selects a stamp and gives the PDF view keyboard focus so arrow keys nudge it.
     var selectedPlacementID: UUID? {
         coordinator?.selectedPlacementID
     }
 
-    /// The VoiceOver label of a placement as it is now, e.g. for Select Next Signature.
+    var stampOwnsArrowKeys: Bool {
+        coordinator?.stampOwnsArrowKeys == true
+    }
+
+    /// The VoiceOver label of a placement as it is now, e.g. for Select Next Stamp.
     func label(for placement: PDFViewerDocument.SignaturePlacement) -> String? {
         coordinator?.label(for: placement, bounds: placement.bounds)
     }
@@ -118,8 +121,14 @@ final class PDFViewerProxy {
         coordinator?.moveToFormField(forward: forward)
     }
 
-    func select(placementID: UUID?) {
-        coordinator?.selectedPlacementID = placementID
+    /// Go > Activate Form Field, for the field Next/Previous Form Field moved to.
+    func activateFormField() {
+        coordinator?.performFormFieldActivation()
+    }
+
+    /// Selects a stamp and gives the PDF view keyboard focus; with `ownsArrowKeys` plain arrows nudge it.
+    func select(placementID: UUID?, ownsArrowKeys: Bool = false) {
+        coordinator?.select(placementID, ownsArrowKeys: ownsArrowKeys)
         if let pdfView, placementID != nil {
             pdfView.window?.makeFirstResponder(pdfView)
         }
@@ -173,6 +182,8 @@ struct PDFKitView: NSViewRepresentable {
     var onDocumentStateChange: (DocumentState) -> Void
     /// The user changed a form widget's value.
     var onFormValuesChange: ([FormFieldValue]) -> Void
+    /// Explains why an action did nothing, in the banner and to VoiceOver, instead of beeping.
+    var onNotice: (String) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -236,16 +247,28 @@ extension PDFKitView {
         private var reportedFormValues: [FormFieldValue]?
         private(set) var formScan: FormScan?
         /// The widget Next/Previous Form Field last moved to.
-        private var lastFormFieldID: ObjectIdentifier?
+        private(set) var lastFormFieldID: ObjectIdentifier?
+        /// Space and Return activate that widget until another key, a click or a scroll.
+        var acceptsFormFieldKeys = false
         /// Counts overlay rebuilds, so tests can check that unrelated updates skip them.
         private(set) var overlayRefreshCount = 0
 
         var selectedPlacementID: UUID? {
             didSet {
                 if selectedPlacementID != oldValue {
+                    stampOwnsArrowKeys = false
                     refreshOverlays()
                 }
             }
+        }
+
+        /// Plain arrows move the selected stamp only once the user chose it (a click, Select Next Stamp,
+        /// VoiceOver's Move); a stamp that was just placed leaves them to scrolling.
+        private(set) var stampOwnsArrowKeys = false
+
+        func select(_ id: UUID?, ownsArrowKeys: Bool) {
+            selectedPlacementID = id
+            stampOwnsArrowKeys = id != nil && ownsArrowKeys
         }
 
         init(_ parent: PDFKitView) {
@@ -256,7 +279,11 @@ extension PDFKitView {
             self.pdfView = pdfView
             pdfView.pageOverlayViewProvider = self
             pdfView.isSigning = { [weak self] in self?.parent.signingMode != .idle }
-            pdfView.onIdleMouseDown = { [weak self] in self?.selectedPlacementID = nil }
+            pdfView.onIdleMouseDown = { [weak self] in
+                self?.selectedPlacementID = nil
+                self?.acceptsFormFieldKeys = false
+            }
+            pdfView.onScrollWheel = { [weak self] in self?.acceptsFormFieldKeys = false }
             pdfView.keyHandler = { [weak self] event in self?.handleKey(event) ?? false }
             pdfView.onWindowChange = { [weak self] window in
                 self?.parent.onWindow(window)
@@ -264,7 +291,7 @@ extension PDFKitView {
             }
             pdfView.onUserInteraction = { [weak self] in self?.scheduleFormValueCheck() }
             pdfView.onStopSigning = { [weak self] in self?.parent.onStopSigning() }
-            pdfView.hasSelectedStamp = { [weak self] in self?.selectedPlacementID != nil }
+            pdfView.stampOwnsArrowKeys = { [weak self] in self?.stampOwnsArrowKeys == true }
 
             let center = NotificationCenter.default
             center.addObserver(
@@ -313,6 +340,7 @@ extension PDFKitView {
             scanTask?.cancel()
             formScan = nil
             lastFormFieldID = nil
+            acceptsFormFieldKeys = false
             reportedFormValues = nil
             signatureFields = []
             let document = pdfView?.document
@@ -396,15 +424,18 @@ extension PDFKitView {
             ) else { return nil }
 
             let (widget, page, _) = located[order[position]]
+            let field = fields[order[position]]
             lastFormFieldID = ObjectIdentifier(widget)
             pdfView.go(to: widget.bounds.insetBy(dx: -40, dy: -40), on: page)
-            if fields[order[position]].kind == .text, !widget.isReadOnly {
+            // A text field gets the keyboard itself; any other field takes Space and Return from here.
+            acceptsFormFieldKeys = field.kind != .text || widget.isReadOnly
+            if field.kind == .text, !widget.isReadOnly {
                 // Once it has scrolled into view.
                 DispatchQueue.main.async { [weak pdfView] in
                     pdfView?.clickWidget(widget, on: page)
                 }
             }
-            return FormFieldNavigation.announcement(for: fields[order[position]])
+            return FormFieldNavigation.announcement(for: field, state: FormFieldNavigation.spokenState(of: widget))
         }
 
         // MARK: Zoom
@@ -599,7 +630,7 @@ extension PDFKitView.Coordinator: PageOverlayViewDelegate {
                 width: parent.stampWidth
             )
         } else {
-            NSSound.beep()
+            parent.onNotice(SigningFlowLogic.clickInsideFieldNotice)
             return
         }
 
@@ -607,7 +638,7 @@ extension PDFKitView.Coordinator: PageOverlayViewDelegate {
     }
 
     func overlay(_: PageOverlayView, didSelect id: UUID?) {
-        selectedPlacementID = id
+        select(id, ownsArrowKeys: true)
         if let pdfView {
             pdfView.window?.makeFirstResponder(pdfView)
         }
@@ -642,17 +673,22 @@ final class SigningPDFView: PDFView {
     /// A click or key press PDFKit handled, which may have changed a form widget.
     var onUserInteraction: (() -> Void)?
     var onStopSigning: (() -> Void)?
+    var onScrollWheel: (() -> Void)?
 
-    var hasSelectedStamp: () -> Bool = { false }
+    var stampOwnsArrowKeys: () -> Bool = { false }
 
     /// Menu key equivalents are matched before keyDown, so the arrow chords that move or resize a
-    /// selected stamp are claimed here first. Option alone is left to the Go menu's page commands.
+    /// selected stamp are claimed here first. Option and Option-Command are left to the Go menu.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let arrows: [NSEvent.SpecialKey] = [.leftArrow, .rightArrow, .upArrow, .downArrow]
         let flags = event.modifierFlags
-        let isStampArrow = event.specialKey.map(arrows.contains) == true && !flags.contains(.command)
-            && PlacementGeometry.arrowAction(shift: flags.contains(.shift), option: flags.contains(.option)) != nil
-        if isStampArrow, window?.firstResponder === self, hasSelectedStamp(), keyHandler?(event) == true {
+        let isStampArrow = event.specialKey.map(arrows.contains) == true && PlacementGeometry.arrowAction(
+            shift: flags.contains(.shift),
+            option: flags.contains(.option),
+            command: flags.contains(.command),
+            control: flags.contains(.control)
+        ) != nil
+        if isStampArrow, window?.firstResponder === self, stampOwnsArrowKeys(), keyHandler?(event) == true {
             return true
         }
         return super.performKeyEquivalent(with: event)
@@ -671,6 +707,11 @@ final class SigningPDFView: PDFView {
         onIdleMouseDown?()
         super.mouseDown(with: event)
         onUserInteraction?()
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        onScrollWheel?()
+        super.scrollWheel(with: event)
     }
 
     override func keyDown(with event: NSEvent) {

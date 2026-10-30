@@ -61,23 +61,48 @@ enum PendingSigningAction: Equatable {
     case placeInitialsOnEveryPage
 }
 
-/// Key equivalents for the Sign menu, shown in the banner so the keyboard path is discoverable.
-/// Chosen to avoid the standard File, Edit (including Find), View, Window and Go menu chords.
+/// The stamp kind and placement mode a window is in.
+struct SigningState: Equatable {
+    var kind: StampKind
+    var mode: SigningMode
+}
+
+/// A setup sheet opened on the way to a stamp: what to run once it saves, and the state to return to
+/// if it is cancelled, so a kind with no artwork never stays active.
+struct SetupRequest: Equatable {
+    var pending: PendingSigningAction?
+    var restoring: SigningState
+
+    var stateAfterCancel: SigningState {
+        restoring.mode == .idle
+            ? SigningState(kind: StampWorkflow.kindAfterPlacementOrExit(restoring.kind), mode: .idle)
+            : restoring
+    }
+}
+
+/// Sign menu chords as the signing banner and announcements show them, taken from `MenuShortcuts`.
 enum SigningShortcut {
-    static let placeInNextField = "⌥⌘N"
-    static let placeOnCurrentPage = "⌥⌘P"
+    static let placeInNextField = MenuShortcuts.display(MenuShortcuts.placeInNextField)
+    static let placeOnCurrentPage = MenuShortcuts.display(MenuShortcuts.placeOnCurrentPage)
+    static let selectNextStamp = MenuShortcuts.display(MenuShortcuts.selectNextStamp)
+    static let placeInitialsOnEveryPage = MenuShortcuts.display(MenuShortcuts.placeInitialsOnEveryPage)
+}
+
+/// The Fields/Anywhere choice per stamp kind, remembered for one window. Signatures default to the
+/// PDF's signature fields; initials and dates usually go elsewhere on the page, so they start in Anywhere.
+struct PlacementChoices: Equatable {
+    private var anywhere: [StampKind: Bool] = [:]
+
+    func entryMode(for kind: StampKind, hasSignatureFields: Bool) -> SigningMode {
+        SigningFlowLogic.mode(anywhere: anywhere[kind] ?? (kind != .signature), hasSignatureFields: hasSignatureFields)
+    }
+
+    mutating func remember(anywhere: Bool, for kind: StampKind) {
+        self.anywhere[kind] = anywhere
+    }
 }
 
 enum SigningFlowLogic {
-    static func entryMode(hasSignatureFields: Bool) -> SigningMode {
-        hasSignatureFields ? .fieldPlacement : .freePlacement
-    }
-
-    /// The Sign toolbar toggle and Start/Stop Signing menu item.
-    static func toggled(_ mode: SigningMode, hasSignatureFields: Bool) -> SigningMode {
-        mode == .idle ? entryMode(hasSignatureFields: hasSignatureFields) : .idle
-    }
-
     /// Done, Escape, or Stop Signing.
     static func exited(_: SigningMode) -> SigningMode {
         .idle
@@ -99,11 +124,30 @@ enum SigningFlowLogic {
 
     static func statusText(mode: SigningMode, kind: StampKind = .signature) -> String {
         let instruction = kind == .signature ? "sign" : "place your \(kind.title.lowercased())"
-        return mode == .fieldPlacement
-            ? "Click a signature field, choose Anywhere, or use Sign > "
-            + "\(StampWorkflow.placeInNextFieldTitle(kind: kind)) (\(SigningShortcut.placeInNextField))."
-            : "Click where you want to \(instruction), or use Sign > "
-            + "\(StampWorkflow.placeOnCurrentPageTitle(kind: kind)) (\(SigningShortcut.placeOnCurrentPage))."
+        let text = switch (mode, kind) {
+        case (.fieldPlacement, .signature):
+            "Click a signature field, choose Anywhere, or use Sign > "
+                + "\(StampWorkflow.placeInNextFieldTitle(kind: kind)) (\(SigningShortcut.placeInNextField))."
+        case (.fieldPlacement, _):
+            "Click a signature field, or choose Anywhere to \(instruction) elsewhere on the page."
+        default:
+            "Click where you want to \(instruction), or use Sign > "
+                + "\(StampWorkflow.placeOnCurrentPageTitle(kind: kind)) (\(SigningShortcut.placeOnCurrentPage))."
+        }
+        guard kind == .initials else { return text }
+        return text + " Sign > \(StampWorkflow.everyPageActionName) (\(SigningShortcut.placeInitialsOnEveryPage)) "
+            + "initials every page at once."
+    }
+
+    /// Why Sign > Place Signature in Next Field is unavailable, or nil when it can be used. It fills
+    /// signature fields, so it never places initials or a date.
+    static func nextFieldUnavailableReason(kind: StampKind, hasSignatureFields: Bool) -> String? {
+        switch kind {
+        case _ where !hasSignatureFields: "This PDF has no signature fields."
+        case .signature: nil
+        case .initials: "Place in Next Field places signatures. Click a field or the page to place initials."
+        case .date: "Place in Next Field places signatures. Click a field or the page to place the date."
+        }
     }
 
     static func enteredAnnouncement(mode: SigningMode, kind: StampKind = .signature) -> String {
@@ -112,9 +156,8 @@ enum SigningFlowLogic {
 
     static let exitedAnnouncement = "Stopped signing."
 
-    static func signatureMenuTitle(hasProfile: Bool) -> String {
-        hasProfile ? "Edit Signature…" : "Create Signature…"
-    }
+    /// Shown in the signing banner when a click in Fields mode misses every signature field.
+    static let clickInsideFieldNotice = "Click inside a signature field, or choose Anywhere."
 
     static func escapeAction(
         isExporting: Bool,
@@ -147,7 +190,7 @@ enum SigningFlowLogic {
         "Saved \(url.lastPathComponent) to \(url.deletingLastPathComponent().lastPathComponent)"
     }
 
-    /// Select Next/Previous Signature: reading order (page, then top to bottom, then left to right), wrapping.
+    /// Select Next/Previous Stamp: reading order (page, then top to bottom, then left to right), wrapping.
     static func adjacentPlacement(
         after currentID: UUID?,
         in placements: [PDFViewerDocument.SignaturePlacement],
@@ -162,6 +205,20 @@ enum SigningFlowLogic {
         }
         let next = (index + (forward ? 1 : -1) + ordered.count) % ordered.count
         return ordered[next].id
+    }
+
+    /// Select Next/Previous Stamp. A stamp that is selected but does not own the arrow keys yet (it was
+    /// just placed) is taken first, so the command never skips the stamp the user is looking at.
+    static func stampToSelect(
+        after currentID: UUID?,
+        ownsArrowKeys: Bool,
+        in placements: [PDFViewerDocument.SignaturePlacement],
+        forward: Bool
+    ) -> UUID? {
+        if let currentID, !ownsArrowKeys, placements.contains(where: { $0.id == currentID }) {
+            return currentID
+        }
+        return adjacentPlacement(after: currentID, in: placements, forward: forward)
     }
 
     /// True while the window holds placements that differ from the last saved signed copy.

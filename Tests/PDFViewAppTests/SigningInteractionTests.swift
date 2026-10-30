@@ -21,9 +21,16 @@ import Testing
     #expect(SigningFlowLogic.exitedAnnouncement == "Stopped signing.")
 }
 
-@Test func signatureMenuCreatesUntilAProfileExists() {
-    #expect(SigningFlowLogic.signatureMenuTitle(hasProfile: false) == "Create Signature…")
-    #expect(SigningFlowLogic.signatureMenuTitle(hasProfile: true) == "Edit Signature…")
+@Test func profileMenuItemsCreateUntilAProfileExists() {
+    #expect(SignMenuTitles.profile(.signature, hasProfile: false) == "Create Signature…")
+    #expect(SignMenuTitles.profile(.signature, hasProfile: true) == "Edit Signature…")
+    #expect(SignMenuTitles.profile(.initials, hasProfile: false) == "Create Initials…")
+    #expect(SignMenuTitles.profile(.initials, hasProfile: true) == "Edit Initials…")
+}
+
+@Test func stampSelectionItemsNameStampsNotSignatures() {
+    #expect(SignMenuTitles.selectNextStamp == "Select Next Stamp")
+    #expect(SignMenuTitles.selectPreviousStamp == "Select Previous Stamp")
 }
 
 @Test func escapeStopsTheMostRecentThingFirst() {

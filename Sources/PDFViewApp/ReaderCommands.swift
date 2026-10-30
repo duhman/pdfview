@@ -7,6 +7,7 @@ struct ReaderCommandActions {
     var pageSetup: () -> Void
     var hasFormFields = false
     var moveToFormField: (_ forward: Bool) -> Void = { _ in }
+    var activateFormField: () -> Void = {}
 }
 
 private struct ReaderCommandActionsKey: FocusedValueKey {
@@ -83,6 +84,10 @@ struct ReaderCommands: Commands {
             .disabled(reader?.canRead != true || actions?.hasFormFields != true)
         Button("Previous Form Field") { actions?.moveToFormField(false) }
             .keyboardShortcut(MenuShortcuts.previousFormField)
+            .disabled(reader?.canRead != true || actions?.hasFormFields != true)
+        // Space or Return does the same on a field just moved to, unless it is a text field.
+        Button("Activate Form Field") { actions?.activateFormField() }
+            .keyboardShortcut(MenuShortcuts.activateFormField)
             .disabled(reader?.canRead != true || actions?.hasFormFields != true)
         Divider()
         Button("Go to Page…") { reader?.showGoToPage = true }

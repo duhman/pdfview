@@ -36,7 +36,7 @@ duti -s com.bigmac.pdfview com.adobe.pdf all
 - A native sidebar with a Thumbnails/Outline selector and current-section selection in the outline.
 - Asynchronous text search with match highlights and previous/next navigation; VoiceOver hears the result and each move.
 - Unlock password-protected PDFs with secure entry; cancel keeps the locked reader open with an Unlock banner.
-- Move between form fields with Go > Next/Previous Form Field; text fields open for typing.
+- Move between form fields with Go > Next/Previous Form Field, which reads each field’s name, kind and state; text fields open for typing, and Go > Activate Form Field (or Space or Return) toggles checkboxes and radio buttons and opens pop-up and list choices.
 - Print the PDF with any placed stamps included; document print permissions are respected.
 - Remember your page, scroll position and zoom for the 200 most recently read file paths.
 - Single-page and two-page layouts, continuous scrolling, and full screen.
@@ -46,7 +46,8 @@ duti -s com.bigmac.pdfview com.adobe.pdf all
 
 - Create and edit independent signature and initials profiles by drawing, typing, or importing an image.
 - Choose Signature, Initials, or Date from the Sign toolbar menu; dates use today’s date and your locale at placement time.
-- Place each stamp in the PDF’s own signature fields or anywhere on a page, including the keyboard placement commands. Place in Next Field skips fields that already hold a stamp.
+- Place each stamp in the PDF’s own signature fields or anywhere on a page, including the keyboard placement commands. Signatures start in Fields when the PDF has signature fields; initials and dates start in Anywhere, and each kind remembers your choice for the window. Place Signature in Next Field skips fields that already hold a stamp.
+- When an action can’t do anything (a click outside every field, every field already filled, a cancelled save), the banner says why for a few seconds instead of beeping, and VoiceOver reads the same message.
 - Initials and dates start at their own sizes (60 and 110 pt wide; signatures 180 pt), and the last size you resize each kind to is reused while the app is open.
 - Place Initials on Every Page initials each page that has none, in one undoable step, at the position of your selected or last initials, or in the bottom-right margin.
 - After each stamp the Sign menu goes back to Signature, and its commands say which kind they will place.
@@ -65,6 +66,8 @@ Signatures are **visual stamps, not certificate-based digital signatures**. They
 
 ### Keyboard shortcuts
 
+Help > Keyboard Shortcuts shows this list in the app, generated from the menus.
+
 | Shortcut | Action |
 | --- | --- |
 | ⌥⌘S | Start/Stop Signing |
@@ -73,8 +76,9 @@ Signatures are **visual stamps, not certificate-based digital signatures**. They
 | ⌥⇧⌘D | Place Date (then click, or use a placement command) |
 | ⌥⌘N | Place in Next Field |
 | ⌥⌘P | Place on Current Page |
-| ⌥⌘] / ⌥⌘[ | Select Next / Previous Signature |
-| ← → ↑ ↓ | Move the selected stamp 1 pt (⇧ 10 pt) |
+| ⌥⌘I | Place Initials on Every Page |
+| ⌥⌘] / ⌥⌘[ | Select Next / Previous Stamp |
+| ← → ↑ ↓ | Move the selected stamp 1 pt (⇧ 10 pt, ⌘ 50 pt). A stamp you just placed leaves the arrows to scrolling until you click it or choose Select Next Stamp |
 | ⌥⇧→ / ⌥⇧↑, ⌥⇧← / ⌥⇧↓ | Enlarge / shrink the selected stamp |
 | ⌫ | Remove the selected stamp from the page |
 | ⇧⌘E | Save Signed Copy… (File menu) |
@@ -86,6 +90,7 @@ Signatures are **visual stamps, not certificate-based digital signatures**. They
 | ⌥↓ / ⌥↑ | Next / Previous Page |
 | ⌥⌘↑ / ⌥⌘↓ | First / Last Page (Option-arrows page even while a stamp is selected) |
 | ⌥⌘→ / ⌥⌘← | Next / Previous Form Field |
+| ⌥⌘↩, or Space / Return on the field just moved to | Activate Form Field: toggle a checkbox or radio button, choose from a pop-up or list, edit a text field |
 | ⌘F | Find |
 | ⌘G / ⇧⌘G | Next / Previous Match |
 | ⌃⌘F | Enter/Exit Full Screen |

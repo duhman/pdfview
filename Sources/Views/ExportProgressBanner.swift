@@ -24,6 +24,23 @@ enum ExportPurpose {
         }
     }
 
+    /// What the window says when the export ends early: a cancel is the user's own choice, so it
+    /// gets a banner message, and anything else is an error alert.
+    enum Feedback: Equatable {
+        case notice(String)
+        case alert(ErrorAlert)
+    }
+
+    func feedback(for error: Error) -> Feedback {
+        guard !(error is CancellationError) else {
+            return .notice(self == .print ? "Printing cancelled." : "Save cancelled.")
+        }
+        return .alert(ErrorAlert(
+            title: self == .print ? "Couldn’t Print PDF" : "Couldn’t Save Signed Copy",
+            error: error
+        ))
+    }
+
     var cancelHelp: String {
         switch self {
         case .signedCopy: "Cancel without changing the destination"

@@ -49,7 +49,8 @@ private enum Page {
     )
     #expect(
         StampAccessibility.placedAnnouncement(pageIndex: 1, location: "in field “Buyer”")
-            == "Signature placed on page 2, in field “Buyer”. Arrow keys move it, Escape when done."
+            == "Signature placed on page 2, in field “Buyer”. To move it, choose Sign > Select Next Stamp (⌥⌘]), "
+            + "then use the arrow keys."
     )
     #expect(StampAccessibility.movedAnnouncement(pageIndex: 0, location: "at center") == "Moved, page 1, at center")
 }
