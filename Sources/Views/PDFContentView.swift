@@ -864,13 +864,11 @@ extension PDFContentView {
             completion(false)
             return
         }
-        let panel = NSSavePanel()
-        export.configure(panel, originalURL: fileURL, protection: protection)
-        panel.canCreateDirectories = true
-        panel.allowedContentTypes = [.pdf]
-        panel.nameFieldStringValue = SigningFlowLogic.signedFileName(for: fileURL)
-        panel.directoryURL = fileURL?.deletingLastPathComponent()
+        let panel = savePanel(protection: protection)
         panel.beginSheetModal(for: window) { response in
+            if let message = ExportPurpose.savePanelNotice(for: response) {
+                showNotice(message)
+            }
             guard response == .OK, let url = panel.url, document.pdfDocument === source else {
                 export.release()
                 completion(false)
@@ -896,6 +894,16 @@ extension PDFContentView {
                 }
             }
         }
+    }
+
+    private func savePanel(protection: DocumentProtection) -> NSSavePanel {
+        let panel = NSSavePanel()
+        export.configure(panel, originalURL: fileURL, protection: protection)
+        panel.canCreateDirectories = true
+        panel.allowedContentTypes = [.pdf]
+        panel.nameFieldStringValue = SigningFlowLogic.signedFileName(for: fileURL)
+        panel.directoryURL = fileURL?.deletingLastPathComponent()
+        return panel
     }
 
     private func reportExportEnd(_ error: Error, purpose: ExportPurpose) {

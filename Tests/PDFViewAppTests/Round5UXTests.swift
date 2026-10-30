@@ -234,3 +234,10 @@ private func stamp(_ kind: StampKind, page: Int) -> PDFViewerDocument.SignatureP
     try await Task.sleep(for: .milliseconds(80))
     #expect(notice.text == "Signature placed.")
 }
+
+// MARK: Cancelling the save panel
+
+@Test func cancellingTheSavePanelSaysSaveCancelled() {
+    #expect(ExportPurpose.savePanelNotice(for: .cancel) == "Save cancelled.")
+    #expect(ExportPurpose.savePanelNotice(for: .OK) == nil)
+}
