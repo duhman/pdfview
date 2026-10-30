@@ -1,7 +1,7 @@
 import AppKit
-@testable import PDFViewApp
 import Quartz
 import Testing
+@testable import PDFViewApp
 
 @Test
 func placementAddAndRemoveRoundTrip() {

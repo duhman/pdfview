@@ -1,8 +1,8 @@
 import AppKit
 import CoreText
-@testable import PDFViewApp
 import Quartz
 import Testing
+@testable import PDFViewApp
 
 @MainActor
 enum ExportFixture {

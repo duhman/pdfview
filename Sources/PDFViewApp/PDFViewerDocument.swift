@@ -1,7 +1,7 @@
-import SwiftUI
-@preconcurrency import Quartz
-import UniformTypeIdentifiers
 import AppKit
+@preconcurrency import Quartz
+import SwiftUI
+import UniformTypeIdentifiers
 
 /// Document model for PDF files conforming to FileDocument protocol
 struct PDFViewerDocument: FileDocument {
@@ -87,8 +87,8 @@ struct PDFViewerDocument: FileDocument {
 
     /// Initialize with empty document
     init() {
-        self.pdfDocument = nil
-        self.originalPDFData = nil
+        pdfDocument = nil
+        originalPDFData = nil
     }
 
     init(pdfDocument: PDFDocument?, originalPDFData: Data? = nil) {
@@ -98,20 +98,16 @@ struct PDFViewerDocument: FileDocument {
 
     /// Initialize from file configuration
     init(configuration: ReadConfiguration) throws {
-        guard let data = configuration.file.regularFileContents else {
+        guard let data = configuration.file.regularFileContents, let document = PDFDocument(data: data) else {
             throw CocoaError(.fileReadCorruptFile)
         }
 
-        guard let document = PDFDocument(data: data) else {
-            throw CocoaError(.fileReadCorruptFile)
-        }
-
-        self.pdfDocument = document
-        self.originalPDFData = data
+        pdfDocument = document
+        originalPDFData = data
     }
 
     /// Write document to file.
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+    func fileWrapper(configuration _: WriteConfiguration) throws -> FileWrapper {
         guard let data = pdfDocument?.dataRepresentation() else {
             throw ExportError.cannotEncodeDocumentData
         }

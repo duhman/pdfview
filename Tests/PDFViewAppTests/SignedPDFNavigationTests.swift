@@ -1,7 +1,7 @@
 import AppKit
-@testable import PDFViewApp
 import Quartz
 import Testing
+@testable import PDFViewApp
 
 @MainActor
 struct SignedPDFNavigationTests {
@@ -78,7 +78,7 @@ struct SignedPDFNavigationTests {
             PDFDocumentAttribute.titleAttribute: "Signed agreement",
             PDFDocumentAttribute.authorAttribute: "Tester",
             PDFDocumentAttribute.subjectAttribute: "Export regression",
-            PDFDocumentAttribute.keywordsAttribute: ["offline", "signing"]
+            PDFDocumentAttribute.keywordsAttribute: ["offline", "signing"],
         ]
         let model = try ExportFixture.model(source, baseline: baseline, signed: signed)
         try ExportFixture.withDirectory { directory in
@@ -98,7 +98,7 @@ struct SignedPDFNavigationTests {
     private func navigationDocument(origin: CGPoint) throws -> (document: PDFDocument, pages: [PDFPage]) {
         let source = try ExportFixture.document(mediaBoxes: [
             CGRect(origin: origin, size: CGSize(width: 400, height: 600)),
-            CGRect(origin: origin, size: CGSize(width: 595, height: 842))
+            CGRect(origin: origin, size: CGSize(width: 595, height: 842)),
         ])
         let first = try #require(source.page(at: 0))
         let second = try #require(source.page(at: 1))

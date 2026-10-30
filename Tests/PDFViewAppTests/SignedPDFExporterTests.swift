@@ -1,7 +1,7 @@
 import AppKit
-@testable import PDFViewApp
 import Quartz
 import Testing
+@testable import PDFViewApp
 
 @MainActor
 struct SignedPDFExporterTests {
@@ -10,7 +10,7 @@ struct SignedPDFExporterTests {
         let boxes = [
             CGRect(x: 0, y: 0, width: 400, height: 600),
             CGRect(x: 0, y: 0, width: 595, height: 842),
-            CGRect(x: 0, y: 0, width: 612, height: 792)
+            CGRect(x: 0, y: 0, width: 612, height: 792),
         ]
         let source = try ExportFixture.document(mediaBoxes: boxes)
         let model = try ExportFixture.model(source)
@@ -101,7 +101,7 @@ struct SignedPDFExporterTests {
             let source = try ExportFixture.document()
             let encryptedURL = directory.appendingPathComponent("encrypted.pdf")
             #expect(source.write(to: encryptedURL, withOptions: [
-                .userPasswordOption: "test-user", .ownerPasswordOption: "test-owner"
+                .userPasswordOption: "test-user", .ownerPasswordOption: "test-owner",
             ]))
             let baseline = try Data(contentsOf: encryptedURL)
             let unlocked = try #require(PDFDocument(data: baseline))

@@ -13,7 +13,6 @@ analyzer_rules:
 
 opt_in_rules:
   - array_init
-  - attributes
   - closure_end_indentation
   - closure_spacing
   - collection_alignment
@@ -32,7 +31,6 @@ opt_in_rules:
   - first_where
   - flatmap_over_map_reduce
   - force_unwrapping
-  - function_default_parameter_at_end
   - identical_operands
   - implicit_return
   - joined_default_parameter
@@ -66,7 +64,6 @@ opt_in_rules:
   - redundant_type_annotation
   - single_test_class
   - sorted_first_last
-  - sorted_imports
   - static_operator
   - strong_iboutlet
   - toggle_bool
@@ -84,6 +81,16 @@ disabled_rules:
   - file_header
 
 # Rule configurations
+# SwiftFormat (.swiftformat) owns layout, including attribute placement and
+# import order (sortedImports, testable-bottom). These settings keep SwiftLint
+# from contradicting it: multi-line collections keep a trailing comma, and
+# digits are grouped from 6 digits up.
+trailing_comma:
+  mandatory_comma: true
+
+number_separator:
+  minimum_length: 6
+
 line_length:
   warning: 120
   error: 150
