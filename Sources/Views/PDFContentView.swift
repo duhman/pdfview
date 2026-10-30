@@ -462,7 +462,7 @@ extension PDFContentView {
     // MARK: Saving
 
     /// Asks for a destination in a sheet on this document's window, then writes the signed copy.
-    private func saveSignedCopy(completion: @escaping @MainActor (Bool) -> Void = { _ in }) {
+    private func saveSignedCopy(completion: @escaping (Bool) -> Void = { _ in }) {
         guard canSaveSignedCopy, let window = viewer.window else {
             completion(false)
             return
@@ -585,7 +585,7 @@ final class DocumentCloseGuard: NSObject, NSWindowDelegate {
     private nonisolated(unsafe) static var associationKey: UInt8 = 0
 
     var documentName = "this document"
-    var saveSignedCopy: (@escaping @MainActor (Bool) -> Void) -> Void = { $0(false) }
+    var saveSignedCopy: (@escaping (Bool) -> Void) -> Void = { $0(false) }
 
     /// Mirrors unexported placements into the window's edited dot.
     var isEdited = false {
