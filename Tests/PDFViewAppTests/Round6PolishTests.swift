@@ -66,3 +66,26 @@ import Testing
     #expect(titles.contains("Zoom to Fit"))
     #expect(titles.contains("Fit Width"))
 }
+
+// MARK: Place Initials on Every Page shows where they went
+
+@Test func everyPageRevealsTheNewInitialsOnTheCurrentPage() {
+    let targets: [(pageIndex: Int, bounds: CGRect)] = [
+        (0, CGRect(x: 1, y: 1, width: 60, height: 20)),
+        (1, CGRect(x: 2, y: 2, width: 60, height: 20)),
+        (2, CGRect(x: 3, y: 3, width: 60, height: 20)),
+    ]
+    #expect(StampWorkflow.targetToReveal(targets, currentPageIndex: 1)?.pageIndex == 1)
+    #expect(StampWorkflow.targetToReveal(targets, currentPageIndex: 1)?.bounds == targets[1].bounds)
+}
+
+@Test func everyPageRevealsTheNextNewInitialsWhenTheCurrentPageHadSome() {
+    let targets: [(pageIndex: Int, bounds: CGRect)] = [
+        (0, CGRect(x: 1, y: 1, width: 60, height: 20)),
+        (3, CGRect(x: 3, y: 3, width: 60, height: 20)),
+    ]
+    #expect(StampWorkflow.targetToReveal(targets, currentPageIndex: 1)?.pageIndex == 3)
+    #expect(StampWorkflow.targetToReveal(targets, currentPageIndex: 5)?.pageIndex == 0)
+    #expect(StampWorkflow.targetToReveal(targets, currentPageIndex: nil)?.pageIndex == 0)
+    #expect(StampWorkflow.targetToReveal([], currentPageIndex: 0) == nil)
+}

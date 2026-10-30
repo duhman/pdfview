@@ -759,6 +759,10 @@ extension PDFContentView {
         if !targets.isEmpty {
             let placements = targets.map { artwork.placement(pageIndex: $0.pageIndex, bounds: $0.bounds) }
             configuredEditor().add(placements, actionName: StampWorkflow.everyPageActionName)
+            // They usually land in the bottom margin, below what is on screen.
+            if let target = StampWorkflow.targetToReveal(targets, currentPageIndex: viewer.currentPageIndex) {
+                viewer.reveal(target.bounds, onPageAt: target.pageIndex)
+            }
             signingMode = .idle
             stampKind = StampWorkflow.kindAfterPlacementOrExit(stampKind)
         }

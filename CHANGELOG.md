@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - View > Zoom to Fit (⌘9) shows the whole current page; before, it fit only the page width in continuous mode and cut off the bottom. The old behaviour is View > Fit Width (⌥⌘9)
+- Place Initials on Every Page scrolls to the new initials on the current page (or the next page that got some), so you can see where they went; the "Placed initials on N pages." notice stays
 - Next / Previous Form Field skips read-only fields; a form with nothing editable says "This document has no form fields you can fill in."
 - Landing on a checkbox, radio button, pop-up, list or button with Next / Previous Form Field gives the document keyboard focus and ends any text edit, so Space and Return act on that field instead of typing into the text field just left
 - Sign > Anywhere is available only while signing; choosing it no longer starts signing

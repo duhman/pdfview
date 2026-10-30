@@ -133,6 +133,15 @@ enum StampWorkflow {
         }
     }
 
+    /// Which new initials to scroll to: the current page's, else the next page's, else the first.
+    static func targetToReveal(
+        _ targets: [(pageIndex: Int, bounds: CGRect)],
+        currentPageIndex: Int?
+    ) -> (pageIndex: Int, bounds: CGRect)? {
+        guard let current = currentPageIndex else { return targets.first }
+        return targets.first { $0.pageIndex >= current } ?? targets.first
+    }
+
     static func everyPageAnnouncement(count: Int) -> String {
         switch count {
         case 0: "Every page already has initials."
