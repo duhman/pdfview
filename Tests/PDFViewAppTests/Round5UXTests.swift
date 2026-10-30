@@ -155,3 +155,30 @@ private func makeTextThenCheckboxForm() throws -> PDFDocument {
     // Space and Return now reach the PDF view, which activates the checkbox, not the old text field.
     #expect(window.firstResponder === pdfView)
 }
+
+// MARK: Commands that can't act explain why instead of beeping
+
+@Test func signingCommandsSayWhyTheyCannotRun() {
+    #expect(SigningFlowLogic.signingUnavailableReason(hasPages: true, isLocked: true, isBusy: false)
+        == "Unlock this PDF to sign it.")
+    #expect(SigningFlowLogic.signingUnavailableReason(hasPages: true, isLocked: false, isBusy: true)
+        == "Wait for the current save or print to finish.")
+    #expect(SigningFlowLogic.signingUnavailableReason(hasPages: false, isLocked: false, isBusy: false)
+        == "This PDF has no pages to sign.")
+    #expect(SigningFlowLogic.signingUnavailableReason(hasPages: true, isLocked: false, isBusy: false)
+        == "This PDF is still opening. Try again in a moment.")
+}
+
+@Test func selectNextStampWithNoStampsSaysSo() {
+    #expect(SigningFlowLogic
+        .noStampsNotice == "There are no stamps to select. Place a signature, initials or a date first.")
+}
+
+@Test func formFieldNavigationSaysWhyItCannotMove() {
+    #expect(FormFieldNavigation.unavailableNotice(isLocked: true, isScanned: false)
+        == "Unlock this PDF to use its form fields.")
+    #expect(FormFieldNavigation.unavailableNotice(isLocked: false, isScanned: false)
+        == "Still finding this PDF’s form fields. Try again in a moment.")
+    #expect(FormFieldNavigation.unavailableNotice(isLocked: false, isScanned: true)
+        == FormFieldNavigation.noFieldsAnnouncement)
+}

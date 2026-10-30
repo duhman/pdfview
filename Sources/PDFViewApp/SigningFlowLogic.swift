@@ -156,6 +156,23 @@ enum SigningFlowLogic {
         }
     }
 
+    /// Why a Sign command cannot run right now. The commands stay enabled and show this instead, because
+    /// a disabled menu item's shortcut only beeps.
+    static func signingUnavailableReason(hasPages: Bool, isLocked: Bool, isBusy: Bool) -> String {
+        if isLocked {
+            "Unlock this PDF to sign it."
+        } else if isBusy {
+            "Wait for the current save or print to finish."
+        } else if !hasPages {
+            "This PDF has no pages to sign."
+        } else {
+            "This PDF is still opening. Try again in a moment."
+        }
+    }
+
+    /// Select Next/Previous Stamp before anything has been placed.
+    static let noStampsNotice = "There are no stamps to select. Place a signature, initials or a date first."
+
     static func enteredAnnouncement(mode: SigningMode, kind: StampKind = .signature) -> String {
         "Placing \(kind.title.lowercased()). \(statusText(mode: mode, kind: kind)) Press Escape to stop."
     }

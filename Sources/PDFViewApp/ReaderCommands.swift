@@ -79,12 +79,13 @@ struct ReaderCommands: Commands {
             .keyboardShortcut(MenuShortcuts.lastPage)
             .disabled(reader?.canRead != true)
         Divider()
+        // Enabled whenever a document is open: with no field to move to, the banner says why instead of a beep.
         Button("Next Form Field") { actions?.moveToFormField(true) }
             .keyboardShortcut(MenuShortcuts.nextFormField)
-            .disabled(reader?.canRead != true || actions?.hasFormFields != true)
+            .disabled(actions == nil)
         Button("Previous Form Field") { actions?.moveToFormField(false) }
             .keyboardShortcut(MenuShortcuts.previousFormField)
-            .disabled(reader?.canRead != true || actions?.hasFormFields != true)
+            .disabled(actions == nil)
         // Space or Return does the same on a field just moved to, unless it is a text field.
         Button("Activate Form Field") { actions?.activateFormField() }
             .keyboardShortcut(MenuShortcuts.activateFormField)

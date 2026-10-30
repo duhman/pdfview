@@ -463,6 +463,14 @@ extension PDFContentView {
         return !pdf.isLocked && documentState?.isLocked == false && !export.isBusy
     }
 
+    private var signingUnavailableReason: String {
+        SigningFlowLogic.signingUnavailableReason(
+            hasPages: (document.pdfDocument?.pageCount ?? 0) > 0,
+            isLocked: isLocked,
+            isBusy: export.isBusy
+        )
+    }
+
     private var canSaveSignedCopy: Bool {
         document.pdfDocument?.isLocked == false && protectionSession.protection != nil
             && !export.isBusy && SigningFlowLogic.hasSignedCopyContent(
@@ -518,7 +526,6 @@ extension PDFContentView {
             placeOnCurrentPage: placeOnCurrentPage,
             placeInitialsOnEveryPage: placeInitialsOnEveryPage,
             setAnywhere: setAnywhere,
-            hasPlacements: !document.signaturePlacements.isEmpty,
             selectNextStamp: { selectAdjacentStamp(forward: true) },
             selectPreviousStamp: { selectAdjacentStamp(forward: false) },
             saveSignedCopy: { saveSignedCopy() },
@@ -667,7 +674,10 @@ extension PDFContentView {
 
     /// Keyboard path to field signing: each use fills the next detected signature field.
     private func placeInNextField() {
-        guard canSign else { return }
+        guard canSign else {
+            showNotice(signingUnavailableReason)
+            return
+        }
         if let reason = SigningFlowLogic.nextFieldUnavailableReason(
             kind: stampKind,
             hasSignatureFields: hasSignatureFields
@@ -771,6 +781,10 @@ extension PDFContentView {
     /// Select Next/Previous Stamp: reveals the stamp, gives it keyboard focus and reads its label.
     private func selectAdjacentStamp(forward: Bool) {
         let placements = document.signaturePlacements
+        guard !placements.isEmpty else {
+            showNotice(SigningFlowLogic.noStampsNotice)
+            return
+        }
         guard let id = SigningFlowLogic.stampToSelect(
             after: viewer.selectedPlacementID,
             ownsArrowKeys: viewer.stampOwnsArrowKeys,
@@ -931,7 +945,10 @@ extension PDFContentView {
 
     private func moveToFormField(forward: Bool) {
         guard let message = viewer.moveToFormField(forward: forward) else {
-            showNotice(FormFieldNavigation.noFieldsAnnouncement)
+            showNotice(FormFieldNavigation.unavailableNotice(
+                isLocked: isLocked,
+                isScanned: documentState?.formValues != nil
+            ))
             return
         }
         announce(message)

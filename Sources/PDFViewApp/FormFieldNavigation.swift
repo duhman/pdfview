@@ -69,4 +69,16 @@ enum FormFieldNavigation {
     }
 
     static let noFieldsAnnouncement = "This document has no form fields you can fill in."
+
+    /// Why Next/Previous Form Field found nothing to move to. The commands stay enabled and show this,
+    /// because a disabled menu item's shortcut only beeps.
+    static func unavailableNotice(isLocked: Bool, isScanned: Bool) -> String {
+        if isLocked {
+            "Unlock this PDF to use its form fields."
+        } else if !isScanned {
+            "Still finding this PDF’s form fields. Try again in a moment."
+        } else {
+            noFieldsAnnouncement
+        }
+    }
 }
