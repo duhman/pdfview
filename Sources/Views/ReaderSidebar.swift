@@ -5,49 +5,62 @@ struct ReaderSidebar: View {
     let reader: ReaderController
     @State private var tab: Tab = .thumbnails
 
-    private enum Tab: String, CaseIterable {
+    enum Tab: String, CaseIterable {
         case thumbnails = "Thumbnails"
         case outline = "Outline"
     }
 
+    /// Without an outline the Outline segment is disabled, so it never shows an empty list.
+    static func shownTab(_ tab: Tab, hasOutline: Bool) -> Tab {
+        hasOutline ? tab : .thumbnails
+    }
+
+    static func outlineHelp(hasOutline: Bool) -> String? {
+        hasOutline ? nil : "This PDF has no outline"
+    }
+
     var body: some View {
+        let hasOutline = !reader.outline.isEmpty
         VStack(spacing: 0) {
-            Picker("Sidebar content", selection: $tab) {
+            Picker("Sidebar content", selection: shownTabBinding(hasOutline: hasOutline)) {
                 ForEach(Tab.allCases, id: \.self) { tab in
-                    Text(tab.rawValue).tag(tab)
+                    Text(tab.rawValue)
+                        .tag(tab)
+                        .disabled(tab == .outline && !hasOutline)
                 }
             }
             .pickerStyle(.segmented)
             // The label stays for VoiceOver; on screen the segments speak for themselves.
             .labelsHidden()
+            .help(Self.outlineHelp(hasOutline: hasOutline) ?? "")
             .padding(10)
 
             Divider()
 
-            switch tab {
+            switch Self.shownTab(tab, hasOutline: hasOutline) {
             case .thumbnails:
                 PDFThumbnails(view: reader.view)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .outline:
-                if reader.outline.isEmpty {
-                    ContentUnavailableView(
-                        "No Outline",
-                        systemImage: "list.bullet.indent",
-                        description: Text("This PDF has no bookmarks.")
-                    )
-                } else {
-                    List(reader.outline, children: \.children, selection: outlineSelection) { node in
-                        Text(node.item.label ?? "Untitled section").tag(node.id)
-                    }
-                    .listStyle(.sidebar)
-                    .scrollContentBackground(.hidden)
-                    .accessibilityLabel("Document outline")
+                List(reader.outline, children: \.children, selection: outlineSelection) { node in
+                    Text(node.item.label ?? "Untitled section").tag(node.id)
                 }
+                .listStyle(.sidebar)
+                .scrollContentBackground(.hidden)
+                .accessibilityLabel("Document outline")
             }
         }
         .frame(minWidth: 180, idealWidth: 220, maxWidth: 320, maxHeight: .infinity)
         .background(.regularMaterial)
         .accessibilityLabel("Document sidebar")
+    }
+
+    /// Keeps the chosen tab, so Outline comes back when a PDF with an outline is shown again.
+    private func shownTabBinding(hasOutline: Bool) -> Binding<Tab> {
+        Binding(
+            get: { Self.shownTab(tab, hasOutline: hasOutline) },
+            set: { tab = $0 }
+        )
     }
 
     private var outlineSelection: Binding<ObjectIdentifier?> {

@@ -16,3 +16,15 @@ func sidebarResolvesNestedOutlineSelection() {
     #expect(ReaderSidebar.find(ObjectIdentifier(root), in: nodes) == nil)
     #expect(ReaderSidebar.find(nil, in: nodes) == nil)
 }
+
+@MainActor
+@Test
+func theOutlineTabIsOfferedOnlyWhenThePDFHasAnOutline() {
+    #expect(ReaderSidebar.shownTab(.outline, hasOutline: false) == .thumbnails)
+    #expect(ReaderSidebar.shownTab(.outline, hasOutline: true) == .outline)
+    #expect(ReaderSidebar.shownTab(.thumbnails, hasOutline: false) == .thumbnails)
+    #expect(ReaderSidebar.outlineHelp(hasOutline: false) == "This PDF has no outline")
+    #expect(ReaderSidebar.outlineHelp(hasOutline: true) == nil)
+    // A root with no sections is no outline.
+    #expect((ReaderOutlineNode.children(of: PDFOutline()) ?? []).isEmpty)
+}
