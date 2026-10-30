@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-30
+
+A full native reader with offline visual signing: correct signed export, visible and editable stamps, initials and dates, password-protected copies, keyboard and VoiceOver support.
+
 ### Fixed
 - Keep closing/quitting cancelled and the window edited when stamps or form values change during Save Signed Copy
 - Capture initial form values before editing, including during incremental field discovery and immediately after unlock

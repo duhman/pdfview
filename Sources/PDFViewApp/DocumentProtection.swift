@@ -57,7 +57,8 @@ final class DocumentProtection: NSObject {
         return true
     }
 
-    /// Call after PDFKit's native unlock path; that path cannot reveal its password.
+    /// Re-reads the lock state. Runs on .PDFDocumentDidUnlock, which the unlock sheet's
+    /// unlock(withPassword:) posts; PDFKit's own password field is never shown.
     @objc func refresh() {
         isLocked = document.isLocked
         if formBaseline == nil, !isLocked {
