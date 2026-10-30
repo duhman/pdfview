@@ -96,3 +96,63 @@ func makeStampPNG(width: Int, height: Int) throws -> Data {
     ))
     return try #require(rep.representation(using: .png, properties: [:]))
 }
+
+// MARK: Kind-aware wording
+
+@Test func editNamesSayWhichKindOfStampChanged() {
+    #expect(StampKind.signature.actionName(.add) == "Add Signature")
+    #expect(StampKind.initials.actionName(.move) == "Move Initials")
+    #expect(StampKind.date.actionName(.resize) == "Resize Date")
+    #expect(StampKind.initials.actionName(.remove) == "Remove Initials from Page")
+}
+
+@MainActor
+@Test func undoNamesFollowThePlacementsKind() {
+    var document = PDFViewerDocument()
+    let undoManager = UndoManager()
+    undoManager.groupsByEvent = false
+    let editor = SignaturePlacementEditor()
+    editor.document = Binding(get: { document }, set: { document = $0 })
+    editor.undoManager = undoManager
+    let initials = PDFViewerDocument.SignaturePlacement(
+        pageIndex: 0,
+        bounds: CGRect(x: 10, y: 10, width: 60, height: 20),
+        signaturePNGData: Data([1]),
+        signerName: "Tester",
+        kind: .initials
+    )
+
+    undoManager.beginUndoGrouping()
+    editor.add(initials)
+    undoManager.endUndoGrouping()
+    #expect(undoManager.undoActionName == "Add Initials")
+
+    undoManager.beginUndoGrouping()
+    editor.delete(id: initials.id)
+    undoManager.endUndoGrouping()
+    #expect(undoManager.undoActionName == "Remove Initials from Page")
+}
+
+@MainActor
+@Test func contextMenuAndVoiceOverActionsNameTheStampKind() throws {
+    let overlay = PageOverlayView(page: nil)
+    overlay.frame = CGRect(x: 0, y: 0, width: 300, height: 400)
+    let stamp = try PageOverlayView.Stamp(
+        id: UUID(),
+        bounds: CGRect(x: 100, y: 100, width: 60, height: 20),
+        image: blackPixel(),
+        kind: .date
+    )
+    overlay.content = PageOverlayView.Content(cropBox: overlay.frame, stamps: [stamp])
+
+    let menu = try #require(overlay.menu(for: rightClick(at: CGPoint(x: 120, y: 110))))
+    #expect(menu.items.map(\.title) == ["Remove Date from Page"])
+
+    let element = try #require(overlay.accessibilityChildren()?.first as? NSAccessibilityElement)
+    #expect(element.accessibilityCustomActions()?.map(\.name) == ["Remove Date from Page", "Move"])
+}
+
+@Test func moveInstructionsNameTheStampKind() {
+    #expect(StampAccessibility.moveInstructions(for: .initials).hasPrefix("Use the arrow keys to move the initials"))
+    #expect(StampAccessibility.moveInstructions(for: .signature).contains("the signature"))
+}

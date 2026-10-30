@@ -34,7 +34,7 @@ final class RecordingOverlayDelegate: PageOverlayViewDelegate {
 }
 
 @MainActor
-private func rightClick(at point: CGPoint) throws -> NSEvent {
+func rightClick(at point: CGPoint) throws -> NSEvent {
     try #require(NSEvent.mouseEvent(
         with: .rightMouseDown,
         location: point,

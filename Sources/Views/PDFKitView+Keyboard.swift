@@ -77,7 +77,7 @@ extension PDFKitView.Coordinator {
         )
 
         let bounds = PlacementGeometry.moved(placement.bounds, by: delta, within: page.bounds(for: .cropBox))
-        apply(bounds, to: placement, actionName: "Move Signature")
+        apply(bounds, to: placement, actionName: placement.kind.actionName(.move))
     }
 
     /// Option-Shift-arrows: right or up grows the stamp by 10 pt of width, left or down shrinks it.
@@ -88,7 +88,7 @@ extension PDFKitView.Coordinator {
             byWidth: growing ? 10 : -10,
             within: page.bounds(for: .cropBox)
         )
-        apply(bounds, to: placement, actionName: "Resize Signature")
+        apply(bounds, to: placement, actionName: placement.kind.actionName(.resize))
     }
 
     private func apply(_ bounds: CGRect, to placement: PDFViewerDocument.SignaturePlacement, actionName: String) {

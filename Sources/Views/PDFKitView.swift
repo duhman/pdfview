@@ -400,7 +400,8 @@ extension PDFKitView {
                         id: placement.id,
                         bounds: placement.bounds,
                         image: image,
-                        accessibilityLabel: label(for: placement, bounds: placement.bounds)
+                        accessibilityLabel: label(for: placement, bounds: placement.bounds),
+                        kind: placement.kind
                     )
                 }
             let isSigning = parent.signingMode != .idle
@@ -557,7 +558,8 @@ extension PDFKitView.Coordinator: PageOverlayViewDelegate {
 
     func overlay(_ overlay: PageOverlayView, didRequestMove id: UUID) {
         self.overlay(overlay, didSelect: id)
-        StampAccessibility.announce(StampAccessibility.moveInstructions, in: pdfView?.window)
+        let kind = parent.signaturePlacements.first { $0.id == id }?.kind ?? .signature
+        StampAccessibility.announce(StampAccessibility.moveInstructions(for: kind), in: pdfView?.window)
     }
 }
 

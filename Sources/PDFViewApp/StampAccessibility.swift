@@ -80,8 +80,10 @@ enum StampAccessibility {
         "Moved, page \(pageIndex + 1), \(location)"
     }
 
-    static let moveInstructions = "Use the arrow keys to move the signature: Shift moves 10 points, "
-        + "Option moves 50. Option-Shift arrows resize it. Delete removes it."
+    static func moveInstructions(for kind: StampKind) -> String {
+        "Use the arrow keys to move the \(kind.title.lowercased()): Shift moves 10 points, "
+            + "Option moves 50. Option-Shift arrows resize it. Delete removes it."
+    }
 
     @MainActor
     static func announce(_ message: String, in window: NSWindow?, priority: NSAccessibilityPriorityLevel = .high) {
@@ -101,14 +103,14 @@ final class StampAccessibilityElement: NSAccessibilityElement {
     // swiftlint:disable:next modifier_order
     private nonisolated(unsafe) weak var overlay: PageOverlayView?
 
-    init(stampID: UUID, overlay: PageOverlayView) {
+    init(stampID: UUID, kind: StampKind = .signature, overlay: PageOverlayView) {
         self.stampID = stampID
         self.overlay = overlay
         super.init()
         setAccessibilityRole(.button)
         setAccessibilityParent(overlay)
         setAccessibilityCustomActions([
-            NSAccessibilityCustomAction(name: "Remove Signature from Page") { [weak self] in
+            NSAccessibilityCustomAction(name: kind.actionName(.remove)) { [weak self] in
                 self?.perform { $0.removeStampFromAccessibility($1) } ?? false
             },
             NSAccessibilityCustomAction(name: "Move") { [weak self] in

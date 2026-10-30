@@ -54,6 +54,7 @@ final class PageOverlayView: NSView {
         let image: CGImage
         /// What VoiceOver reads for this stamp, e.g. "Signature by Jane Doe, page 2, in field Buyer".
         var accessibilityLabel = ""
+        var kind: StampKind = .signature
     }
 
     struct Content {
@@ -307,9 +308,9 @@ final class PageOverlayView: NSView {
         needsDisplay = true
         guard latest != stamp.bounds else { return }
         let actionName = if case .resize = target {
-            "Resize Signature"
+            stamp.kind.actionName(.resize)
         } else {
-            "Move Signature"
+            stamp.kind.actionName(.move)
         }
         delegate?.overlay(self, didChange: stamp.id, to: latest, actionName: actionName)
     }
@@ -341,7 +342,7 @@ final class PageOverlayView: NSView {
 
         let menu = NSMenu()
         let item = NSMenuItem(
-            title: "Remove Signature from Page",
+            title: stamp.kind.actionName(.remove),
             action: #selector(deleteFromMenu(_:)),
             keyEquivalent: ""
         )
@@ -363,7 +364,8 @@ final class PageOverlayView: NSView {
         let ids = Set(content.stamps.map(\.id))
         stampElements = stampElements.filter { ids.contains($0.key) }
         return content.stamps.map { stamp in
-            let element = stampElements[stamp.id] ?? StampAccessibilityElement(stampID: stamp.id, overlay: self)
+            let element = stampElements[stamp.id]
+                ?? StampAccessibilityElement(stampID: stamp.id, kind: stamp.kind, overlay: self)
             element.setAccessibilityLabel(stamp.accessibilityLabel)
             stampElements[stamp.id] = element
             return element

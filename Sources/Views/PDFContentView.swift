@@ -783,11 +783,12 @@ final class SignaturePlacementEditor {
     weak var undoManager: UndoManager?
 
     func add(_ placement: PDFViewerDocument.SignaturePlacement) {
-        insert(placement, at: nil, actionName: "Add Signature")
+        insert(placement, at: nil, actionName: placement.kind.actionName(.add))
     }
 
     func delete(id: UUID) {
-        remove(id: id, actionName: "Remove Signature from Page")
+        let kind = document?.wrappedValue.signaturePlacements.first { $0.id == id }?.kind ?? .signature
+        remove(id: id, actionName: kind.actionName(.remove))
     }
 
     func setBounds(id: UUID, to bounds: CGRect, actionName: String) {
