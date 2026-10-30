@@ -667,12 +667,16 @@ final class SigningPDFView: PDFView {
     var stampOwnsArrowKeys: () -> Bool = { false }
 
     /// Menu key equivalents are matched before keyDown, so the arrow chords that move or resize a
-    /// selected stamp are claimed here first. Option alone is left to the Go menu's page commands.
+    /// selected stamp are claimed here first. Option and Option-Command are left to the Go menu.
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let arrows: [NSEvent.SpecialKey] = [.leftArrow, .rightArrow, .upArrow, .downArrow]
         let flags = event.modifierFlags
-        let isStampArrow = event.specialKey.map(arrows.contains) == true && !flags.contains(.command)
-            && PlacementGeometry.arrowAction(shift: flags.contains(.shift), option: flags.contains(.option)) != nil
+        let isStampArrow = event.specialKey.map(arrows.contains) == true && PlacementGeometry.arrowAction(
+            shift: flags.contains(.shift),
+            option: flags.contains(.option),
+            command: flags.contains(.command),
+            control: flags.contains(.control)
+        ) != nil
         if isStampArrow, window?.firstResponder === self, stampOwnsArrowKeys(), keyHandler?(event) == true {
             return true
         }

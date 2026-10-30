@@ -91,7 +91,7 @@ enum StampAccessibility {
     }
 
     static func moveInstructions(for kind: StampKind) -> String {
-        "Use the arrow keys to move the \(kind.title.lowercased()): Shift moves 10 points. "
+        "Use the arrow keys to move the \(kind.title.lowercased()): Shift moves 10 points, Command moves 50 points. "
             + "Option-Shift arrows resize it. Delete removes it. Escape when done."
     }
 

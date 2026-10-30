@@ -108,3 +108,36 @@ private enum Sample {
     #expect(coordinator.selectedPlacementID == nil)
     #expect(StampAccessibility.deselectedAnnouncement == "Stamp deselected.")
 }
+
+// MARK: Coarse nudge
+
+@Test func commandArrowsMoveASelectedStampFiftyPoints() {
+    #expect(PlacementGeometry.arrowAction(shift: false, option: false, command: true) == .move(50))
+    // Option-Command arrows stay with First/Last Page and Next/Previous Form Field.
+    #expect(PlacementGeometry.arrowAction(shift: false, option: true, command: true) == nil)
+    #expect(PlacementGeometry.arrowAction(shift: true, option: false, command: true) == nil)
+    // Control-arrows belong to Mission Control and Spaces.
+    #expect(PlacementGeometry.arrowAction(shift: false, option: false, control: true) == nil)
+    #expect(PlacementGeometry.arrowAction(shift: false, option: false) == .move(1))
+}
+
+@MainActor
+@Test func commandArrowIsClaimedBeforeTheMenusButOptionCommandArrowIsNot() throws {
+    let pdfView = SigningPDFView(frame: CGRect(x: 0, y: 0, width: 400, height: 600))
+    let window = NSWindow(contentRect: pdfView.frame, styleMask: [.titled], backing: .buffered, defer: false)
+    window.contentView = pdfView
+    window.makeFirstResponder(pdfView)
+    var handled = 0
+    pdfView.stampOwnsArrowKeys = { true }
+    pdfView.keyHandler = { _ in
+        handled += 1
+        return true
+    }
+    #expect(try pdfView.performKeyEquivalent(with: downArrow(.command)))
+    _ = try pdfView.performKeyEquivalent(with: downArrow([.command, .option]))
+    #expect(handled == 1)
+}
+
+@Test func moveInstructionsMentionTheCoarseStep() {
+    #expect(StampAccessibility.moveInstructions(for: .date).contains("Command moves 50 points"))
+}

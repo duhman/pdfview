@@ -21,7 +21,12 @@ extension PDFKitView.Coordinator {
         case let key? where [.leftArrow, .rightArrow, .upArrow, .downArrow].contains(key):
             guard stampOwnsArrowKeys else { return false }
             let flags = event.modifierFlags
-            switch PlacementGeometry.arrowAction(shift: flags.contains(.shift), option: flags.contains(.option)) {
+            switch PlacementGeometry.arrowAction(
+                shift: flags.contains(.shift),
+                option: flags.contains(.option),
+                command: flags.contains(.command),
+                control: flags.contains(.control)
+            ) {
             case let .move(distance)?:
                 nudge(placement, key: key, by: distance)
             case .resize?:
