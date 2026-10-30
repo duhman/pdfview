@@ -322,3 +322,58 @@ func undecodableDataIsRejected() {
     #expect(SignatureRenderer.decodeImage(Data([0x89, 0x50, 0x4E, 0x47])) == nil)
     #expect(SignatureRenderer.decodeImage(Data("not an image".utf8)) == nil)
 }
+
+// MARK: - Date stamps
+
+@MainActor
+@Test
+func dateStampUsesLocaleMediumStyleAndCustomFormat() throws {
+    let date = Date(timeIntervalSince1970: 1_767_355_200) // 2026-01-02 12:00 UTC
+    let zone = try #require(TimeZone(secondsFromGMT: 0))
+    #expect(SignatureRenderer.dateText(date, locale: Locale(identifier: "en_US"), timeZone: zone) == "Jan 2, 2026")
+    #expect(SignatureRenderer.dateText(date, locale: Locale(identifier: "en_GB"), timeZone: zone) == "2 Jan 2026")
+    #expect(SignatureRenderer.dateText(
+        date, locale: Locale(identifier: "en_US"), timeZone: zone, customFormat: "yyyy-MM-dd"
+    ) == "2026-01-02")
+    #expect(SignatureRenderer.dateText(
+        date, locale: Locale(identifier: "en_US"), timeZone: zone, customFormat: "  "
+    ) == "Jan 2, 2026")
+}
+
+@MainActor
+@Test
+func dateStampSharesTypedInkSizingAndTransparency() throws {
+    let date = Date(timeIntervalSince1970: 1_767_355_200)
+    let locale = Locale(identifier: "en_US")
+    let stamp = try #require(SignatureRenderer.renderDate(date, locale: locale))
+    let text = SignatureRenderer.dateText(date, locale: locale)
+    let typed = try #require(SignatureRenderer.renderText(text, fontName: "SnellRoundhand"))
+    #expect(stamp.pngData == typed.pngData)
+    #expect(stamp.pointSize.width <= SignatureRenderer.maximumSize.width + 1)
+    #expect(stamp.pointSize.height <= SignatureRenderer.maximumSize.height + 1)
+    #expect(alpha(atX: 0, y: 0, in: stamp.image) == 0)
+    #expect(alpha(atX: stamp.image.width - 1, y: stamp.image.height - 1, in: stamp.image) == 0)
+    #expect(measuredInkBounds(stamp.image) != nil)
+    #expect(SignatureRenderer.decodeImage(stamp.pngData) != nil)
+    let long = try #require(SignatureRenderer.renderDate(
+        date,
+        customFormat: String(repeating: "EEEE MMMM ", count: 10)
+    ))
+    #expect(long.pointSize.width <= SignatureRenderer.maximumSize.width + 1)
+}
+
+@MainActor
+@Test
+func dateStampIsIndependentOfAppearance() throws {
+    let date = Date(timeIntervalSince1970: 1_767_355_200)
+    var light: Data?
+    var dark: Data?
+    try #require(NSAppearance(named: .aqua)).performAsCurrentDrawingAppearance {
+        light = SignatureRenderer.renderDate(date)?.pngData
+    }
+    try #require(NSAppearance(named: .darkAqua)).performAsCurrentDrawingAppearance {
+        dark = SignatureRenderer.renderDate(date)?.pngData
+    }
+    #expect(light != nil)
+    #expect(light == dark)
+}

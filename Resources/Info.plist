@@ -41,6 +41,10 @@
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.2</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 Adrian Marten. MIT License.</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>
