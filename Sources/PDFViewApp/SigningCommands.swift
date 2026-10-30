@@ -21,7 +21,7 @@ struct SigningCommandActions {
     var lastSavedURL: URL?
     var shareSignedCopy: (URL) -> Void
     var editSignature: () -> Void
-    var deleteSignature: () -> Void
+    var deleteProfile: (SignatureKind) -> Void
     var placeStamp: (StampKind) -> Void
     var editInitials: () -> Void
     var canUnlock: Bool
@@ -244,10 +244,12 @@ struct SigningCommandMenu: Commands {
             Button("Unlock…") { actions?.unlock() }
                 .disabled(actions?.canUnlock != true)
 
-            Button("Delete Saved Signature…") {
-                actions?.deleteSignature()
+            ForEach(SignatureKind.allCases, id: \.self) { kind in
+                Button(StampWorkflow.deleteMenuTitle(kind)) {
+                    actions?.deleteProfile(kind)
+                }
+                .disabled(actions == nil || signatureStore.profile(for: kind) == nil)
             }
-            .disabled(actions == nil || signatureStore.profile == nil)
         }
     }
 }

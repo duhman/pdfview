@@ -321,3 +321,15 @@ private func initials(page: Int, bounds: CGRect) -> PDFViewerDocument.SignatureP
     undoManager.redo()
     #expect(document.signaturePlacements.count == 3)
 }
+
+// MARK: Deleting saved profiles
+
+@Test func deleteConfirmationNamesTheProfileKind() {
+    #expect(StampWorkflow.deleteMenuTitle(.initials) == "Delete Saved Initials…")
+    #expect(StampWorkflow.deleteMenuTitle(.signature) == "Delete Saved Signature…")
+    #expect(StampWorkflow.deleteAlertTitle(.initials) == "Delete your saved initials?")
+    #expect(StampWorkflow.deleteAlertMessage(.initials)
+        == "They will be removed from this Mac. Initials already placed in documents are not affected.")
+    #expect(StampWorkflow.deleteAlertMessage(.signature)
+        == "It will be removed from this Mac. Signatures already placed in documents are not affected.")
+}

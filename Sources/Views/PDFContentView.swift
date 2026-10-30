@@ -43,7 +43,8 @@ struct PDFContentView: View {
     @State private var showSignatureSetupSheet = false
     @State private var isEditingSignature = false
     @State private var pendingAfterSetup: PendingSigningAction?
-    @State private var showDeleteSignatureAlert = false
+    /// The saved profile the Delete Saved Signature/Initials… alert is asking about.
+    @State private var profileToDelete: SignatureKind?
     @State private var errorAlert: ErrorAlert?
 
     var body: some View {
@@ -102,11 +103,15 @@ struct PDFContentView: View {
             .sheet(isPresented: $showSignatureSetupSheet) {
                 signatureSetupSheet
             }
-            .alert("Delete your saved signature?", isPresented: $showDeleteSignatureAlert) {
-                Button("Delete", role: .destructive, action: deleteSignatureProfile)
+            .alert(
+                StampWorkflow.deleteAlertTitle(profileToDelete ?? .signature),
+                isPresented: deleteAlertIsPresented,
+                presenting: profileToDelete
+            ) { kind in
+                Button("Delete", role: .destructive) { deleteProfile(kind) }
                 Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("It will be removed from this Mac. Signatures already placed in documents are not affected.")
+            } message: { kind in
+                Text(StampWorkflow.deleteAlertMessage(kind))
             }
     }
 
@@ -343,6 +348,17 @@ extension PDFContentView {
         )
     }
 
+    private var deleteAlertIsPresented: Binding<Bool> {
+        Binding(
+            get: { profileToDelete != nil },
+            set: {
+                if !$0 {
+                    profileToDelete = nil
+                }
+            }
+        )
+    }
+
     private var anywhereSelection: Binding<Bool> {
         Binding(
             get: { signingMode == .freePlacement },
@@ -416,7 +432,7 @@ extension PDFContentView {
             lastSavedURL: lastSavedURL,
             shareSignedCopy: { url in viewer.showSharingPicker(for: url) },
             editSignature: editSignature,
-            deleteSignature: confirmDeleteSignature,
+            deleteProfile: { profileToDelete = $0 },
             placeStamp: chooseStamp,
             editInitials: { editProfile(.initials) },
             canUnlock: protectionSession.protection?.isLocked == true,
@@ -691,17 +707,15 @@ extension PDFContentView {
         showSignatureSetupSheet = true
     }
 
-    private func confirmDeleteSignature() {
-        showDeleteSignatureAlert = true
-    }
-
-    private func deleteSignatureProfile() {
+    private func deleteProfile(_ kind: SignatureKind) {
         do {
-            try signatureStore.deleteProfile()
-            signingMode = .idle
-            stampKind = .signature
+            try signatureStore.deleteProfile(for: kind)
+            if stampKind.profileKind == kind {
+                signingMode = .idle
+                stampKind = .signature
+            }
         } catch {
-            errorAlert = ErrorAlert(title: "Couldn’t Delete Signature", error: error)
+            errorAlert = ErrorAlert(title: "Couldn’t Delete \(kind.title)", error: error)
         }
     }
 

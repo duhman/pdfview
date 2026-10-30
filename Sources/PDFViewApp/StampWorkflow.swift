@@ -171,4 +171,23 @@ enum StampWorkflow {
         }
         return CGRect(origin: origin, size: size)
     }
+
+    // MARK: Saved profiles
+
+    static func deleteMenuTitle(_ kind: SignatureKind) -> String {
+        "Delete Saved \(kind.title)…"
+    }
+
+    static func deleteAlertTitle(_ kind: SignatureKind) -> String {
+        "Delete your saved \(kind.title.lowercased())?"
+    }
+
+    static func deleteAlertMessage(_ kind: SignatureKind) -> String {
+        switch kind {
+        case .signature:
+            "It will be removed from this Mac. Signatures already placed in documents are not affected."
+        case .initials:
+            "They will be removed from this Mac. Initials already placed in documents are not affected."
+        }
+    }
 }
