@@ -41,6 +41,8 @@ struct PDFContentView: View {
     /// The last signed copy saved from this window; File menu sharing stays bound to it.
     @State private var lastSavedURL: URL?
     @State private var showsSavedBanner = false
+    /// Why the last action did nothing, or what it did when nothing else on screen shows it.
+    @State private var notice = TransientNotice()
 
     @State private var showSignatureSetupSheet = false
     @State private var isEditingSignature = false
@@ -145,8 +147,13 @@ struct PDFContentView: View {
             }
             if signingMode != .idle {
                 signingBanner
-            } else if isSavedBannerVisible, let lastSavedURL {
-                savedBanner(for: lastSavedURL)
+            } else {
+                if let message = notice.text {
+                    noticeBanner(message)
+                }
+                if isSavedBannerVisible, let lastSavedURL {
+                    savedBanner(for: lastSavedURL)
+                }
             }
 
             if reader.find.isVisible {
@@ -185,7 +192,8 @@ struct PDFContentView: View {
             onUpdatePlacementBounds: updatePlacementBounds,
             onDeletePlacement: { configuredEditor().delete(id: $0) },
             onDocumentStateChange: applyDocumentState,
-            onFormValuesChange: applyFormValues
+            onFormValuesChange: applyFormValues,
+            onNotice: showNotice
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay {
@@ -277,7 +285,12 @@ extension PDFContentView {
             Image(systemName: "signature")
                 .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
-            Text(SigningFlowLogic.statusText(mode: signingMode, kind: stampKind))
+            // A notice stands in for the instruction while it shows, so the banner does not grow.
+            if let message = notice.text {
+                Label(message, systemImage: "exclamationmark.circle")
+            } else {
+                Text(SigningFlowLogic.statusText(mode: signingMode, kind: stampKind))
+            }
             Spacer()
             if hasSignatureFields {
                 Picker("Place stamp in", selection: anywhereSelection) {
@@ -289,6 +302,20 @@ extension PDFContentView {
                 .fixedSize()
             }
             Button("Done", action: exitSigning)
+        }
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+    }
+
+    private func noticeBanner(_ message: String) -> some View {
+        HStack(spacing: 12) {
+            Label(message, systemImage: "exclamationmark.circle")
+            Spacer()
         }
         .font(.callout)
         .padding(.horizontal, 12)
@@ -599,6 +626,7 @@ extension PDFContentView {
         guard signingMode != .idle else { return }
         signingMode = SigningFlowLogic.exited(signingMode)
         stampKind = StampWorkflow.kindAfterPlacementOrExit(stampKind)
+        notice.dismiss()
         announce(SigningFlowLogic.exitedAnnouncement)
         // The Done button that may have had focus is gone; give focus back to the document.
         viewer.focusDocument()
@@ -621,7 +649,7 @@ extension PDFContentView {
             kind: stampKind,
             hasSignatureFields: hasSignatureFields
         ) {
-            announce(reason)
+            showNotice(reason)
             return
         }
         guard let imageSize = signatureImageSize else {
@@ -633,8 +661,7 @@ extension PDFContentView {
             fields: signatureFields,
             placements: document.signaturePlacements
         ) else {
-            NSSound.beep()
-            announce(StampWorkflow.allFieldsFilledAnnouncement)
+            showNotice(StampWorkflow.allFieldsFilledAnnouncement)
             return
         }
         guard let page = document.pdfDocument?.page(at: signatureFields[index].pageIndex) else { return }
@@ -698,15 +725,13 @@ extension PDFContentView {
             placements: document.signaturePlacements,
             defaultSize: PlacementGeometry.defaultSize(imageSize: imageSize, width: stampSizes.width(for: .initials))
         )
-        if targets.isEmpty {
-            NSSound.beep()
-        } else {
+        if !targets.isEmpty {
             let placements = targets.map { artwork.placement(pageIndex: $0.pageIndex, bounds: $0.bounds) }
             configuredEditor().add(placements, actionName: StampWorkflow.everyPageActionName)
             signingMode = .idle
             stampKind = StampWorkflow.kindAfterPlacementOrExit(stampKind)
         }
-        announce(StampWorkflow.everyPageAnnouncement(count: targets.count))
+        showNotice(StampWorkflow.everyPageAnnouncement(count: targets.count))
     }
 
     private func placeSignature(pageIndex: Int, bounds: CGRect) {
@@ -881,8 +906,7 @@ extension PDFContentView {
 
     private func moveToFormField(forward: Bool) {
         guard let message = viewer.moveToFormField(forward: forward) else {
-            NSSound.beep()
-            announce(FormFieldNavigation.noFieldsAnnouncement)
+            showNotice(FormFieldNavigation.noFieldsAnnouncement)
             return
         }
         announce(message)
@@ -901,6 +925,12 @@ extension PDFContentView {
         }
         closeGuard.install(on: window)
         closeGuard.isEdited = !unsavedWork.isEmpty
+    }
+
+    /// Shows a message in the banner for a few seconds and reads it to VoiceOver, instead of a beep.
+    private func showNotice(_ message: String) {
+        notice.show(message)
+        announce(message)
     }
 
     private func announce(_ message: String) {

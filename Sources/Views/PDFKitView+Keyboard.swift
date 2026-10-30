@@ -78,7 +78,7 @@ extension PDFKitView.Coordinator {
         )
 
         let bounds = PlacementGeometry.moved(placement.bounds, by: delta, within: page.bounds(for: .cropBox))
-        apply(bounds, to: placement, actionName: placement.kind.actionName(.move))
+        apply(bounds, to: placement, edit: .move)
     }
 
     /// Option-Shift-arrows: right or up grows the stamp by 10 pt of width, left or down shrinks it.
@@ -89,15 +89,15 @@ extension PDFKitView.Coordinator {
             byWidth: growing ? 10 : -10,
             within: page.bounds(for: .cropBox)
         )
-        apply(bounds, to: placement, actionName: placement.kind.actionName(.resize))
+        apply(bounds, to: placement, edit: .resize)
     }
 
-    private func apply(_ bounds: CGRect, to placement: PDFViewerDocument.SignaturePlacement, actionName: String) {
+    private func apply(_ bounds: CGRect, to placement: PDFViewerDocument.SignaturePlacement, edit: StampEdit) {
         guard bounds != placement.bounds else {
-            NSSound.beep()
+            parent.onNotice(StampAccessibility.limitNotice(for: edit))
             return
         }
-        parent.onUpdatePlacementBounds(placement.id, bounds, actionName)
+        parent.onUpdatePlacementBounds(placement.id, bounds, placement.kind.actionName(edit))
         let message = StampAccessibility.movedAnnouncement(
             pageIndex: placement.pageIndex,
             location: location(of: bounds, onPageAt: placement.pageIndex)

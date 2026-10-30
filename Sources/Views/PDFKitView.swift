@@ -178,6 +178,8 @@ struct PDFKitView: NSViewRepresentable {
     var onDocumentStateChange: (DocumentState) -> Void
     /// The user changed a form widget's value.
     var onFormValuesChange: ([FormFieldValue]) -> Void
+    /// Explains why an action did nothing, in the banner and to VoiceOver, instead of beeping.
+    var onNotice: (String) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -604,7 +606,7 @@ extension PDFKitView.Coordinator: PageOverlayViewDelegate {
                 width: parent.stampWidth
             )
         } else {
-            NSSound.beep()
+            parent.onNotice(SigningFlowLogic.clickInsideFieldNotice)
             return
         }
 

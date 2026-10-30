@@ -152,6 +152,9 @@ enum SigningFlowLogic {
 
     static let exitedAnnouncement = "Stopped signing."
 
+    /// Shown in the signing banner when a click in Fields mode misses every signature field.
+    static let clickInsideFieldNotice = "Click inside a signature field, or choose Anywhere."
+
     static func signatureMenuTitle(hasProfile: Bool) -> String {
         hasProfile ? "Edit Signature…" : "Create Signature…"
     }

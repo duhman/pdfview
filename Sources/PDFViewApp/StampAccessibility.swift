@@ -81,6 +81,11 @@ enum StampAccessibility {
         "Moved, page \(pageIndex + 1), \(location)"
     }
 
+    /// Why a keyboard move or resize did nothing.
+    static func limitNotice(for edit: StampEdit) -> String {
+        edit == .resize ? "This stamp can’t be resized any further." : "This stamp is already at the edge of the page."
+    }
+
     static func moveInstructions(for kind: StampKind) -> String {
         "Use the arrow keys to move the \(kind.title.lowercased()): Shift moves 10 points. "
             + "Option-Shift arrows resize it. Delete removes it. Escape when done."
