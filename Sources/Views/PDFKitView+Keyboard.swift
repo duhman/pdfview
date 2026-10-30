@@ -3,6 +3,9 @@ import AppKit
 
 extension PDFKitView.Coordinator {
     func handleKey(_ event: NSEvent) -> Bool {
+        if handleFormFieldKey(event) {
+            return true
+        }
         if event.keyCode == 53 {
             return handleEscape()
         }

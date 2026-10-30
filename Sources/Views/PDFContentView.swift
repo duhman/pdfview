@@ -93,7 +93,8 @@ struct PDFContentView: View {
                 printDocument: printDocument,
                 pageSetup: runPageSetup,
                 hasFormFields: formValues?.isEmpty == false,
-                moveToFormField: moveToFormField
+                moveToFormField: moveToFormField,
+                activateFormField: viewer.activateFormField
             ))
     }
 

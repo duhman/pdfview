@@ -36,7 +36,7 @@ duti -s com.bigmac.pdfview com.adobe.pdf all
 - A native sidebar with a Thumbnails/Outline selector and current-section selection in the outline.
 - Asynchronous text search with match highlights and previous/next navigation; VoiceOver hears the result and each move.
 - Unlock password-protected PDFs with secure entry; cancel keeps the locked reader open with an Unlock banner.
-- Move between form fields with Go > Next/Previous Form Field; text fields open for typing.
+- Move between form fields with Go > Next/Previous Form Field, which reads each field’s name, kind and state; text fields open for typing, and Go > Activate Form Field (or Space or Return) toggles checkboxes and radio buttons and opens pop-up and list choices.
 - Print the PDF with any placed stamps included; document print permissions are respected.
 - Remember your page, scroll position and zoom for the 200 most recently read file paths.
 - Single-page and two-page layouts, continuous scrolling, and full screen.
@@ -87,6 +87,7 @@ Signatures are **visual stamps, not certificate-based digital signatures**. They
 | ⌥↓ / ⌥↑ | Next / Previous Page |
 | ⌥⌘↑ / ⌥⌘↓ | First / Last Page (Option-arrows page even while a stamp is selected) |
 | ⌥⌘→ / ⌥⌘← | Next / Previous Form Field |
+| ⌥⌘↩, or Space / Return on the field just moved to | Activate Form Field: toggle a checkbox or radio button, choose from a pop-up or list, edit a text field |
 | ⌘F | Find |
 | ⌘G / ⇧⌘G | Next / Previous Match |
 | ⌃⌘F | Enter/Exit Full Screen |
