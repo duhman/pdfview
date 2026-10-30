@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Place Initials on Every Page scrolls to the new initials on the current page (or the next page that got some), so you can see where they went; the "Placed initials on N pages." notice stays
 - The initials signing banner fits on one line at a 1000 pt window: the Place Initials on Every Page (⌥⌘I) hint moved to the banner's help tag, and VoiceOver still hears it when signing starts
 - A selected stamp's outline and corner handles sit half a handle outside the stamp, so on small stamps such as a date the handles no longer cover the text; dragging a handle resizes by the pointer's travel instead of snapping the corner to the pointer
+- The signature sheet's font picker reads "Style:", with the colon the "Full name:" and "Signature:" labels use
 - Next / Previous Form Field skips read-only fields; a form with nothing editable says "This document has no form fields you can fill in."
 - Landing on a checkbox, radio button, pop-up, list or button with Next / Previous Form Field gives the document keyboard focus and ends any text edit, so Space and Return act on that field instead of typing into the text field just left
 - Sign > Anywhere is available only while signing; choosing it no longer starts signing

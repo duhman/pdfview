@@ -169,7 +169,8 @@ struct SignatureSetupSheet: View {
             .labelsHidden()
             .focused($focusedField, equals: .typedText)
 
-            Picker("Style", selection: $fontName) {
+            // Colon like "Full name:" and the typed-text label beside it.
+            Picker("Style:", selection: $fontName) {
                 ForEach(SignatureRenderer.availableScriptFonts, id: \.self) { name in
                     Text(NSFont(name: name, size: NSFont.systemFontSize)?.displayName ?? name).tag(name)
                 }
