@@ -7,7 +7,7 @@ import Testing
 struct WidgetCaptureLatencyTests {
     @Test func widgetHeavyCaptureLatency() async throws {
         if ProcessInfo.processInfo.environment["PDFVIEW_WIDGET_LATENCY_CHILD"] == "1" {
-            try measureCapture()
+            try await measureCapture()
         } else {
             let result = try await runIsolated()
             print(result.output)
@@ -41,7 +41,46 @@ struct WidgetCaptureLatencyTests {
         }.value
     }
 
-    private func measureCapture() throws {
+    private func measureCapture() async throws {
+        let cold = try widgetHeavyDocument()
+        let clock = ContinuousClock()
+        let start = clock.now
+        let model = PDFViewerDocument(pdfDocument: cold)
+        let open = start.duration(to: clock.now)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let saveStart = clock.now
+        var firstSuspension: Duration?
+        var last = saveStart
+        var maximumGap = Duration.zero
+        let heartbeat = Task { @MainActor in
+            firstSuspension = saveStart.duration(to: clock.now)
+            while !Task.isCancelled {
+                let now = clock.now
+                maximumGap = max(maximumGap, last.duration(to: now))
+                last = now
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        defer { heartbeat.cancel() }
+        let state = try await SignedPDFExporter.writeAsync(cold, placements: [], to: url) { _ in }
+        maximumGap = max(maximumGap, last.duration(to: clock.now))
+        let save = try #require(firstSuspension)
+        let values = state.formValues
+        print(
+            "300-page / 2000-widget form capture: open=\(open), save-to-first-suspension=\(save), max-gap=\(maximumGap)"
+        )
+        #expect(model.initialFormValues?.count == 2000)
+        #expect(values == model.initialFormValues)
+        // Capture at open includes PDFKit's lazy annotation parse of every page and measured
+        // 47-103 ms for this fixture depending on machine load; 250 ms catches a real regression
+        // (a noticeable stall) without failing on a busy machine.
+        #expect(open < .milliseconds(250))
+        #expect(save < .milliseconds(100))
+        #expect(maximumGap < .milliseconds(250))
+    }
+
+    private func widgetHeavyDocument() throws -> PDFDocument {
         let source = try ExportFixture.document(mediaBoxes: Array(
             repeating: CGRect(x: 0, y: 0, width: 400, height: 600), count: 300
         ))
@@ -51,22 +90,7 @@ struct WidgetCaptureLatencyTests {
             field.fieldName = "Field\(index)"
         }
         let fixtureData = try #require(source.dataRepresentation())
-        let cold = try #require(PDFDocument(data: fixtureData))
-        let clock = ContinuousClock()
-        let start = clock.now
-        let model = PDFViewerDocument(pdfDocument: cold)
-        let open = start.duration(to: clock.now)
-        let saveStart = clock.now
-        let values = FormScan.capture(cold)?.values()
-        let save = saveStart.duration(to: clock.now)
-        print("300-page / 2000-widget form capture: open=\(open), save=\(save)")
-        #expect(model.initialFormValues?.count == 2000)
-        #expect(values == model.initialFormValues)
-        // Capture at open includes PDFKit's lazy annotation parse of every page and measured
-        // 47-103 ms for this fixture depending on machine load; 250 ms catches a real regression
-        // (a noticeable stall) without failing on a busy machine.
-        #expect(open < .milliseconds(250))
-        #expect(save < .milliseconds(100))
+        return try #require(PDFDocument(data: fixtureData))
     }
 }
 

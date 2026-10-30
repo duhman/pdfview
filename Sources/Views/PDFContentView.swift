@@ -31,11 +31,13 @@ struct PDFContentView: View {
     /// Nil until the PDF view has scanned the document.
     @State private var documentState: PDFKitView.DocumentState?
     @State private var lastFieldIndex: Int?
-    @State private var exportedPlacements: [PDFViewerDocument.SignaturePlacement]?
+    @State private var exportedState: ExportedState?
     /// Live, initial and last-exported form values; the baseline is captured before editing.
     @State private var formValues: [FormFieldValue]?
-    @State private var originalFormValues: [FormFieldValue]?
-    @State private var savedFormValues: [FormFieldValue]?
+    private var originalFormValues: [FormFieldValue]? {
+        protectionSession.protection?.initialFormValues
+    }
+
     /// The last signed copy saved from this window; File menu sharing stays bound to it.
     @State private var lastSavedURL: URL?
     @State private var showsSavedBanner = false
@@ -458,8 +460,9 @@ extension PDFContentView {
         document.pdfDocument?.isLocked == false && protectionSession.protection != nil
             && !export.isBusy && SigningFlowLogic.hasSignedCopyContent(
                 placements: document.signaturePlacements,
-                formValues: formValues,
-                originalFormValues: originalFormValues
+                formValues: protectionSession.protection?.formBaseline?.values() ?? formValues,
+                originalFormValues: originalFormValues,
+                exported: exportedState
             )
     }
 
@@ -468,13 +471,9 @@ extension PDFContentView {
     }
 
     private func unsavedWork(formValues: [FormFieldValue]?) -> UnsavedWork {
-        SigningFlowLogic.unsavedWork(
-            placements: document.signaturePlacements,
-            exported: exportedPlacements,
-            formValues: formValues,
-            savedFormValues: savedFormValues,
-            isLocked: document.pdfDocument?.isLocked == true
-        )
+        protectionSession.protection?.unsavedWork(
+            placements: document.signaturePlacements, exported: exportedState, formValues: formValues
+        ) ?? UnsavedWork()
     }
 
     private var activeArtwork: StampArtwork? {
@@ -535,10 +534,6 @@ extension PDFContentView {
         reader.refresh()
         documentState = state
         formValues = protectionSession.protection?.formBaseline?.values() ?? state.formValues
-        if originalFormValues == nil {
-            originalFormValues = protectionSession.protection?.initialFormValues
-            savedFormValues = originalFormValues
-        }
         lastFieldIndex = nil
         signingMode = state.isLocked ? .idle :
             SigningFlowLogic.refreshed(signingMode, hasSignatureFields: !state.signatureFields.isEmpty)
@@ -555,10 +550,8 @@ extension PDFContentView {
         setupRequest = nil
         showSignatureSetupSheet = false
         lastFieldIndex = nil
-        exportedPlacements = nil
+        exportedState = nil
         formValues = protectionSession.protection?.formBaseline?.values()
-        originalFormValues = protectionSession.protection?.initialFormValues
-        savedFormValues = originalFormValues
         lastSavedURL = nil
         showsSavedBanner = false
     }
@@ -814,8 +807,8 @@ extension PDFContentView {
     /// Asks for a destination in a sheet on this document's window, then writes the signed copy.
     private func saveSignedCopy(completion: @escaping (Bool) -> Void = { _ in }) {
         viewer.refreshFormValues()
-        guard canSaveSignedCopy, let protection = protectionSession.protection,
-              let source = document.pdfDocument, let window = viewer.window, export.reserve()
+        guard let protection = protectionSession.protection,
+              let source = document.pdfDocument, !source.isLocked, let window = viewer.window, export.reserve()
         else {
             completion(false)
             return
@@ -836,8 +829,7 @@ extension PDFContentView {
             export.write(source, placements: placements, to: url) { result in
                 switch result {
                 case let .success(state):
-                    exportedPlacements = state.placements
-                    savedFormValues = state.formValues
+                    exportedState = state
                     lastSavedURL = url
                     showsSavedBanner = true
                     announce(SigningFlowLogic.savedAnnouncement(for: url))
