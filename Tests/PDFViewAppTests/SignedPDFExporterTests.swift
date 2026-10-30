@@ -6,7 +6,7 @@ import Testing
 @MainActor
 struct SignedPDFExporterTests {
     @Test
-    func preservesMixedPageSizes() throws {
+    func preservesMixedPageSizes() async throws {
         let boxes = [
             CGRect(x: 0, y: 0, width: 400, height: 600),
             CGRect(x: 0, y: 0, width: 595, height: 842),
@@ -14,9 +14,9 @@ struct SignedPDFExporterTests {
         ]
         let source = try ExportFixture.document(mediaBoxes: boxes)
         let model = try ExportFixture.model(source)
-        try ExportFixture.withDirectory { directory in
+        try await ExportFixture.withDirectoryAsync { directory in
             let url = directory.appendingPathComponent("signed.pdf")
-            try model.writeSignedCopy(to: url)
+            try await model.writeSignedCopy(to: url)
             let output = try #require(PDFDocument(url: url))
             #expect(output.pageCount == boxes.count)
             for (index, box) in boxes.enumerated() {
@@ -27,7 +27,7 @@ struct SignedPDFExporterTests {
     }
 
     @Test(arguments: [0, 90, 180, 270])
-    func preservesRotationAndPageSpaceStamps(rotation: Int) throws {
+    func preservesRotationAndPageSpaceStamps(rotation: Int) async throws {
         let source = try ExportFixture.document()
         let page = try #require(source.page(at: 0))
         page.rotation = rotation
@@ -35,9 +35,9 @@ struct SignedPDFExporterTests {
         #expect(sourceBounds == ExportFixture.marker)
         var model = try ExportFixture.model(source)
         model.signaturePlacements[0].bounds = ExportFixture.marker.offsetBy(dx: 80, dy: 40)
-        try ExportFixture.withDirectory { directory in
+        try await ExportFixture.withDirectoryAsync { directory in
             let url = directory.appendingPathComponent("signed.pdf")
-            try model.writeSignedCopy(to: url)
+            try await model.writeSignedCopy(to: url)
             let output = try #require(PDFDocument(url: url))
             let result = try #require(output.page(at: 0))
             #expect(result.rotation == rotation)
@@ -48,7 +48,7 @@ struct SignedPDFExporterTests {
     }
 
     @Test(arguments: [0, 90, 180, 270], [CGPoint(x: 20, y: 30), CGPoint(x: -20, y: -30)])
-    func preservesOffsetCropAndMediaOrigin(rotation: Int, origin: CGPoint) throws {
+    func preservesOffsetCropAndMediaOrigin(rotation: Int, origin: CGPoint) async throws {
         let media = CGRect(origin: origin, size: CGSize(width: 400, height: 600))
         let crop = CGRect(x: 50, y: 70, width: 300, height: 400)
         let source = try ExportFixture.document(mediaBoxes: [media])
@@ -57,9 +57,9 @@ struct SignedPDFExporterTests {
         page.rotation = rotation
         var model = try ExportFixture.model(source)
         model.signaturePlacements[0].bounds = ExportFixture.marker.offsetBy(dx: 80, dy: 40)
-        try ExportFixture.withDirectory { directory in
+        try await ExportFixture.withDirectoryAsync { directory in
             let url = directory.appendingPathComponent("signed.pdf")
-            try model.writeSignedCopy(to: url)
+            try await model.writeSignedCopy(to: url)
             let output = try #require(PDFDocument(url: url))
             let result = try #require(output.page(at: 0))
             #expect(result.bounds(for: .mediaBox) == media)
@@ -76,15 +76,15 @@ struct SignedPDFExporterTests {
     }
 
     @Test(arguments: [false, true])
-    func flattensLiveFormValues(signed: Bool) throws {
+    func flattensLiveFormValues(signed: Bool) async throws {
         let source = try ExportFixture.document()
         let page = try #require(source.page(at: 0))
         let field = ExportFixture.textField(on: page)
         field.widgetStringValue = "Edited contact value"
         let model = try ExportFixture.model(source, signed: signed)
-        try ExportFixture.withDirectory { directory in
+        try await ExportFixture.withDirectoryAsync { directory in
             let url = directory.appendingPathComponent("signed.pdf")
-            try model.writeSignedCopy(to: url)
+            try await model.writeSignedCopy(to: url)
             let output = try #require(PDFDocument(url: url))
             #expect(output.string?.contains("Edited contact value") == true)
             #expect(output.string?.contains("Original page content") == true)
@@ -95,8 +95,8 @@ struct SignedPDFExporterTests {
     }
 
     @Test(arguments: [false, true])
-    func exportsUnlockedEncryptedContent(signed: Bool) throws {
-        try ExportFixture.withDirectory { directory in
+    func exportsUnlockedEncryptedContent(signed: Bool) async throws {
+        try await ExportFixture.withDirectoryAsync { directory in
             let source = try ExportFixture.document()
             let encryptedURL = directory.appendingPathComponent("encrypted.pdf")
             #expect(source.write(to: encryptedURL, withOptions: [
@@ -107,7 +107,7 @@ struct SignedPDFExporterTests {
             #expect(unlocked.unlock(withPassword: "test-user"))
             let model = try ExportFixture.model(unlocked, signed: signed)
             let url = directory.appendingPathComponent("signed.pdf")
-            try model.writeSignedCopy(to: url)
+            try await model.writeSignedCopy(to: url)
             let output = try #require(PDFDocument(url: url))
             #expect(!output.isLocked)
             #expect(output.string?.contains("Original page content") == true)
@@ -119,18 +119,20 @@ struct SignedPDFExporterTests {
     }
 
     @Test
-    func rejectsUndecodableImageWithoutReplacingDestination() throws {
+    func rejectsUndecodableImageWithoutReplacingDestination() async throws {
         let source = try ExportFixture.document()
         var model = try ExportFixture.model(source, signed: false)
         model.addSignaturePlacement(.init(
             pageIndex: 0, bounds: ExportFixture.marker, signaturePNGData: Data("invalid".utf8), signerName: "Tester"
         ))
-        try ExportFixture.withDirectory { directory in
+        try await ExportFixture.withDirectoryAsync { directory in
             let url = directory.appendingPathComponent("signed.pdf")
             let original = Data("existing destination".utf8)
             try original.write(to: url)
-            #expect(throws: PDFViewerDocument.ExportError.cannotDecodeSignature(id: model.signaturePlacements[0].id)) {
-                try model.writeSignedCopy(to: url)
+            await #expect(throws: PDFViewerDocument.ExportError
+                .cannotDecodeSignature(id: model.signaturePlacements[0].id))
+            {
+                try await model.writeSignedCopy(to: url)
             }
             #expect(try Data(contentsOf: url) == original)
             #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == ["signed.pdf"])
@@ -138,24 +140,24 @@ struct SignedPDFExporterTests {
     }
 
     @Test(arguments: [false, true])
-    func failedWriteLeavesDestinationUntouched(signed: Bool) throws {
+    func failedWriteLeavesDestinationUntouched(signed: Bool) async throws {
         let source = try ExportFixture.document()
         let model = try ExportFixture.model(source, signed: signed)
-        try ExportFixture.withDirectory { directory in
+        try await ExportFixture.withDirectoryAsync { directory in
             let url = directory.appendingPathComponent("signed.pdf")
             let original = Data("existing destination".utf8)
             try original.write(to: url)
             try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: directory.path)
             defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path) }
-            #expect(throws: PDFViewerDocument.ExportError.self) { try model.writeSignedCopy(to: url) }
+            await #expect(throws: PDFViewerDocument.ExportError.self) { try await model.writeSignedCopy(to: url) }
             #expect(try Data(contentsOf: url) == original)
             #expect(try FileManager.default.contentsOfDirectory(atPath: directory.path) == ["signed.pdf"])
         }
     }
 
     @Test(arguments: [false, true])
-    func rejectsLockedDocument(signed: Bool) throws {
-        try ExportFixture.withDirectory { directory in
+    func rejectsLockedDocument(signed: Bool) async throws {
+        try await ExportFixture.withDirectoryAsync { directory in
             let source = try ExportFixture.document()
             let encryptedURL = directory.appendingPathComponent("encrypted.pdf")
             #expect(source.write(
@@ -166,7 +168,9 @@ struct SignedPDFExporterTests {
             #expect(locked.isLocked)
             let model = try ExportFixture.model(locked, signed: signed)
             let url = directory.appendingPathComponent("signed.pdf")
-            #expect(throws: PDFViewerDocument.ExportError.documentLocked) { try model.writeSignedCopy(to: url) }
+            await #expect(throws: PDFViewerDocument.ExportError.documentLocked) {
+                try await model.writeSignedCopy(to: url)
+            }
             #expect(!FileManager.default.fileExists(atPath: url.path))
         }
     }

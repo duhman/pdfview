@@ -1,7 +1,7 @@
 @preconcurrency import Quartz
 
 /// One form widget's user-editable value, compared to tell whether the user changed the form.
-struct FormFieldValue: Equatable {
+struct FormFieldValue: Equatable, Sendable {
     let fieldName: String?
     let stringValue: String?
     let buttonState: Int
@@ -9,13 +9,26 @@ struct FormFieldValue: Equatable {
 
 /// Signature fields and editable widgets found by walking the document a few pages at a time,
 /// so a long PDF shows its pages before every page's annotations have been read.
-@MainActor
 struct FormScan {
     var signatureFields: [SignatureField] = []
     /// Every non-signature widget, in page order; their values are the form's unsaved work.
     var widgets: [PDFAnnotation] = []
     var isCancelled = false
 
+    /// Capture before exposing widgets for editing; signature discovery can still yield later.
+    static func capture(_ document: PDFDocument) -> FormScan? {
+        guard !document.isLocked else { return nil }
+        var result = FormScan()
+        for index in 0 ..< document.pageCount {
+            guard let page = document.page(at: index) else { return nil }
+            result.widgets += page.annotations.filter {
+                $0.type == "Widget" && !SigningFlowLogic.isSignatureField($0)
+            }
+        }
+        return result
+    }
+
+    @MainActor
     static func scan(_ document: PDFDocument, pagesPerYield: Int = 8) async -> FormScan {
         var result = FormScan()
         func collectWidgets(_ page: PDFPage) {

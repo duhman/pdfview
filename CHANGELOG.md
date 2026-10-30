@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Keep closing/quitting cancelled and the window edited when stamps or form values change during Save Signed Copy
+- Capture initial form values before editing, including during incremental field discovery and immediately after unlock
+- Return the exact form baseline captured with the exported snapshot and preserve stamp removals as unsaved work
+- Render, serialize, repair geometry and validate independent export snapshots off the main actor, with cancellation and atomic replacement
+- Explicitly disable unsigned document writing content types and include hidden/minimized document windows in quit review
+- Cache date artwork per local day, locale and time zone; remove unused signature-storage errors
+
 ### Added
 - Secure unlock on opening a locked PDF, Sign > Unlock… retry, and a locked-state banner after Cancel
 - Sign menu and compact toolbar menu for Signature, Initials and Date; initials setup resumes pending placement

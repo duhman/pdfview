@@ -56,7 +56,7 @@ struct PDFViewerDocument: FileDocument {
         }
     }
 
-    struct SignaturePlacement: Identifiable, Equatable {
+    struct SignaturePlacement: Identifiable, Equatable, Sendable {
         let id: UUID
         let pageIndex: Int
         var bounds: CGRect
@@ -87,12 +87,20 @@ struct PDFViewerDocument: FileDocument {
     /// The underlying PDFKit document
     var pdfDocument: PDFDocument?
 
+    /// Captured synchronously while loading, before the reader can edit any widget.
+    var formBaseline: FormScan?
+    var initialFormValues: [FormFieldValue]?
+
     /// Signature placements added during this document session.
     var signaturePlacements: [SignaturePlacement] = []
 
     /// Supported content types (PDF only)
     static var readableContentTypes: [UTType] {
         [.pdf]
+    }
+
+    static var writableContentTypes: [UTType] {
+        []
     }
 
     /// Initialize with empty document
@@ -102,6 +110,8 @@ struct PDFViewerDocument: FileDocument {
 
     init(pdfDocument: PDFDocument?) {
         self.pdfDocument = pdfDocument
+        formBaseline = pdfDocument.flatMap(FormScan.capture)
+        initialFormValues = formBaseline?.values()
     }
 
     /// Initialize from file configuration
@@ -110,7 +120,7 @@ struct PDFViewerDocument: FileDocument {
             throw CocoaError(.fileReadCorruptFile)
         }
 
-        pdfDocument = document
+        self.init(pdfDocument: document)
     }
 
     /// Write document to file.
@@ -133,21 +143,23 @@ struct PDFViewerDocument: FileDocument {
         return signaturePlacements.remove(at: index)
     }
 
-    /// Writes the live document with form values and visual signatures flattened into page content.
+    /// Writes through the same snapshot/export path used by Save Signed Copy.
     @MainActor
-    func writeSignedCopy(to destinationURL: URL, password: String? = nil) throws {
-        guard destinationURL.isFileURL else {
-            throw ExportError.invalidDestinationURL
-        }
-        guard let pdfDocument else {
-            throw ExportError.missingDocument
-        }
-        try SignedCopyOperation.validateDestination(destinationURL, originalURL: pdfDocument.documentURL)
-        try SignedPDFExporter.write(
-            pdfDocument,
-            placements: signaturePlacements,
-            to: destinationURL,
-            password: password
-        )
+    @discardableResult
+    func writeSignedCopy(to destinationURL: URL, password: String? = nil) async throws -> ExportedState {
+        guard let pdfDocument else { throw ExportError.missingDocument }
+        return try await SignedPDFExporter.writeAsync(
+            pdfDocument, placements: signaturePlacements, to: destinationURL, password: password
+        ) { _ in }
+    }
+}
+
+/// The values frozen in a successfully written copy, never values read after an async suspension.
+struct ExportedState: Equatable, Sendable {
+    let placements: [PDFViewerDocument.SignaturePlacement]
+    let formValues: [FormFieldValue]
+
+    func matches(placements: [PDFViewerDocument.SignaturePlacement], formValues: [FormFieldValue]?) -> Bool {
+        self.placements == placements && self.formValues == formValues
     }
 }

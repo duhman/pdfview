@@ -108,7 +108,7 @@ To build a release bundle:
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the pinned SwiftLint and SwiftFormat setup, quality checks, icon generation, and manual verification. There is no hosted CI: run `/bin/bash scripts/ci-local.sh` before pushing. It builds both bundle configurations with `/bin/bash`, runs the tests, checks the bundle, and lints the unmodified checkout.
 
-Signed exports capture a stable start state and reject replacing the original file. The window retains password state only for the current PDF, offers secure unlock, and passes the save accessory’s protection choice to export. Protected export with nonzero page origins fails with recovery advice instead of risking an invalid copy.
+Signed exports capture form values and a stable document snapshot together, then render and validate that private snapshot in the background. Closing or quitting after a save proceeds only when the live stamps and form values still match the saved copy. Form baselines are captured before editing, including before the incremental field scan finishes. Viewer documents explicitly offer no writable content types; use Save Signed Copy for flattened output. Signed exports reject replacing the original file. The window retains password state only for the current PDF, offers secure unlock, and passes the save accessory’s protection choice to export. Protected export with nonzero page origins fails with recovery advice instead of risking an invalid copy.
 
 ### Signing and notarization
 

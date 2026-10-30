@@ -44,9 +44,9 @@ private enum Sample {
     #expect(both == UnsavedWork(signatures: true, formEntries: true))
 }
 
-@Test func formValuesBeforeTheScanFinishesAreNotUnsavedWork() {
+@Test func unavailableFormValuesMustWarnBeforeClose() {
     let work = SigningFlowLogic.unsavedWork(placements: [], exported: nil, formValues: nil, savedFormValues: nil)
-    #expect(work.isEmpty)
+    #expect(work.formEntries)
 }
 
 @Test func closeWarningNamesWhatWillBeLost() {
@@ -74,4 +74,8 @@ private enum Sample {
         formValues: nil,
         originalFormValues: nil
     ))
+}
+
+@Test func deletingAllExportedPlacementsIsUnsavedWork() {
+    #expect(SigningFlowLogic.hasUnexportedPlacements([], exported: [Sample.placement]))
 }

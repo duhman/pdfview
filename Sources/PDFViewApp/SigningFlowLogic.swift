@@ -170,11 +170,11 @@ enum SigningFlowLogic {
         _ placements: [PDFViewerDocument.SignaturePlacement],
         exported: [PDFViewerDocument.SignaturePlacement]?
     ) -> Bool {
-        !placements.isEmpty && placements != exported
+        placements != (exported ?? [])
     }
 
     /// Placements not yet in a saved copy, and form values that differ from the last saved copy
-    /// (or from the file as opened). Nil form values mean the form scan has not finished.
+    /// (or from the file as opened). Unavailable form values conservatively require review.
     static func unsavedWork(
         placements: [PDFViewerDocument.SignaturePlacement],
         exported: [PDFViewerDocument.SignaturePlacement]?,
@@ -183,7 +183,7 @@ enum SigningFlowLogic {
     ) -> UnsavedWork {
         UnsavedWork(
             signatures: hasUnexportedPlacements(placements, exported: exported),
-            formEntries: formValues != nil && formValues != savedFormValues
+            formEntries: formValues == nil || savedFormValues == nil || formValues != savedFormValues
         )
     }
 

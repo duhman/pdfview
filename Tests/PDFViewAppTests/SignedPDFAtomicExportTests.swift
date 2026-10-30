@@ -6,13 +6,13 @@ import Testing
 @MainActor
 struct SignedPDFAtomicExportTests {
     @Test(arguments: [false, true])
-    func replacesExistingDestinationAfterValidation(signed: Bool) throws {
+    func replacesExistingDestinationAfterValidation(signed: Bool) async throws {
         let source = try ExportFixture.document()
         let model = try ExportFixture.model(source, signed: signed)
-        try ExportFixture.withDirectory { directory in
+        try await ExportFixture.withDirectoryAsync { directory in
             let url = directory.appendingPathComponent("signed.pdf")
             try Data("previous destination".utf8).write(to: url)
-            try model.writeSignedCopy(to: url)
+            try await model.writeSignedCopy(to: url)
             let output = try #require(PDFDocument(url: url))
             #expect(output.pageCount == source.pageCount)
             #expect(output.string?.contains("Original page content") == true)
@@ -21,13 +21,13 @@ struct SignedPDFAtomicExportTests {
     }
 
     @Test
-    func stampsUseGivenBoundsWithoutClamping() throws {
+    func stampsUseGivenBoundsWithoutClamping() async throws {
         let source = try ExportFixture.document()
         var model = try ExportFixture.model(source)
         model.signaturePlacements[0].bounds = CGRect(x: 380, y: 580, width: 80, height: 40)
-        try ExportFixture.withDirectory { directory in
+        try await ExportFixture.withDirectoryAsync { directory in
             let url = directory.appendingPathComponent("signed.pdf")
-            try model.writeSignedCopy(to: url)
+            try await model.writeSignedCopy(to: url)
             let output = try #require(PDFDocument(url: url))
             let page = try #require(output.page(at: 0))
             #expect(try ExportFixture.colorBounds(on: page, red: true) == CGRect(x: 380, y: 580, width: 20, height: 20))
@@ -35,7 +35,7 @@ struct SignedPDFAtomicExportTests {
     }
 
     @Test
-    func rejectsPlacementOnMissingPage() throws {
+    func rejectsPlacementOnMissingPage() async throws {
         let source = try ExportFixture.document()
         var model = try ExportFixture.model(source)
         try model.addSignaturePlacement(.init(
@@ -44,10 +44,10 @@ struct SignedPDFAtomicExportTests {
             signaturePNGData: ExportFixture.signature(),
             signerName: "Tester"
         ))
-        try ExportFixture.withDirectory { directory in
+        try await ExportFixture.withDirectoryAsync { directory in
             let url = directory.appendingPathComponent("signed.pdf")
-            #expect(throws: PDFViewerDocument.ExportError.invalidPlacementPage(index: 1)) {
-                try model.writeSignedCopy(to: url)
+            await #expect(throws: PDFViewerDocument.ExportError.invalidPlacementPage(index: 1)) {
+                try await model.writeSignedCopy(to: url)
             }
             let files = try FileManager.default.contentsOfDirectory(atPath: directory.path)
             #expect(files.isEmpty)
@@ -55,25 +55,25 @@ struct SignedPDFAtomicExportTests {
     }
 
     @Test
-    func noPlacementExportUsesLivePageChanges() throws {
+    func noPlacementExportUsesLivePageChanges() async throws {
         let source = try ExportFixture.document()
         let additional = try ExportFixture.document()
         try source.insert(#require(additional.page(at: 0)), at: 1)
         let model = try ExportFixture.model(source, signed: false)
-        try ExportFixture.withDirectory { directory in
+        try await ExportFixture.withDirectoryAsync { directory in
             let url = directory.appendingPathComponent("signed.pdf")
-            try model.writeSignedCopy(to: url)
+            try await model.writeSignedCopy(to: url)
             #expect(PDFDocument(url: url)?.pageCount == 2)
         }
     }
 
     @Test
-    func missingDestinationDirectoryFailsWithoutCreatingFiles() throws {
+    func missingDestinationDirectoryFailsWithoutCreatingFiles() async throws {
         let source = try ExportFixture.document()
         let model = try ExportFixture.model(source)
-        try ExportFixture.withDirectory { directory in
+        try await ExportFixture.withDirectoryAsync { directory in
             let url = directory.appendingPathComponent("missing/signed.pdf")
-            #expect(throws: PDFViewerDocument.ExportError.self) { try model.writeSignedCopy(to: url) }
+            await #expect(throws: PDFViewerDocument.ExportError.self) { try await model.writeSignedCopy(to: url) }
             let files = try FileManager.default.contentsOfDirectory(atPath: directory.path)
             #expect(files.isEmpty)
         }

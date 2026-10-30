@@ -51,7 +51,7 @@ import Testing
 
     let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
     defer { try? FileManager.default.removeItem(at: url) }
-    try SignedPDFExporter.write(document, placements: [], to: url)
+    try await SignedPDFExporter.writeAsync(document, placements: [], to: url) { _ in }
 
     let saved = try #require(PDFDocument(url: url))
     let text = saved.page(at: 0)?.string ?? ""

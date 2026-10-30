@@ -2,8 +2,7 @@ import AppKit
 import ImageIO
 @preconcurrency import Quartz
 
-/// Renders on the main actor because PDFKit's live pages are also used by the reader.
-@MainActor
+/// Only capture touches the live PDF on the main actor. A private copy belongs exclusively to the worker.
 enum SignedPDFExporter {
     private typealias ExportError = PDFViewerDocument.ExportError
     private typealias Placement = PDFViewerDocument.SignaturePlacement
@@ -19,100 +18,101 @@ enum SignedPDFExporter {
         let pages: [PDFPage]
     }
 
-    static func write(
-        _ source: PDFDocument,
-        placements: [PDFViewerDocument.SignaturePlacement],
-        to destination: URL,
-        password: String? = nil
-    ) throws {
-        try SignedCopyOperation.validateDestination(destination, originalURL: source.documentURL)
-        guard !source.isLocked else { throw ExportError.documentLocked }
-        let sourcePages = try pages(in: source)
-        // PDFDestination.page is weak. Keep every destination page alive through serialization.
-        defer { withExtendedLifetime(sourcePages) {} }
-        let stamps = try decode(placements, pageCount: source.pageCount)
-        let requiresPageRebuild = source.outlineRoot != nil || sourcePages.contains {
-            !$0.annotations.isEmpty || $0.bounds(for: .mediaBox).origin != .zero
-        }
-        let fileManager = FileManager.default
-        do {
-            let staging = try fileManager.url(
-                for: .itemReplacementDirectory,
-                in: .userDomainMask,
-                appropriateFor: destination,
-                create: true
-            )
-            defer { try? fileManager.removeItem(at: staging) }
-            let completed = staging.appendingPathComponent("completed.pdf")
-            if placements.isEmpty, !source.isEncrypted, password == nil, !requiresPageRebuild {
-                guard source.write(to: completed) else { throw ExportError.cannotEncodeDocumentData }
-            } else {
-                let rendered = staging.appendingPathComponent("rendered.pdf")
-                try render(source, stamps: stamps, to: rendered)
-                let output = try structuredDocument(rendered, from: source)
-                try write(output, to: completed, password: password)
-                try PDFExportGeometry.restore(at: completed, pages: geometry(of: sourcePages))
-            }
-            _ = try validatedDocument(at: completed, pageCount: source.pageCount, password: password)
-            if fileManager.fileExists(atPath: destination.path) {
-                _ = try fileManager.replaceItemAt(destination, withItemAt: completed)
-            } else {
-                try fileManager.moveItem(at: completed, to: destination)
-            }
-        } catch let error as ExportError {
-            throw error
-        } catch {
-            throw ExportError.writeFailed(description: error.localizedDescription)
-        }
+    /// PDFKit does not declare Sendable. This private box transfers exclusive ownership of a deep
+    /// copy to one worker; neither the live document nor any of its pages are stored here.
+    private struct Snapshot: @unchecked Sendable {
+        let document: PDFDocument
+        let pages: [PDFPage]
+        let state: ExportedState
     }
 
-    /// PDFKit stays on the main actor. Each rendered page is a cancellation and UI-yield boundary.
+    @MainActor
+    @discardableResult
     static func writeAsync(
         _ source: PDFDocument,
         placements: [PDFViewerDocument.SignaturePlacement],
         to destination: URL,
         password: String? = nil,
         originalURL: URL? = nil,
-        progress: (ExportProgress) -> Void
-    ) async throws {
+        progress: @escaping @MainActor @Sendable (ExportProgress) -> Void
+    ) async throws -> ExportedState {
         let originalURL = originalURL ?? source.documentURL
         try SignedCopyOperation.validateDestination(destination, originalURL: originalURL)
         guard !source.isLocked else { throw ExportError.documentLocked }
         try Task.checkCancellation()
-        let source = try snapshot(of: source)
-        let sourcePages = try pages(in: source)
-        defer { withExtendedLifetime(sourcePages) {} }
-        let stamps = try decode(placements, pageCount: source.pageCount)
-        let manager = FileManager.default
-        let staging = try manager.url(
-            for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: destination, create: true
+        // No suspension between baseline capture and copying the live PDF.
+        guard let values = FormScan.capture(source)?.values() else { throw ExportError.cannotEncodeDocumentData }
+        let copy = try snapshot(of: source)
+        let snapshot = try Snapshot(
+            document: copy, pages: pages(in: copy), state: ExportedState(placements: placements, formValues: values)
         )
-        defer { try? manager.removeItem(at: staging) }
-        let rendered = staging.appendingPathComponent("rendered.pdf")
-        let completed = staging.appendingPathComponent("completed.pdf")
-        try await renderAsync(sourcePages, stamps: stamps, to: rendered, progress: progress)
-        try await finalizeAsync(rendered, from: source, to: completed, password: password, progress: progress)
-        try SignedCopyOperation.validateDestination(destination, originalURL: originalURL)
-        if manager.fileExists(atPath: destination.path) {
-            _ = try manager.replaceItemAt(destination, withItemAt: completed)
-        } else {
-            try manager.moveItem(at: completed, to: destination)
+        let worker = Task.detached(priority: .userInitiated) {
+            try await writeSnapshot(
+                snapshot,
+                to: destination,
+                password: password,
+                originalURL: originalURL,
+                progress: progress
+            )
+        }
+        return try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+    }
+
+    private static func writeSnapshot(
+        _ snapshot: Snapshot,
+        to destination: URL,
+        password: String?,
+        originalURL: URL?,
+        progress: @MainActor @Sendable (ExportProgress) -> Void
+    ) async throws -> ExportedState {
+        let source = snapshot.document
+        defer { withExtendedLifetime(snapshot) {} }
+        do {
+            try Task.checkCancellation()
+            let stamps = try decode(snapshot.state.placements, pageCount: source.pageCount)
+            let manager = FileManager.default
+            let staging = try manager.url(
+                for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: destination, create: true
+            )
+            defer { try? manager.removeItem(at: staging) }
+            let rendered = staging.appendingPathComponent("rendered.pdf")
+            let completed = staging.appendingPathComponent("completed.pdf")
+            try await renderAsync(snapshot.pages, stamps: stamps, to: rendered, progress: progress)
+            try await finalizeAsync(rendered, from: source, to: completed, password: password, progress: progress)
+            try SignedCopyOperation.validateDestination(destination, originalURL: originalURL)
+            try Task.checkCancellation()
+            if manager.fileExists(atPath: destination.path) {
+                _ = try manager.replaceItemAt(destination, withItemAt: completed)
+            } else {
+                try manager.moveItem(at: completed, to: destination)
+            }
+            return snapshot.state
+        } catch let error as ExportError {
+            throw error
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw ExportError.writeFailed(description: error.localizedDescription)
         }
     }
 
     private static func renderAsync(
-        _ pages: [PDFPage], stamps: [Int: [Stamp]], to url: URL, progress: (ExportProgress) -> Void
+        _ pages: [PDFPage], stamps: [Int: [Stamp]], to url: URL, progress: @MainActor @Sendable (ExportProgress) -> Void
     ) async throws {
         guard let context = CGContext(url as CFURL, mediaBox: nil, nil) else {
             throw ExportError.cannotCreatePDFContext
         }
         defer { context.closePDF() }
-        progress(ExportProgress(completedPages: 0, totalPages: pages.count))
+        await progress(ExportProgress(completedPages: 0, totalPages: pages.count))
         await Task.yield()
         for (index, page) in pages.enumerated() {
             try Task.checkCancellation()
             renderPage(page, stamps: stamps[index] ?? [], in: context)
-            progress(ExportProgress(completedPages: index + 1, totalPages: pages.count))
+            await progress(ExportProgress(completedPages: index + 1, totalPages: pages.count))
             await Task.yield()
         }
     }
@@ -186,22 +186,20 @@ enum SignedPDFExporter {
         from source: PDFDocument,
         to completed: URL,
         password: String?,
-        progress: (ExportProgress) -> Void
+        progress: @MainActor @Sendable (ExportProgress) -> Void
     ) async throws {
         let boxes = try geometry(of: pages(in: source))
         let count = source.pageCount
         let output = try structuredDocument(rendered, from: source)
-        progress(ExportProgress(completedPages: count, totalPages: count, stage: .writing))
+        await progress(ExportProgress(completedPages: count, totalPages: count, stage: .writing))
         await Task.yield()
         try Task.checkCancellation()
         try write(output, to: completed, password: password)
-        progress(ExportProgress(completedPages: count, totalPages: count, stage: .restoringGeometry))
+        await progress(ExportProgress(completedPages: count, totalPages: count, stage: .restoringGeometry))
         await Task.yield()
         try Task.checkCancellation()
-        try await Task.detached(priority: .userInitiated) {
-            try PDFExportGeometry.restore(at: completed, pages: boxes)
-        }.value
-        progress(ExportProgress(completedPages: count, totalPages: count, stage: .validating))
+        try PDFExportGeometry.restore(at: completed, pages: boxes)
+        await progress(ExportProgress(completedPages: count, totalPages: count, stage: .validating))
         await Task.yield()
         try Task.checkCancellation()
         _ = try validatedDocument(at: completed, pageCount: count, password: password)
@@ -229,17 +227,6 @@ enum SignedPDFExporter {
             stamps[placement.pageIndex, default: []].append(Stamp(bounds: placement.bounds, image: image))
         }
         return stamps
-    }
-
-    private static func render(_ source: PDFDocument, stamps: [Int: [Stamp]], to url: URL) throws {
-        guard let context = CGContext(url as CFURL, mediaBox: nil, nil) else {
-            throw ExportError.cannotCreatePDFContext
-        }
-        defer { context.closePDF() }
-        for index in 0 ..< source.pageCount {
-            guard let page = source.page(at: index) else { throw ExportError.cannotReadPage(index: index) }
-            renderPage(page, stamps: stamps[index] ?? [], in: context)
-        }
     }
 
     private static func draw(_ page: PDFPage, media: CGRect, in context: CGContext) {

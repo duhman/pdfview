@@ -1,6 +1,6 @@
 import AppKit
 
-enum StampKind: String, CaseIterable, Identifiable {
+enum StampKind: String, CaseIterable, Identifiable, Sendable {
     case signature
     case initials
     case date
@@ -38,6 +38,14 @@ struct StampArtwork {
         NSImage(data: pngData)?.size
     }
 
+    private struct DateKey: Equatable {
+        let day: Date
+        let locale: Locale
+        let timeZone: TimeZone
+    }
+
+    private static var cachedDate: (key: DateKey, artwork: StampArtwork)?
+
     static func make(
         kind: StampKind,
         signature: SignatureProfile?,
@@ -47,15 +55,23 @@ struct StampArtwork {
         timeZone: TimeZone = .current
     ) -> StampArtwork? {
         if kind == .date {
+            var calendar = locale.calendar
+            calendar.timeZone = timeZone
+            let key = DateKey(day: calendar.startOfDay(for: date), locale: locale, timeZone: timeZone)
+            if let cachedDate, cachedDate.key == key {
+                return cachedDate.artwork
+            }
             guard let rendering = SignatureRenderer.renderDate(date, locale: locale, timeZone: timeZone) else {
                 return nil
             }
-            return StampArtwork(
+            let artwork = StampArtwork(
                 kind: .date,
                 pngData: rendering.pngData,
                 signerName: "",
                 dateText: SignatureRenderer.dateText(date, locale: locale, timeZone: timeZone)
             )
+            cachedDate = (key, artwork)
+            return artwork
         }
         guard let profile = kind == .initials ? initials : signature, let data = profile.signaturePNGData else {
             return nil

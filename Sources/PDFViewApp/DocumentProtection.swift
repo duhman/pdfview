@@ -4,15 +4,24 @@ import Observation
 /// One instance per open PDF. Passwords exist only for this document session.
 @MainActor
 @Observable
-final class DocumentProtection {
+final class DocumentProtection: NSObject {
     let document: PDFDocument
     private(set) var knownPassword: String?
     private(set) var isLocked: Bool
+    private(set) var formBaseline: FormScan?
+    private(set) var initialFormValues: [FormFieldValue]?
     var keepPasswordProtection = true
 
-    init(document: PDFDocument) {
+    init(document: PDFDocument, formBaseline: FormScan? = nil, initialFormValues: [FormFieldValue]? = nil) {
         self.document = document
         isLocked = document.isLocked
+        let baseline = formBaseline ?? FormScan.capture(document)
+        self.formBaseline = baseline
+        self.initialFormValues = initialFormValues ?? baseline?.values()
+        super.init()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(refresh), name: .PDFDocumentDidUnlock, object: document
+        )
     }
 
     var isEncrypted: Bool {
@@ -49,9 +58,15 @@ final class DocumentProtection {
     }
 
     /// Call after PDFKit's native unlock path; that path cannot reveal its password.
-    func refresh() {
+    @objc func refresh() {
         isLocked = document.isLocked
+        if formBaseline == nil, !isLocked {
+            formBaseline = FormScan.capture(document)
+            initialFormValues = formBaseline?.values()
+        }
     }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
 }
 
 /// Retains the password only while this window shows the same PDFKit document.
@@ -61,9 +76,11 @@ final class DocumentProtectionSession {
     private(set) var protection: DocumentProtection?
     var showsUnlock = false
 
-    func attach(_ document: PDFDocument?) {
+    func attach(_ document: PDFDocument?, formBaseline: FormScan? = nil, initialFormValues: [FormFieldValue]? = nil) {
         guard protection?.document !== document else { return }
-        protection = document.map(DocumentProtection.init)
+        protection = document.map {
+            DocumentProtection(document: $0, formBaseline: formBaseline, initialFormValues: initialFormValues)
+        }
         showsUnlock = protection?.isLocked == true
     }
 

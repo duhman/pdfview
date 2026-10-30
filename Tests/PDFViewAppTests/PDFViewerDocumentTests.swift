@@ -23,7 +23,7 @@ func placementAddAndRemoveRoundTrip() {
 
 @MainActor
 @Test
-func signedCopyFailsForNonFileDestination() throws {
+func signedCopyFailsForNonFileDestination() async throws {
     let pdfData = makeSamplePDFData()
     let pdf = PDFDocument(data: pdfData)
     var document = PDFViewerDocument(pdfDocument: pdf)
@@ -37,7 +37,7 @@ func signedCopyFailsForNonFileDestination() throws {
     )
 
     do {
-        try document.writeSignedCopy(to: #require(URL(string: "https://example.com/out.pdf")))
+        try await document.writeSignedCopy(to: #require(URL(string: "https://example.com/out.pdf")))
         Issue.record("Expected invalidDestinationURL error")
     } catch let error as PDFViewerDocument.ExportError {
         #expect(error == .invalidDestinationURL)
@@ -48,7 +48,7 @@ func signedCopyFailsForNonFileDestination() throws {
 
 @MainActor
 @Test
-func signedCopyDoesNotMutateSourceDocumentAnnotations() throws {
+func signedCopyDoesNotMutateSourceDocumentAnnotations() async throws {
     let baselineData = makeSamplePDFData()
     guard let sourceDocument = PDFDocument(data: baselineData) else {
         Issue.record("Could not create PDFDocument from baseline data")
@@ -75,7 +75,7 @@ func signedCopyDoesNotMutateSourceDocumentAnnotations() throws {
     )
 
     let annotationCountBefore = sourceDocument.page(at: 0)?.annotations.count ?? 0
-    try document.writeSignedCopy(to: outputURL)
+    try await document.writeSignedCopy(to: outputURL)
     let annotationCountAfter = sourceDocument.page(at: 0)?.annotations.count ?? 0
 
     #expect(annotationCountBefore == 0)
@@ -130,4 +130,8 @@ private func makeSignaturePNGData() -> Data {
     }
 
     return png
+}
+
+@Test func viewingDocumentsDoNotOfferUnsignedWriting() {
+    #expect(PDFViewerDocument.writableContentTypes.isEmpty)
 }

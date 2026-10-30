@@ -122,7 +122,7 @@ struct ExportSafetyTests {
         let source = try #require(PDFDocument(url: url))
         let operation = SignedCopyOperation()
         #expect(operation.reserve())
-        var result: Result<Void, Error>?
+        var result: Result<ExportedState, Error>?
         operation.write(source, placements: [], to: url) { result = $0 }
         for _ in 0 ..< 100 where operation.isBusy {
             await Task.yield()
