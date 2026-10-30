@@ -7,6 +7,11 @@ A full native Mac PDF reader with private, offline visual signing.
 - Save a flattened signed copy that keeps page sizes, links, and bookmarks.
 - Private: no network access, cloud services, or telemetry; your saved signature stays only on this Mac.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/signing-dark.png">
+  <img src="docs/images/signing-light.png" alt="PDFView with a three-page service agreement open, the page thumbnails in the sidebar, and a signature placed in the PDF's signature field on page 3." width="800">
+</picture>
+
 ## Why PDFView instead of Preview
 
 - Initial every page in one step: Sign > Place Initials on Every Page (⌥⌘I), undone as a single change.
