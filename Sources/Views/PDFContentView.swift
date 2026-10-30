@@ -370,6 +370,9 @@ extension PDFContentView {
             placeInNextField: placeInNextField,
             placeOnCurrentPage: placeOnCurrentPage,
             setAnywhere: setAnywhere,
+            hasPlacements: !document.signaturePlacements.isEmpty,
+            selectNextSignature: { selectAdjacentSignature(forward: true) },
+            selectPreviousSignature: { selectAdjacentSignature(forward: false) },
             saveSignedCopy: { saveSignedCopy() },
             lastSavedURL: lastSavedURL,
             shareSignedCopy: { url in viewer.showSharingPicker(for: url) },
@@ -522,7 +525,23 @@ extension PDFContentView {
         configuredEditor().add(placement)
         signingMode = SigningFlowLogic.afterPlacement(signingMode)
         viewer.select(placementID: placement.id)
-        announce(SigningFlowLogic.placedAnnouncement(pageIndex: pageIndex))
+        let location = viewer.location(of: bounds, onPageAt: pageIndex) ?? ""
+        announce(StampAccessibility.placedAnnouncement(pageIndex: pageIndex, location: location))
+    }
+
+    /// Select Next/Previous Signature: reveals the stamp, gives it keyboard focus and reads its label.
+    private func selectAdjacentSignature(forward: Bool) {
+        let placements = document.signaturePlacements
+        guard let id = SigningFlowLogic.adjacentPlacement(
+            after: viewer.selectedPlacementID,
+            in: placements,
+            forward: forward
+        ), let placement = placements.first(where: { $0.id == id }) else { return }
+        viewer.reveal(placement.bounds, onPageAt: placement.pageIndex)
+        viewer.select(placementID: id)
+        if let label = viewer.label(for: placement) {
+            announce(label)
+        }
     }
 
     private func configuredEditor() -> SignaturePlacementEditor {

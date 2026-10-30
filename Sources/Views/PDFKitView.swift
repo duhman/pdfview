@@ -82,6 +82,19 @@ final class PDFViewerProxy {
     }
 
     /// Selects a stamp and gives the PDF view keyboard focus so arrow keys nudge it.
+    var selectedPlacementID: UUID? {
+        coordinator?.selectedPlacementID
+    }
+
+    /// The VoiceOver label of a placement as it is now, e.g. for Select Next Signature.
+    func label(for placement: PDFViewerDocument.SignaturePlacement) -> String? {
+        coordinator?.label(for: placement, bounds: placement.bounds)
+    }
+
+    func location(of bounds: CGRect, onPageAt pageIndex: Int) -> String? {
+        coordinator?.location(of: bounds, onPageAt: pageIndex)
+    }
+
     func select(placementID: UUID?) {
         coordinator?.selectedPlacementID = placementID
         if let pdfView, placementID != nil {
@@ -184,12 +197,12 @@ extension PDFKitView {
     @MainActor
     final class Coordinator: NSObject {
         var parent: PDFKitView
-        private weak var pdfView: SigningPDFView?
+        private(set) weak var pdfView: SigningPDFView?
         private var isApplyingZoom = false
         private var overlays: [ObjectIdentifier: PageOverlayView] = [:]
         private var imageCache: [UUID: CGImage] = [:]
         private var profileImageCache: (data: Data, image: CGImage?)?
-        private var signatureFields: [SignatureField] = []
+        private(set) var signatureFields: [SignatureField] = []
         private var overlayInputs: OverlayInputs?
         private var scanTask: Task<Void, Never>?
         private var reportedFormValues: [FormFieldValue]?
@@ -218,6 +231,7 @@ extension PDFKitView {
             pdfView.onWindowChange = { [weak self] window in self?.parent.onWindow(window) }
             pdfView.onUserInteraction = { [weak self] in self?.scheduleFormValueCheck() }
             pdfView.onStopSigning = { [weak self] in self?.parent.onStopSigning() }
+            pdfView.hasSelectedStamp = { [weak self] in self?.selectedPlacementID != nil }
 
             let center = NotificationCenter.default
             center.addObserver(
@@ -371,7 +385,12 @@ extension PDFKitView {
                 .filter { $0.pageIndex == pageIndex }
                 .compactMap { placement -> PageOverlayView.Stamp? in
                     guard let image = image(for: placement) else { return nil }
-                    return PageOverlayView.Stamp(id: placement.id, bounds: placement.bounds, image: image)
+                    return PageOverlayView.Stamp(
+                        id: placement.id,
+                        bounds: placement.bounds,
+                        image: image,
+                        accessibilityLabel: label(for: placement, bounds: placement.bounds)
+                    )
                 }
             let isSigning = parent.signingMode != .idle
 
@@ -382,6 +401,29 @@ extension PDFKitView {
                 signingMode: parent.signingMode,
                 fields: isSigning ? signatureFields.filter { $0.pageIndex == pageIndex }.map(\.bounds) : [],
                 ghostImage: isSigning ? profileImage() : nil
+            )
+        }
+
+        func label(for placement: PDFViewerDocument.SignaturePlacement, bounds: CGRect) -> String {
+            let page = pdfView?.document?.page(at: placement.pageIndex)
+            return StampAccessibility.label(
+                signerName: placement.signerName,
+                pageIndex: placement.pageIndex,
+                bounds: bounds,
+                cropBox: page?.bounds(for: .cropBox) ?? bounds,
+                rotation: page?.rotation ?? 0,
+                fields: signatureFields
+            )
+        }
+
+        func location(of bounds: CGRect, onPageAt pageIndex: Int) -> String {
+            let page = pdfView?.document?.page(at: pageIndex)
+            return StampAccessibility.location(
+                of: bounds,
+                pageIndex: pageIndex,
+                cropBox: page?.bounds(for: .cropBox) ?? bounds,
+                rotation: page?.rotation ?? 0,
+                fields: signatureFields
             )
         }
 
@@ -424,74 +466,6 @@ extension PDFKitView {
 
         fileprivate func removeOverlay(for page: PDFPage) {
             overlays[ObjectIdentifier(page)] = nil
-        }
-
-        // MARK: Keyboard
-
-        private func handleKey(_ event: NSEvent) -> Bool {
-            if event.keyCode == 53 {
-                let action = SigningFlowLogic.escapeAction(
-                    isExporting: parent.isExporting,
-                    isSigning: parent.signingMode != .idle,
-                    isFindVisible: parent.reader.find.isVisible,
-                    hasSelection: selectedPlacementID != nil
-                )
-                switch action {
-                case .cancelExport, .stopSigning, .closeFind:
-                    parent.onEscape()
-                case .deselect:
-                    selectedPlacementID = nil
-                case .none:
-                    return false
-                }
-                return true
-            }
-
-            guard let selectedID = selectedPlacementID,
-                  let placement = parent.signaturePlacements.first(where: { $0.id == selectedID })
-            else {
-                return false
-            }
-
-            switch event.specialKey {
-            case .delete?, .deleteForward?:
-                selectedPlacementID = nil
-                parent.onDeletePlacement(selectedID)
-                return true
-            case .leftArrow?, .rightArrow?, .upArrow?, .downArrow?:
-                nudge(placement, key: event.specialKey, by: event.modifierFlags.contains(.shift) ? 10 : 1)
-                return true
-            default:
-                return false
-            }
-        }
-
-        /// Moves the stamp in the on-screen direction of the arrow key, whatever the page rotation.
-        private func nudge(
-            _ placement: PDFViewerDocument.SignaturePlacement,
-            key: NSEvent.SpecialKey?,
-            by distance: CGFloat
-        ) {
-            guard let pdfView, let page = pdfView.document?.page(at: placement.pageIndex) else { return }
-
-            let screenUp: CGFloat = pdfView.isFlipped ? -1 : 1
-            let screenVector = switch key {
-            case .leftArrow?: CGVector(dx: -1, dy: 0)
-            case .rightArrow?: CGVector(dx: 1, dy: 0)
-            case .upArrow?: CGVector(dx: 0, dy: screenUp)
-            default: CGVector(dx: 0, dy: -screenUp)
-            }
-
-            let origin = pdfView.convert(CGPoint.zero, to: page)
-            let target = pdfView.convert(CGPoint(x: screenVector.dx, y: screenVector.dy), to: page)
-            let length = max(hypot(target.x - origin.x, target.y - origin.y), 0.0001)
-            let delta = CGVector(
-                dx: (target.x - origin.x) / length * distance,
-                dy: (target.y - origin.y) / length * distance
-            )
-
-            let bounds = PlacementGeometry.moved(placement.bounds, by: delta, within: page.bounds(for: .cropBox))
-            parent.onUpdatePlacementBounds(placement.id, bounds, "Move Signature")
         }
 
         deinit {
@@ -561,6 +535,11 @@ extension PDFKitView.Coordinator: PageOverlayViewDelegate {
     func overlayDidRequestStopSigning(_: PageOverlayView) {
         parent.onStopSigning()
     }
+
+    func overlay(_ overlay: PageOverlayView, didRequestMove id: UUID) {
+        self.overlay(overlay, didSelect: id)
+        StampAccessibility.announce(StampAccessibility.moveInstructions, in: pdfView?.window)
+    }
 }
 
 @MainActor
@@ -572,6 +551,19 @@ final class SigningPDFView: PDFView {
     /// A click or key press PDFKit handled, which may have changed a form widget.
     var onUserInteraction: (() -> Void)?
     var onStopSigning: (() -> Void)?
+
+    var hasSelectedStamp: () -> Bool = { false }
+
+    /// The Go menu owns ⌥↑/⌥↓ and menu key equivalents are matched before keyDown, so arrow keys
+    /// for a selected stamp are claimed here first, while this view has keyboard focus.
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let arrows: [NSEvent.SpecialKey] = [.leftArrow, .rightArrow, .upArrow, .downArrow]
+        let isStampArrow = event.specialKey.map(arrows.contains) == true && !event.modifierFlags.contains(.command)
+        if isStampArrow, window?.firstResponder === self, hasSelectedStamp(), keyHandler?(event) == true {
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
 
     /// While signing, a right-click offers Stop Signing instead of PDFKit's reading menu.
     override func menu(for event: NSEvent) -> NSMenu? {

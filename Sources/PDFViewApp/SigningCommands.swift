@@ -10,6 +10,9 @@ struct SigningCommandActions {
     var placeInNextField: () -> Void
     var placeOnCurrentPage: () -> Void
     var setAnywhere: (Bool) -> Void
+    var hasPlacements: Bool
+    var selectNextSignature: () -> Void
+    var selectPreviousSignature: () -> Void
     var saveSignedCopy: () -> Void
     /// The last signed copy this window saved, for the File menu's Share and Show in Finder.
     var lastSavedURL: URL?
@@ -90,6 +93,22 @@ struct SigningCommandMenu: Commands {
             }
             .keyboardShortcut("p", modifiers: [.command, .option])
             .disabled(!canSign)
+
+            Divider()
+
+            Button("Select Next Signature") {
+                actions?.selectNextSignature()
+            }
+            .keyboardShortcut("]", modifiers: [.command, .option])
+            .disabled(!(actions?.hasPlacements ?? false))
+
+            Button("Select Previous Signature") {
+                actions?.selectPreviousSignature()
+            }
+            .keyboardShortcut("[", modifiers: [.command, .option])
+            .disabled(!(actions?.hasPlacements ?? false))
+
+            Divider()
 
             Toggle("Anywhere", isOn: Binding(
                 get: { actions?.signingMode == .freePlacement },

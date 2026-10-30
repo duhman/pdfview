@@ -8,6 +8,8 @@ protocol PageOverlayViewDelegate: AnyObject {
     func overlay(_ overlay: PageOverlayView, didChange id: UUID, to bounds: CGRect, actionName: String)
     func overlay(_ overlay: PageOverlayView, didDelete id: UUID)
     func overlayDidRequestStopSigning(_ overlay: PageOverlayView)
+    /// VoiceOver's Move action: select the stamp and explain the arrow keys.
+    func overlay(_ overlay: PageOverlayView, didRequestMove id: UUID)
 }
 
 /// The one-item context menu shown on the document while signing.
@@ -50,6 +52,8 @@ final class PageOverlayView: NSView {
         let id: UUID
         let bounds: CGRect
         let image: CGImage
+        /// What VoiceOver reads for this stamp, e.g. "Signature by Jane Doe, page 2, in field Buyer".
+        var accessibilityLabel = ""
     }
 
     struct Content {
@@ -85,10 +89,15 @@ final class PageOverlayView: NSView {
                 ghostRect = nil
             }
             needsDisplay = true
+            let summary = content.stamps.map { "\($0.id) \($0.accessibilityLabel)" }
+            if summary != oldValue.stamps.map({ "\($0.id) \($0.accessibilityLabel)" }) {
+                NSAccessibility.post(element: self, notification: .layoutChanged)
+            }
         }
     }
 
     private var ghostRect: CGRect?
+    private var stampElements: [UUID: StampAccessibilityElement] = [:]
     private var liveBounds: (id: UUID, bounds: CGRect)?
 
     init(page: PDFPage?) {
@@ -326,6 +335,37 @@ final class PageOverlayView: NSView {
     private func deleteFromMenu(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? UUID else { return }
         delegate?.overlay(self, didDelete: id)
+    }
+
+    // MARK: Accessibility
+
+    override func accessibilityChildren() -> [Any]? {
+        let ids = Set(content.stamps.map(\.id))
+        stampElements = stampElements.filter { ids.contains($0.key) }
+        return content.stamps.map { stamp in
+            let element = stampElements[stamp.id] ?? StampAccessibilityElement(stampID: stamp.id, overlay: self)
+            element.setAccessibilityLabel(stamp.accessibilityLabel)
+            stampElements[stamp.id] = element
+            return element
+        }
+    }
+
+    func screenFrame(ofStamp id: UUID) -> NSRect {
+        guard let stamp = content.stamps.first(where: { $0.id == id }), let window else { return .zero }
+        let local = currentBounds(of: stamp).applying(pageToLocal)
+        return window.convertToScreen(convert(local, to: nil))
+    }
+
+    func selectStampFromAccessibility(_ id: UUID) {
+        delegate?.overlay(self, didSelect: id)
+    }
+
+    func removeStampFromAccessibility(_ id: UUID) {
+        delegate?.overlay(self, didDelete: id)
+    }
+
+    func moveStampFromAccessibility(_ id: UUID) {
+        delegate?.overlay(self, didRequestMove: id)
     }
 
     // MARK: Hover

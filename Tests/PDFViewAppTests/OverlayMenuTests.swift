@@ -9,6 +9,7 @@ final class RecordingOverlayDelegate: PageOverlayViewDelegate {
     var deleted: [UUID] = []
     var selected: [UUID?] = []
     var changes: [(UUID, CGRect, String)] = []
+    var moveRequests: [UUID] = []
 
     func overlay(_: PageOverlayView, didClickToSignAt _: CGPoint) {}
     func overlay(_: PageOverlayView, didSelect id: UUID?) {
@@ -25,6 +26,10 @@ final class RecordingOverlayDelegate: PageOverlayViewDelegate {
 
     func overlayDidRequestStopSigning(_: PageOverlayView) {
         stopRequests += 1
+    }
+
+    func overlay(_: PageOverlayView, didRequestMove id: UUID) {
+        moveRequests.append(id)
     }
 }
 

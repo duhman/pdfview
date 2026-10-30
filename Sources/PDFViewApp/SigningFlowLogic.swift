@@ -132,10 +132,6 @@ enum SigningFlowLogic {
         }
     }
 
-    static func placedAnnouncement(pageIndex: Int) -> String {
-        "Signature placed on page \(pageIndex + 1)"
-    }
-
     /// The saved banner names the folder too, so the copy can be found after the banner is closed.
     static func savedText(for url: URL) -> String {
         "Saved “\(url.lastPathComponent)” to \(url.deletingLastPathComponent().lastPathComponent)"
@@ -143,6 +139,23 @@ enum SigningFlowLogic {
 
     static func savedAnnouncement(for url: URL) -> String {
         "Saved \(url.lastPathComponent) to \(url.deletingLastPathComponent().lastPathComponent)"
+    }
+
+    /// Select Next/Previous Signature: reading order (page, then top to bottom, then left to right), wrapping.
+    static func adjacentPlacement(
+        after currentID: UUID?,
+        in placements: [PDFViewerDocument.SignaturePlacement],
+        forward: Bool
+    ) -> UUID? {
+        let ordered = placements.sorted {
+            ($0.pageIndex, -$0.bounds.maxY, $0.bounds.minX) < ($1.pageIndex, -$1.bounds.maxY, $1.bounds.minX)
+        }
+        guard !ordered.isEmpty else { return nil }
+        guard let currentID, let index = ordered.firstIndex(where: { $0.id == currentID }) else {
+            return forward ? ordered.first?.id : ordered.last?.id
+        }
+        let next = (index + (forward ? 1 : -1) + ordered.count) % ordered.count
+        return ordered[next].id
     }
 
     static func nextFieldIndex(after lastIndex: Int?, count: Int) -> Int? {
