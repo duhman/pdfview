@@ -541,6 +541,7 @@ extension PDFContentView {
         ZoomCommandActions(
             actualSize: { zoom = .actualSize },
             zoomToFit: zoomToFit,
+            fitWidth: fitWidth,
             zoomIn: zoomIn,
             zoomOut: zoomOut
         )
@@ -591,6 +592,12 @@ extension PDFContentView {
     }
 
     private func zoomToFit() {
+        if let scale = viewer.zoomToFitCurrentPage() {
+            zoom = .manual(scale)
+        }
+    }
+
+    private func fitWidth() {
         zoom = .fit
     }
 

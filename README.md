@@ -49,7 +49,7 @@ duti -s com.bigmac.pdfview com.adobe.pdf all
 - Print the PDF with any placed stamps included; document print permissions are respected.
 - Remember your page, scroll position and zoom for the 200 most recently read file paths.
 - Single-page and two-page layouts, continuous scrolling, and full screen.
-- Actual Size, Zoom to Fit, and manual zoom.
+- Actual Size, Zoom to Fit (the whole current page), Fit Width, and manual zoom.
 
 ### Sign offline
 
@@ -107,7 +107,8 @@ Help > Keyboard Shortcuts shows this list in the app, generated from the menus.
 | ⌘P | Print |
 | ⌘Z / ⇧⌘Z | Undo / redo drawing edits while the signature canvas has focus |
 | ⌘0 | Actual Size |
-| ⌘9 | Zoom to Fit |
+| ⌘9 | Zoom to Fit (whole page) |
+| ⌥⌘9 | Fit Width |
 | ⌘+ / ⌘− | Zoom in / out |
 
 ## Development

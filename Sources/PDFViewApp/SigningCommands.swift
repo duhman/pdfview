@@ -71,6 +71,7 @@ enum MenuShortcuts {
     static let activateFormField = KeyboardShortcut(.return, modifiers: [.command, .option])
     static let actualSize = KeyboardShortcut("0", modifiers: .command)
     static let zoomToFit = KeyboardShortcut("9", modifiers: .command)
+    static let fitWidth = KeyboardShortcut("9", modifiers: [.command, .option])
     static let zoomIn = KeyboardShortcut("+", modifiers: .command)
     static let zoomOut = KeyboardShortcut("-", modifiers: .command)
 
@@ -89,7 +90,7 @@ enum MenuShortcuts {
             selectNextStamp, selectPreviousStamp, saveSignedCopy, shareSignedCopy, showSignedCopyInFinder,
             toggleSidebar, nextPage, previousPage,
             firstPage, lastPage, goToPage, nextFormField, previousFormField, activateFormField, actualSize, zoomToFit,
-            zoomIn, zoomOut,
+            fitWidth, zoomIn, zoomOut,
         ]
     }
 
@@ -137,6 +138,7 @@ enum MenuShortcuts {
 struct ZoomCommandActions {
     var actualSize: () -> Void
     var zoomToFit: () -> Void
+    var fitWidth: () -> Void
     var zoomIn: () -> Void
     var zoomOut: () -> Void
 }
@@ -310,6 +312,11 @@ struct ZoomCommands: Commands {
             actions?.zoomToFit()
         }
         .keyboardShortcut(MenuShortcuts.zoomToFit)
+
+        Button("Fit Width") {
+            actions?.fitWidth()
+        }
+        .keyboardShortcut(MenuShortcuts.fitWidth)
 
         Button("Zoom In") {
             actions?.zoomIn()
