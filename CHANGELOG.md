@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Freeze page content and annotation values together at save, then prepare annotations in the background to keep widget-heavy exports responsive.
 - Let Save write the current state after every saved stamp is deleted or saved form edits are reverted; compare unlocked forms with their baseline before the reader scan finishes.
 - Offer an unprotected copy for protected PDFs with offset page origins, and suggest Print only when printing is allowed.
+- Typing into a form field no longer rewrites the original PDF: macOS autosave saved the document in place with the typed values. The original is now never written; form entries and stamps only reach disk through Save Signed Copy. A read-only original no longer triggers the "file is locked" alert.
+- File > Save, Save As, Duplicate, Rename and Move To are removed; Duplicate wrote an unsigned copy of a document you had just signed.
 
 ## [0.2.1] - 2026-10-30
 

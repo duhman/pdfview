@@ -18,6 +18,8 @@ struct ReaderSidebar: View {
                 }
             }
             .pickerStyle(.segmented)
+            // The label stays for VoiceOver; on screen the segments speak for themselves.
+            .labelsHidden()
             .padding(10)
 
             Divider()

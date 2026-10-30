@@ -112,6 +112,9 @@ struct PDFViewerDocument: FileDocument {
     /// Signature placements added during this document session.
     var signaturePlacements: [SignaturePlacement] = []
 
+    /// The file's bytes as opened; the only thing this document ever writes back.
+    private var originalData: Data?
+
     /// Supported content types (PDF only)
     static var readableContentTypes: [UTType] {
         [.pdf]
@@ -134,19 +137,31 @@ struct PDFViewerDocument: FileDocument {
 
     /// Initialize from file configuration
     init(configuration: ReadConfiguration) throws {
-        guard let data = configuration.file.regularFileContents, let document = PDFDocument(data: data) else {
+        guard let data = configuration.file.regularFileContents else {
             throw CocoaError(.fileReadCorruptFile)
         }
-
-        self.init(pdfDocument: document)
+        try self.init(data: data)
     }
 
-    /// Write document to file.
+    init(data: Data) throws {
+        guard let document = PDFDocument(data: data) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        self.init(pdfDocument: document)
+        originalData = data
+    }
+
+    /// macOS autosave writes this over the original file, so it is always the bytes the file was
+    /// opened with: form entries and stamps only ever reach disk through Save Signed Copy.
     func fileWrapper(configuration _: WriteConfiguration) throws -> FileWrapper {
-        guard let data = pdfDocument?.dataRepresentation() else {
+        try FileWrapper(regularFileWithContents: persistedData())
+    }
+
+    func persistedData() throws -> Data {
+        guard let originalData else {
             throw ExportError.cannotEncodeDocumentData
         }
-        return FileWrapper(regularFileWithContents: data)
+        return originalData
     }
 
     mutating func addSignaturePlacement(_ placement: SignaturePlacement) {
