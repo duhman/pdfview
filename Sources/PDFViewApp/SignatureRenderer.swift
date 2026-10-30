@@ -182,6 +182,37 @@ enum SignatureRenderer {
         return CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
     }
 
+    // MARK: Date stamps
+
+    static func dateText(
+        _ date: Date = Date(),
+        locale: Locale = .current,
+        timeZone: TimeZone = .current,
+        customFormat: String? = nil
+    ) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.timeZone = timeZone
+        if let customFormat, !customFormat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            formatter.dateFormat = customFormat
+        } else {
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+        }
+        return formatter.string(from: date)
+    }
+
+    /// Uses the same fixed black ink, transparent backing and fit rules as typed signatures.
+    static func renderDate(
+        _ date: Date = Date(),
+        locale: Locale = .current,
+        timeZone: TimeZone = .current,
+        customFormat: String? = nil,
+        fontName: String = "SnellRoundhand"
+    ) -> Rendering? {
+        renderText(dateText(date, locale: locale, timeZone: timeZone, customFormat: customFormat), fontName: fontName)
+    }
+
     // MARK: Imported
 
     static func decodeImage(_ data: Data) -> CGImage? {

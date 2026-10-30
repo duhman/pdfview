@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Independent signature and initials profiles with legacy JSON migration and initials setup entry point
+- Transparent locale-aware date stamp renderer for placement integration
 - Thumbnail and recursive outline sidebar, page labels, Go menu and validated Go to Page sheet
 - Asynchronous Find with match count, highlights, next/previous commands and Escape dismissal
 - Signed printing with PDF permission checks, auto-rotation, temporary-file cleanup and a sandbox print entitlement
@@ -21,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.github/SECURITY.md` vulnerability reporting policy
 
 ### Changed
+- Reader sidebar uses a top segmented control, native outline selection and full-height thumbnails
+- About window reads the bundled copyright; app metadata declares the Productivity category
 - Verification runs locally: `scripts/ci-local.sh` builds debug and release bundles with stock `/bin/bash`, runs the tests, checks the bundle and runs pinned SwiftLint 0.65.1 / SwiftFormat 0.64.4 on the untouched checkout
 - Building requires Xcode 27.1 or later (Swift 6.4), the toolchain the app is tested with
 - README and CONTRIBUTING now use the real repository URL and accurate test claims
@@ -33,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions workflows (`ci.yml`, `quality.yml`, `release.yml`); checks and releases run locally
 
 ### Fixed
+- Drawing strokes and clearing participate in the sheet window's native undo/redo history
 - Debug packaging works with Bash 3.2; configuration parsing no longer uses Bash 4-only syntax
 - Universal packaging preserves each architecture before SwiftPM can overwrite its shared product path
 - Notarization submits a ZIP, requires Accepted, staples and validates the app, then rebuilds the distribution ZIP

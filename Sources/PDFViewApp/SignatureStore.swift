@@ -4,7 +4,36 @@ import os
 
 @MainActor
 final class SignatureStore: ObservableObject {
-    @Published private(set) var profile: SignatureProfile?
+    @Published private var profiles = StoredProfiles()
+
+    /// Compatibility access for the existing signature placement path.
+    var profile: SignatureProfile? {
+        profile(for: .signature)
+    }
+
+    func profile(for kind: SignatureKind) -> SignatureProfile? {
+        profiles[kind]
+    }
+
+    private struct StoredProfiles: Codable {
+        var signature: SignatureProfile?
+        var initials: SignatureProfile?
+
+        subscript(kind: SignatureKind) -> SignatureProfile? {
+            get {
+                switch kind {
+                case .signature: signature
+                case .initials: initials
+                }
+            }
+            set {
+                switch kind {
+                case .signature: signature = newValue
+                case .initials: initials = newValue
+                }
+            }
+        }
+    }
 
     private let fileURL: URL
     private let fileManager: FileManager
@@ -91,27 +120,31 @@ final class SignatureStore: ObservableObject {
         }
 
         // Load existing profile with error handling
-        profile = Self.load(from: fileURL, decoder: decoder)
+        profiles = Self.load(from: fileURL, decoder: decoder)
     }
 
-    func saveProfile(_ profile: SignatureProfile) throws {
-        // Validate profile data
-        guard !profile.fullName.isEmpty, let pngData = profile.signaturePNGData, Self.isDecodableImage(pngData) else {
+    func saveProfile(_ profile: SignatureProfile, for kind: SignatureKind = .signature) throws {
+        guard Self.isValid(profile) else {
             throw SignatureError.invalidProfileData
         }
+        var updated = profiles
+        updated[kind] = profile
+        try persist(updated)
+        profiles = updated
+    }
 
-        // Check available disk space
-        let resourceValues = try fileURL.deletingLastPathComponent()
-            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-        let requiredSpace = Int64(pngData.count + 1024)
-        if let available = resourceValues.volumeAvailableCapacityForImportantUsage, available < requiredSpace {
-            throw SignatureError.insufficientDiskSpace
-        }
-
+    private func persist(_ updated: StoredProfiles) throws {
         do {
-            let data = try encoder.encode(profile)
+            let data = try encoder.encode(updated)
+            let resourceValues = try fileURL.deletingLastPathComponent()
+                .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+            let available = resourceValues.volumeAvailableCapacityForImportantUsage ?? Int64.max
+            if available < Int64(data.count + 1024) {
+                throw SignatureError.insufficientDiskSpace
+            }
             try data.write(to: fileURL, options: [.atomic])
-            self.profile = profile
+        } catch let error as SignatureError {
+            throw error
         } catch _ as EncodingError {
             throw SignatureError.cannotEncodeProfile
         } catch let error as CocoaError where error.code == .fileWriteNoPermission {
@@ -132,38 +165,47 @@ final class SignatureStore: ObservableObject {
         profile != nil
     }
 
-    func deleteProfile() throws {
-        if fileManager.fileExists(atPath: fileURL.path) {
-            try fileManager.removeItem(at: fileURL)
+    func deleteProfile(for kind: SignatureKind = .signature) throws {
+        var updated = profiles
+        updated[kind] = nil
+        if updated.signature == nil, updated.initials == nil {
+            if fileManager.fileExists(atPath: fileURL.path) {
+                try fileManager.removeItem(at: fileURL)
+            }
+        } else {
+            try persist(updated)
         }
-        profile = nil
+        profiles = updated
     }
 
-    private static func load(from url: URL, decoder: JSONDecoder) -> SignatureProfile? {
-        let data: Data
+    private static func load(from url: URL, decoder: JSONDecoder) -> StoredProfiles {
         do {
-            data = try Data(contentsOf: url)
-        } catch CocoaError.fileReadNoSuchFile {
-            return nil
-        } catch {
-            logger.error("Could not read signature profile: \(error.localizedDescription, privacy: .public)")
-            return nil
-        }
-
-        do {
-            let profile = try decoder.decode(SignatureProfile.self, from: data)
-            guard !profile.fullName.isEmpty,
-                  let pngData = profile.signaturePNGData,
-                  isDecodableImage(pngData)
-            else {
-                logger.error("Ignoring signature profile whose name is empty or whose image cannot be decoded")
-                return nil
+            let data = try Data(contentsOf: url)
+            // The original file was a bare profile, without a collection envelope.
+            var profiles: StoredProfiles = if let legacy = try? decoder.decode(SignatureProfile.self, from: data) {
+                StoredProfiles(signature: legacy)
+            } else {
+                try decoder.decode(StoredProfiles.self, from: data)
             }
-            return profile
+            for kind in SignatureKind.allCases {
+                if let profile = profiles[kind], !isValid(profile) {
+                    logger.error("Ignoring profile whose name is empty or whose image cannot be decoded")
+                    profiles[kind] = nil
+                }
+            }
+            return profiles
+        } catch CocoaError.fileReadNoSuchFile {
+            return StoredProfiles()
         } catch {
-            logger.error("Could not decode signature profile: \(error.localizedDescription, privacy: .public)")
-            return nil
+            logger.error("Could not load signature profiles: \(error.localizedDescription, privacy: .public)")
+            return StoredProfiles()
         }
+    }
+
+    private static func isValid(_ profile: SignatureProfile) -> Bool {
+        guard !profile.fullName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let data = profile.signaturePNGData else { return false }
+        return isDecodableImage(data)
     }
 
     /// The stamp is drawn from these bytes later; reject anything that isn't a real image now.
