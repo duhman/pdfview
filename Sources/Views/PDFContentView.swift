@@ -837,16 +837,17 @@ extension PDFContentView {
                     )
                     completion(!closeGuard.isEdited)
                 case let .failure(error):
-                    reportSaveFailure(error)
+                    reportExportEnd(error, purpose: .signedCopy)
                     completion(false)
                 }
             }
         }
     }
 
-    private func reportSaveFailure(_ error: Error) {
-        if !(error is CancellationError) {
-            errorAlert = ErrorAlert(title: "Couldn’t Save Signed Copy", error: error)
+    private func reportExportEnd(_ error: Error, purpose: ExportPurpose) {
+        switch purpose.feedback(for: error) {
+        case let .notice(message): showNotice(message)
+        case let .alert(alert): errorAlert = alert
         }
     }
 
@@ -868,9 +869,7 @@ extension PDFContentView {
                 try Task.checkCancellation()
                 try printing.run()
             } catch {
-                if !(error is CancellationError) {
-                    errorAlert = ErrorAlert(title: "Couldn’t Print PDF", error: error)
-                }
+                reportExportEnd(error, purpose: .print)
             }
         }
     }

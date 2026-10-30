@@ -51,3 +51,22 @@ import Testing
     #expect(notices == [SigningFlowLogic.clickInsideFieldNotice])
     #expect(SigningFlowLogic.clickInsideFieldNotice == "Click inside a signature field, or choose Anywhere.")
 }
+
+// MARK: Cancelled saves
+
+@Test func aCancelledSaveIsReportedInTheBannerNotSilently() {
+    #expect(ExportPurpose.signedCopy.feedback(for: CancellationError()) == .notice("Save cancelled."))
+    #expect(ExportPurpose.print.feedback(for: CancellationError()) == .notice("Printing cancelled."))
+}
+
+@Test func aFailedSaveStillRaisesAnAlert() {
+    struct DiskFull: LocalizedError {
+        var errorDescription: String? {
+            "The disk is full."
+        }
+    }
+    #expect(ExportPurpose.signedCopy.feedback(for: DiskFull())
+        == .alert(ErrorAlert(title: "Couldn’t Save Signed Copy", error: DiskFull())))
+    #expect(ExportPurpose.print.feedback(for: DiskFull())
+        == .alert(ErrorAlert(title: "Couldn’t Print PDF", error: DiskFull())))
+}
