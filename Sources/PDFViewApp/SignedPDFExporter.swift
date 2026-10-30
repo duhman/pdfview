@@ -111,7 +111,7 @@ enum SignedPDFExporter {
                 let media = page.bounds(for: .mediaBox)
                 context.beginPDFPage([
                     kCGPDFContextMediaBox as String: boxData(media),
-                    kCGPDFContextCropBox as String: boxData(page.bounds(for: .cropBox))
+                    kCGPDFContextCropBox as String: boxData(page.bounds(for: .cropBox)),
                 ] as CFDictionary)
                 defer { context.endPDFPage() }
                 draw(page, media: media, in: context)
@@ -224,7 +224,7 @@ private struct PDFExportGeometry {
 
     init(url: URL) throws {
         data = try Data(contentsOf: url, options: .mappedIfSafe)
-        guard let tail = String(bytes: data.suffix(1_024), encoding: .isoLatin1) else {
+        guard let tail = String(bytes: data.suffix(1024), encoding: .isoLatin1) else {
             throw ExportError.cannotPreservePageGeometry
         }
         previousXref = try Self.integer("startxref\\s+(\\d+)\\s+%%EOF\\s*$", in: tail)
