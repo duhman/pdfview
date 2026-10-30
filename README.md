@@ -34,8 +34,9 @@ duti -s com.bigmac.pdfview com.adobe.pdf all
 
 - Page indicator with PDF page labels and a validated Go to Page sheet.
 - A native sidebar with a Thumbnails/Outline selector and current-section selection in the outline.
-- Asynchronous text search with match highlights and previous/next navigation.
+- Asynchronous text search with match highlights and previous/next navigation; VoiceOver hears the result and each move.
 - Unlock password-protected PDFs with secure entry; cancel keeps the locked reader open with an Unlock banner.
+- Move between form fields with Go > Next/Previous Form Field; text fields open for typing.
 - Print the PDF with any placed stamps included; document print permissions are respected.
 - Remember your page, scroll position and zoom for the 200 most recently read file paths.
 - Single-page and two-page layouts, continuous scrolling, and full screen.
@@ -45,16 +46,20 @@ duti -s com.bigmac.pdfview com.adobe.pdf all
 
 - Create and edit independent signature and initials profiles by drawing, typing, or importing an image.
 - Choose Signature, Initials, or Date from the Sign toolbar menu; dates use today’s date and your locale at placement time.
-- Place each stamp in the PDF’s own signature fields or anywhere on a page, including the keyboard placement commands.
+- Place each stamp in the PDF’s own signature fields or anywhere on a page, including the keyboard placement commands. Place in Next Field skips fields that already hold a stamp.
+- Initials and dates start at their own sizes (60 and 110 pt wide; signatures 180 pt), and the last size you resize each kind to is reused while the app is open.
+- Place Initials on Every Page initials each page that has none, in one undoable step, at the position of your selected or last initials, or in the bottom-right margin.
+- After each stamp the Sign menu goes back to Signature, and its commands say which kind they will place.
 - Select, move, resize, delete, undo, and redo signature placements, with the mouse or the keyboard.
 - Fill the PDF's form fields; a filled form can be saved as a signed copy even without a stamp.
 - Get asked before closing or quitting with unsaved signatures or form entries.
 - VoiceOver identifies signatures and initials by name, dates by displayed text, and every stamp by page and field or position, with Remove and Move actions.
 - Save a flattened signed copy while keeping page sizes, links, and bookmarks; the original stays separate.
 - Follow page-by-page save progress and cancel before the destination changes.
-- Keep both profiles locally in the app's sandbox, shared across document windows.
+- Keep both profiles locally in the app's sandbox, shared across document windows; delete either one from the Sign menu.
+- Overlays follow Increase Contrast, and messages use at least 12 pt text.
 
-For encrypted sources, Save Signed Copy offers **Keep password protection**, enabled by default when PDFView knows the password. If you unlock through PDFKit’s own password field, the save panel explains that the password is unknown and the copy will be unprotected. Sign > Unlock… reopens secure entry while a PDF is locked.
+For encrypted sources, Save Signed Copy offers **Keep password protection**, enabled by default when PDFView knows the password. Locked PDFs unlock only through PDFView’s own password sheet; File > Unlock… reopens it while a PDF is locked.
 
 Signatures are **visual stamps, not certificate-based digital signatures**. They do not provide certificate identity verification or cryptographic tamper detection. Flattening puts the visible signature into the page content; it does not make the PDF tamper-proof.
 
@@ -62,21 +67,25 @@ Signatures are **visual stamps, not certificate-based digital signatures**. They
 
 | Shortcut | Action |
 | --- | --- |
-| ⌥⌘S | Start/Stop Signing with the selected stamp kind |
+| ⌥⌘S | Start/Stop Signing |
+| ⌃⇧⌘S | Place Signature (then click, or use a placement command) |
 | ⌥⇧⌘I | Place Initials (then click, or use a placement command) |
 | ⌥⇧⌘D | Place Date (then click, or use a placement command) |
 | ⌥⌘N | Place in Next Field |
 | ⌥⌘P | Place on Current Page |
 | ⌥⌘] / ⌥⌘[ | Select Next / Previous Signature |
-| ← → ↑ ↓ | Move the selected signature 1 pt (⇧ 10 pt, ⌥ 50 pt) |
-| ⌥⇧→ / ⌥⇧↑, ⌥⇧← / ⌥⇧↓ | Enlarge / shrink the selected signature |
-| ⌫ | Remove the selected signature from the page |
-| ⇧⌘E | Save Signed Copy… |
-| Esc | Cancel an export, finish signing, or close Find (in the Find field, closes Find first) |
+| ← → ↑ ↓ | Move the selected stamp 1 pt (⇧ 10 pt) |
+| ⌥⇧→ / ⌥⇧↑, ⌥⇧← / ⌥⇧↓ | Enlarge / shrink the selected stamp |
+| ⌫ | Remove the selected stamp from the page |
+| ⇧⌘E | Save Signed Copy… (File menu) |
+| ⌥⇧⌘E | Share Signed Copy… |
+| ⇧⌘R | Show Signed Copy in Finder |
+| Esc | Cancel an export, finish signing, close Find, deselect a stamp, or close the saved banner, in that order (in the Find field, closes Find first) |
 | ⌃⌘S | Show/Hide Sidebar |
 | ⌥⌘G | Go to Page… |
 | ⌥↓ / ⌥↑ | Next / Previous Page |
-| ⌥⌘↑ / ⌥⌘↓ | First / Last Page |
+| ⌥⌘↑ / ⌥⌘↓ | First / Last Page (Option-arrows page even while a stamp is selected) |
+| ⌥⌘→ / ⌥⌘← | Next / Previous Form Field |
 | ⌘F | Find |
 | ⌘G / ⇧⌘G | Next / Previous Match |
 | ⌃⌘F | Enter/Exit Full Screen |
