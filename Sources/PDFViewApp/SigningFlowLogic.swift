@@ -86,6 +86,7 @@ enum SigningShortcut {
     static let placeInNextField = "⌥⌘N"
     static let placeOnCurrentPage = "⌥⌘P"
     static let selectNextStamp = "⌥⌘]"
+    static let placeInitialsOnEveryPage = "⌥⌘I"
 }
 
 /// The Fields/Anywhere choice per stamp kind, remembered for one window. Signatures default to the
@@ -124,7 +125,7 @@ enum SigningFlowLogic {
 
     static func statusText(mode: SigningMode, kind: StampKind = .signature) -> String {
         let instruction = kind == .signature ? "sign" : "place your \(kind.title.lowercased())"
-        return switch (mode, kind) {
+        let text = switch (mode, kind) {
         case (.fieldPlacement, .signature):
             "Click a signature field, choose Anywhere, or use Sign > "
                 + "\(StampWorkflow.placeInNextFieldTitle(kind: kind)) (\(SigningShortcut.placeInNextField))."
@@ -134,6 +135,9 @@ enum SigningFlowLogic {
             "Click where you want to \(instruction), or use Sign > "
                 + "\(StampWorkflow.placeOnCurrentPageTitle(kind: kind)) (\(SigningShortcut.placeOnCurrentPage))."
         }
+        guard kind == .initials else { return text }
+        return text + " Sign > \(StampWorkflow.everyPageActionName) (\(SigningShortcut.placeInitialsOnEveryPage)) "
+            + "initials every page at once."
     }
 
     /// Why Sign > Place Signature in Next Field is unavailable, or nil when it can be used. It fills

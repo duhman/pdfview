@@ -50,6 +50,8 @@ enum MenuShortcuts {
     static let placeDate = KeyboardShortcut("d", modifiers: [.command, .option, .shift])
     static let placeInNextField = KeyboardShortcut("n", modifiers: [.command, .option])
     static let placeOnCurrentPage = KeyboardShortcut("p", modifiers: [.command, .option])
+    /// One more modifier than Place Initials, so the pair is easy to remember.
+    static let placeInitialsOnEveryPage = KeyboardShortcut("i", modifiers: [.command, .option])
     static let selectNextStamp = KeyboardShortcut("]", modifiers: [.command, .option])
     static let selectPreviousStamp = KeyboardShortcut("[", modifiers: [.command, .option])
     /// ⇧⌘S is Save As's convention and ⌥⇧⌘S is taken; ⇧⌘E ("export") is free in the standard menus.
@@ -83,6 +85,7 @@ enum MenuShortcuts {
     static var appSpecific: [KeyboardShortcut] {
         [
             toggleSigning, placeSignature, placeInitials, placeDate, placeInNextField, placeOnCurrentPage,
+            placeInitialsOnEveryPage,
             selectNextStamp, selectPreviousStamp, saveSignedCopy, shareSignedCopy, showSignedCopyInFinder,
             toggleSidebar, nextPage, previousPage,
             firstPage, lastPage, goToPage, nextFormField, previousFormField, actualSize, zoomToFit, zoomIn, zoomOut,
@@ -234,6 +237,7 @@ struct SigningCommandMenu: Commands {
             Button(StampWorkflow.everyPageActionName) {
                 actions?.placeInitialsOnEveryPage()
             }
+            .keyboardShortcut(MenuShortcuts.placeInitialsOnEveryPage)
             .disabled(!canSign)
 
             Divider()

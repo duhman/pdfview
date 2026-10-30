@@ -62,3 +62,22 @@ import Testing
     let request = SetupRequest(pending: nil, restoring: SigningState(kind: .initials, mode: .idle))
     #expect(request.stateAfterCancel == SigningState(kind: .signature, mode: .idle))
 }
+
+// MARK: Initials on every page
+
+@Test func initialsOnEveryPageHasItsOwnShortcut() {
+    let chords = MenuShortcuts.appSpecific.map(MenuShortcuts.Chord.init)
+    #expect(chords.contains(MenuShortcuts.Chord(MenuShortcuts.placeInitialsOnEveryPage)))
+    #expect(MenuShortcuts.Chord(MenuShortcuts.placeInitialsOnEveryPage) == MenuShortcuts.Chord(
+        "i",
+        [.command, .option]
+    ))
+}
+
+@Test func theBannerOffersInitialsOnEveryPageWhilePlacingInitials() {
+    for mode in [SigningMode.freePlacement, .fieldPlacement] {
+        #expect(SigningFlowLogic.statusText(mode: mode, kind: .initials)
+            .hasSuffix("Sign > Place Initials on Every Page (⌥⌘I) initials every page at once."))
+    }
+    #expect(!SigningFlowLogic.statusText(mode: .freePlacement, kind: .date).contains("Every Page"))
+}

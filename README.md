@@ -73,6 +73,7 @@ Signatures are **visual stamps, not certificate-based digital signatures**. They
 | ⌥⇧⌘D | Place Date (then click, or use a placement command) |
 | ⌥⌘N | Place in Next Field |
 | ⌥⌘P | Place on Current Page |
+| ⌥⌘I | Place Initials on Every Page |
 | ⌥⌘] / ⌥⌘[ | Select Next / Previous Stamp |
 | ← → ↑ ↓ | Move the selected stamp 1 pt (⇧ 10 pt, ⌘ 50 pt). A stamp you just placed leaves the arrows to scrolling until you click it or choose Select Next Stamp |
 | ⌥⇧→ / ⌥⇧↑, ⌥⇧← / ⌥⇧↓ | Enlarge / shrink the selected stamp |
