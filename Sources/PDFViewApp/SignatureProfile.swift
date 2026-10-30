@@ -13,6 +13,9 @@ struct SignatureProfile: Codable, Identifiable, Equatable {
     var createdAt: Date
     var signaturePNGBase64: String
     var sourceKind: SourceKind
+    /// For typed signatures, the text and font used, so editing can reopen them. Absent in older profiles.
+    var typedText: String?
+    var fontName: String?
 
     var signaturePNGData: Data? {
         Data(base64Encoded: signaturePNGBase64)
@@ -23,12 +26,16 @@ struct SignatureProfile: Codable, Identifiable, Equatable {
         fullName: String,
         createdAt: Date = Date(),
         signaturePNGData: Data,
-        sourceKind: SourceKind
+        sourceKind: SourceKind,
+        typedText: String? = nil,
+        fontName: String? = nil
     ) {
         self.id = id
         self.fullName = fullName
         self.createdAt = createdAt
-        self.signaturePNGBase64 = signaturePNGData.base64EncodedString()
+        signaturePNGBase64 = signaturePNGData.base64EncodedString()
         self.sourceKind = sourceKind
+        self.typedText = typedText
+        self.fontName = fontName
     }
 }
