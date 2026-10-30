@@ -1,77 +1,76 @@
-import SwiftUI
-import Quartz
 import AppKit
+@preconcurrency import Quartz
+import SwiftUI
 
 /// Main content view for PDF documents
 /// Provides the SwiftUI interface wrapping the PDFKit view
 struct PDFContentView: View {
-
     /// The document binding from DocumentGroup
     @Binding var document: PDFViewerDocument
-    @Environment(\.undoManager) private var undoManager
+    /// The file this window shows; drives the signed copy's default name and folder.
+    let fileURL: URL?
 
-    /// Current zoom scale
-    @State private var zoomScale: CGFloat = 1.0
+    @Environment(\.undoManager)
+    private var undoManager
+    @EnvironmentObject private var signatureStore: SignatureStore
 
-    @StateObject private var signatureStore = SignatureStore()
-    @StateObject private var signatureUndoController = SignaturePlacementUndoController()
+    @State private var zoom: ZoomState = .fit
+    @State private var viewer = PDFViewerProxy()
+    @State private var editor = SignaturePlacementEditor()
+    @State private var closeGuard = DocumentCloseGuard()
 
     @State private var signingMode: SigningMode = .idle
-    @State private var hasSignatureFields = false
-    @State private var lastSignedOutputURL: URL?
+    /// Nil until the PDF view has scanned the document.
+    @State private var documentState: PDFKitView.DocumentState?
+    @State private var lastFieldIndex: Int?
+    @State private var exportedPlacements: [PDFViewerDocument.SignaturePlacement]?
+    @State private var savedURL: URL?
 
     @State private var showSignatureSetupSheet = false
     @State private var isEditingSignature = false
-    @State private var shouldResumeSigningAfterSetup = false
+    @State private var modeAfterSetup: SigningMode?
     @State private var showDeleteSignatureAlert = false
-
-    @State private var activeAlertMessage: String?
+    @State private var errorAlert: ErrorAlert?
 
     var body: some View {
+        window
+            .alert(errorAlert?.title ?? "", isPresented: errorAlertIsPresented, presenting: errorAlert) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { alert in
+                Text(alert.message)
+            }
+            .onExitCommand(perform: signingMode == .idle ? nil : { exitSigning() })
+            .onChange(of: hasUnexportedPlacements) { _, isEdited in
+                closeGuard.isEdited = isEdited
+            }
+            .focusedSceneValue(\.signingActions, signingActions)
+            .focusedSceneValue(\.zoomActions, zoomActions)
+    }
+
+    private var window: some View {
         content
             .frame(minWidth: 600, minHeight: 400)
             .toolbar {
                 toolbarContent
             }
+            .toolbarRole(.editor)
             .sheet(isPresented: $showSignatureSetupSheet) {
                 signatureSetupSheet
             }
-            .alert("Delete Signature?", isPresented: $showDeleteSignatureAlert) {
-                Button("Delete", role: .destructive) {
-                    do {
-                        try signatureStore.deleteProfile()
-                        signingMode = .idle
-                    } catch {
-                        activeAlertMessage = "Could not delete signature: \(error.localizedDescription)"
-                    }
-                }
+            .alert("Delete your saved signature?", isPresented: $showDeleteSignatureAlert) {
+                Button("Delete", role: .destructive, action: deleteSignatureProfile)
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("The saved signature will be removed from this device.")
+                Text("It will be removed from this Mac. Signatures already placed in documents are not affected.")
             }
-            .alert("Error", isPresented: errorAlertIsPresented) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(activeAlertMessage ?? "Unknown error")
-            }
-            .focusedSceneValue(\.startSigningAction, startSigning)
-            .focusedSceneValue(\.canStartSigningAction, canStartSigningAction)
-            .focusedSceneValue(\.toggleFreePlacementAction, toggleFreePlacementMode)
-            .focusedSceneValue(\.saveSignedCopyAction, saveSignedCopy)
-            .focusedSceneValue(\.canSaveSignedCopyAction, canSaveSignedCopyAction)
-            .focusedSceneValue(\.saveSignedCopyAsAction, saveSignedCopyAs)
-            .focusedSceneValue(\.undoSignaturePlacementAction, performUndoSignaturePlacement)
-            .focusedSceneValue(\.redoSignaturePlacementAction, performRedoSignaturePlacement)
-            .focusedSceneValue(\.canUndoSignaturePlacementAction, canUndoSignaturePlacement)
-            .focusedSceneValue(\.canRedoSignaturePlacementAction, canRedoSignaturePlacement)
-            .focusedSceneValue(\.editSignatureAction, editSignature)
-            .focusedSceneValue(\.deleteSignatureAction, { showDeleteSignatureAlert = true })
     }
 
     private var content: some View {
         VStack(spacing: 0) {
             if signingMode != .idle {
-                signingStatusBanner
+                signingBanner
+            } else if let savedURL {
+                savedBanner(for: savedURL)
             }
 
             pdfView
@@ -82,56 +81,129 @@ struct PDFContentView: View {
         PDFKitView(
             document: document.pdfDocument,
             signaturePlacements: document.signaturePlacements,
-            zoomScale: $zoomScale,
+            zoom: $zoom,
             signingMode: signingMode,
             signatureProfile: signatureStore.profile,
-            onSignaturePlacement: handleSignaturePlacement,
-            onSignatureFieldAvailability: { hasSignatureFields = $0 }
+            viewer: viewer,
+            onWindow: attachCloseGuard,
+            onPlaceSignature: placeSignature,
+            onUpdatePlacementBounds: { id, bounds, actionName in
+                configuredEditor().setBounds(id: id, to: bounds, actionName: actionName)
+            },
+            onDeletePlacement: { configuredEditor().delete(id: $0) },
+            onExitSigning: exitSigning,
+            onDocumentStateChange: applyDocumentState
         )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(NSColor.windowBackgroundColor))
     }
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
+    // MARK: Toolbar and banners
+
+    @ToolbarContentBuilder private var toolbarContent: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
-            Button(action: startSigning) {
-                Image(systemName: "signature")
-            }
-            .help("Sign PDF")
-            .disabled(!canStartSigning)
-            .accessibilityLabel("Start signing")
-            .accessibilityHint("Creates or uses your saved visual signature stamp.")
+            ControlGroup {
+                Button(action: zoomOut) {
+                    Label("Zoom Out", systemImage: "minus.magnifyingglass")
+                }
+                .help("Zoom Out")
 
-            Button(action: saveSignedCopy) {
-                Image(systemName: "square.and.arrow.down")
+                Button(action: zoomIn) {
+                    Label("Zoom In", systemImage: "plus.magnifyingglass")
+                }
+                // The View menu item shows ⌘+; this accepts the unshifted ⌘= as well.
+                .keyboardShortcut("=", modifiers: .command)
+                .help("Zoom In")
+            } label: {
+                Label("Zoom", systemImage: "plus.magnifyingglass")
             }
-            .help("Save Signed Copy")
+
+            Button(action: zoomToFit) {
+                Label("Zoom to Fit", systemImage: "arrow.up.left.and.down.right.magnifyingglass")
+            }
+            .help("Zoom to Fit")
+
+            Toggle(isOn: signingToggle) {
+                Label("Sign", systemImage: "signature")
+            }
+            .toggleStyle(.button)
+            .symbolVariant(signingMode == .idle ? .none : .fill)
+            .foregroundStyle(signingMode == .idle ? Color.primary : Color.accentColor)
+            .disabled(!canSign)
+            .help(signingMode == .idle ? "Start Signing" : "Stop Signing")
+            .accessibilityHint("Places your saved visual signature stamp on the document.")
+
+            Button {
+                saveSignedCopy()
+            } label: {
+                Label("Save Signed Copy…", systemImage: "square.and.arrow.down")
+            }
             .disabled(!canSaveSignedCopy)
-            .accessibilityLabel("Save signed copy")
-            .accessibilityHint("Exports a flattened visual signature copy.")
+            .help("Save Signed Copy…")
+            .accessibilityHint("Saves a copy of the PDF with your signature stamps flattened in.")
+        }
+    }
 
-            Button(action: zoomOut) {
-                Image(systemName: "minus.magnifyingglass")
+    private var signingBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "signature")
+                .foregroundStyle(Color.accentColor)
+                .accessibilityHidden(true)
+            Text(SigningFlowLogic.statusText(mode: signingMode))
+            Spacer()
+            if hasSignatureFields {
+                Picker("Place signature in", selection: anywhereSelection) {
+                    Text("Fields").tag(false)
+                    Text("Anywhere").tag(true)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
             }
-            .keyboardShortcut("-", modifiers: .command)
-            .help("Zoom Out")
-            .accessibilityLabel("Zoom out")
+            Button("Done", action: exitSigning)
+                .keyboardShortcut(.cancelAction)
+        }
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+    }
 
-            Button(action: zoomIn) {
-                Image(systemName: "plus.magnifyingglass")
+    private func savedBanner(for url: URL) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+                .accessibilityHidden(true)
+            Text("Saved “\(url.lastPathComponent)”")
+            Spacer()
+            Button("Show in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
             }
-            .keyboardShortcut("=", modifiers: .command)
-            .keyboardShortcut("+", modifiers: .command)
-            .help("Zoom In")
-            .accessibilityLabel("Zoom in")
-
-            Button(action: resetZoom) {
-                Image(systemName: "arrow.uturn.left.circle")
+            ShareLink(item: url) {
+                Label("Share…", systemImage: "square.and.arrow.up")
             }
-            .keyboardShortcut("0", modifiers: .command)
-            .help("Reset Zoom")
-            .accessibilityLabel("Reset zoom")
+            Button {
+                savedURL = nil
+            } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Dismiss")
+        }
+        .font(.callout)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.bar)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
+        .task(id: url) {
+            try? await Task.sleep(for: .seconds(8))
+            if !Task.isCancelled, savedURL == url {
+                savedURL = nil
+            }
         }
     }
 
@@ -140,171 +212,278 @@ struct PDFContentView: View {
             existingProfile: isEditingSignature ? signatureStore.profile : nil,
             onCancel: {
                 showSignatureSetupSheet = false
-                shouldResumeSigningAfterSetup = false
-                signingMode = .idle
+                modeAfterSetup = nil
             },
             onSave: { profile in
                 do {
                     try signatureStore.saveProfile(profile)
                     showSignatureSetupSheet = false
-                    if shouldResumeSigningAfterSetup {
-                        enterSigningMode()
+                    if let modeAfterSetup {
+                        enterSigning(modeAfterSetup)
                     }
-                    shouldResumeSigningAfterSetup = false
+                    modeAfterSetup = nil
                 } catch {
-                    activeAlertMessage = "Could not save signature: \(error.localizedDescription)"
+                    errorAlert = ErrorAlert(title: "Couldn’t Save Signature", error: error)
                 }
             }
         )
     }
 
+    // MARK: State
+
     private var errorAlertIsPresented: Binding<Bool> {
         Binding(
-            get: { activeAlertMessage != nil },
-            set: { if !$0 { activeAlertMessage = nil } }
+            get: { errorAlert != nil },
+            set: {
+                if !$0 {
+                    errorAlert = nil
+                }
+            }
         )
     }
 
-    private var signingStatusBanner: some View {
-        HStack {
-            Text(signingBannerText)
-                .font(.caption)
-                .foregroundStyle(.primary)
-            Spacer()
-            Button(signingMode.allowsFreePlacement ? "Field Mode" : "Free Placement") {
-                toggleFreePlacementMode()
+    private var signingToggle: Binding<Bool> {
+        Binding(
+            get: { signingMode != .idle },
+            set: { isOn in
+                if isOn != (signingMode != .idle) {
+                    toggleSigning()
+                }
             }
-            .buttonStyle(.link)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(Color(NSColor.controlBackgroundColor))
+        )
     }
 
-    private var signingBannerText: String {
-        SigningFlowLogic.statusText(mode: signingMode, hasSignatureFields: hasSignatureFields)
+    private var anywhereSelection: Binding<Bool> {
+        Binding(
+            get: { signingMode == .freePlacement },
+            set: setAnywhere
+        )
     }
 
-    private var canStartSigning: Bool {
-        guard let pdf = document.pdfDocument else { return false }
-        guard pdf.pageCount > 0 else { return false }
-        return !pdf.isLocked
+    private var signatureFields: [SignatureField] {
+        documentState?.signatureFields ?? []
+    }
+
+    private var hasSignatureFields: Bool {
+        !signatureFields.isEmpty
+    }
+
+    private var canSign: Bool {
+        guard let pdf = document.pdfDocument, pdf.pageCount > 0 else { return false }
+        return documentState?.isLocked == false
     }
 
     private var canSaveSignedCopy: Bool {
         document.pdfDocument != nil && !document.signaturePlacements.isEmpty
     }
 
-    /// Zoom in by 25%
+    private var hasUnexportedPlacements: Bool {
+        SigningFlowLogic.hasUnexportedPlacements(document.signaturePlacements, exported: exportedPlacements)
+    }
+
+    private var signatureImageSize: CGSize? {
+        guard let data = signatureStore.profile?.signaturePNGData, let image = NSImage(data: data) else {
+            return nil
+        }
+        return image.size
+    }
+
+    private var signingActions: SigningCommandActions {
+        SigningCommandActions(
+            signingMode: signingMode,
+            canSign: canSign,
+            hasSignatureFields: hasSignatureFields,
+            canSaveSignedCopy: canSaveSignedCopy,
+            toggleSigning: toggleSigning,
+            placeInNextField: placeInNextField,
+            placeOnCurrentPage: placeOnCurrentPage,
+            setAnywhere: setAnywhere,
+            saveSignedCopy: { saveSignedCopy() },
+            editSignature: editSignature,
+            deleteSignature: confirmDeleteSignature
+        )
+    }
+
+    private var zoomActions: ZoomCommandActions {
+        ZoomCommandActions(
+            actualSize: { zoom = .actualSize },
+            zoomToFit: zoomToFit,
+            zoomIn: zoomIn,
+            zoomOut: zoomOut
+        )
+    }
+
+    private func applyDocumentState(_ state: PDFKitView.DocumentState) {
+        documentState = state
+        lastFieldIndex = nil
+        signingMode = SigningFlowLogic.refreshed(signingMode, hasSignatureFields: !state.signatureFields.isEmpty)
+    }
+}
+
+// MARK: Actions
+
+extension PDFContentView {
     private func zoomIn() {
-        zoomScale = min(zoomScale * 1.25, 5.0)
+        zoom = ZoomState.zoomedIn(from: viewer.displayedScale)
     }
 
-    /// Zoom out by 25%
     private func zoomOut() {
-        zoomScale = max(zoomScale / 1.25, 0.25)
+        zoom = ZoomState.zoomedOut(from: viewer.displayedScale)
     }
 
-    /// Reset zoom to default
-    private func resetZoom() {
-        zoomScale = 1.0
+    private func zoomToFit() {
+        zoom = .fit
     }
 
-    private func startSigning() {
-        guard canStartSigning else { return }
+    // MARK: Signing
 
-        if signatureStore.profile == nil {
+    private func toggleSigning() {
+        if signingMode == .idle {
+            startSigning(SigningFlowLogic.toggled(signingMode, hasSignatureFields: hasSignatureFields))
+        } else {
+            exitSigning()
+        }
+    }
+
+    /// Enters signing, first asking the user to create a signature if there is none yet.
+    private func startSigning(_ mode: SigningMode) {
+        guard canSign else { return }
+        guard signatureStore.profile != nil else {
             isEditingSignature = false
-            shouldResumeSigningAfterSetup = true
+            modeAfterSetup = mode
             showSignatureSetupSheet = true
             return
         }
-
-        enterSigningMode()
+        enterSigning(mode)
     }
 
-    private func enterSigningMode() {
-        signingMode = SigningFlowLogic.entryMode(hasSignatureFields: hasSignatureFields)
+    private func enterSigning(_ mode: SigningMode) {
+        viewer.select(placementID: nil)
+        signingMode = mode
+        announce(SigningFlowLogic.enteredAnnouncement(mode: mode))
     }
 
-    private func toggleFreePlacementMode() {
-        guard canStartSigning else { return }
+    private func exitSigning() {
+        signingMode = SigningFlowLogic.exited(signingMode)
+    }
 
+    private func setAnywhere(_ anywhere: Bool) {
+        let mode = SigningFlowLogic.mode(anywhere: anywhere, hasSignatureFields: hasSignatureFields)
         if signingMode == .idle {
-            startSigning()
+            startSigning(mode)
+        } else {
+            signingMode = mode
+        }
+    }
+
+    /// Keyboard path to field signing: each use fills the next detected signature field.
+    private func placeInNextField() {
+        guard canSign else { return }
+        guard let imageSize = signatureImageSize else {
+            startSigning(.fieldPlacement)
+            return
+        }
+        guard let index = SigningFlowLogic.nextFieldIndex(after: lastFieldIndex, count: signatureFields.count),
+              let page = document.pdfDocument?.page(at: signatureFields[index].pageIndex)
+        else {
             return
         }
 
-        signingMode = SigningFlowLogic.toggledMode(current: signingMode, hasSignatureFields: hasSignatureFields)
+        let field = signatureFields[index]
+        lastFieldIndex = index
+        let cropBox = page.bounds(for: .cropBox)
+        let bounds = PlacementGeometry.aspectFit(
+            imageSize: imageSize,
+            in: PlacementGeometry.clamped(field.bounds, to: cropBox)
+        )
+        viewer.reveal(field.bounds, onPageAt: field.pageIndex)
+        placeSignature(pageIndex: field.pageIndex, bounds: bounds)
     }
 
-    private func handleSignaturePlacement(_ placement: PDFViewerDocument.SignaturePlacement) {
-        syncUndoController()
-        signatureUndoController.addPlacement(placement, registerUndo: true)
+    /// Keyboard path to free signing: a centred stamp, then arrow keys move it.
+    private func placeOnCurrentPage() {
+        guard canSign else { return }
+        guard let imageSize = signatureImageSize else {
+            startSigning(.freePlacement)
+            return
+        }
+        let pageIndex = viewer.currentPageIndex ?? 0
+        guard let page = document.pdfDocument?.page(at: pageIndex) else { return }
+
+        let cropBox = page.bounds(for: .cropBox)
+        let bounds = PlacementGeometry.defaultRect(
+            centeredAt: CGPoint(x: cropBox.midX, y: cropBox.midY),
+            imageSize: imageSize,
+            pageBounds: cropBox
+        )
+        placeSignature(pageIndex: pageIndex, bounds: bounds)
     }
 
-    private func performUndoSignaturePlacement() {
-        syncUndoController()
-        signatureUndoController.undo()
+    private func placeSignature(pageIndex: Int, bounds: CGRect) {
+        guard let profile = signatureStore.profile, let imageData = profile.signaturePNGData else { return }
+
+        let placement = PDFViewerDocument.SignaturePlacement(
+            pageIndex: pageIndex,
+            bounds: bounds,
+            signaturePNGData: imageData,
+            signerName: profile.fullName
+        )
+        configuredEditor().add(placement)
+        signingMode = SigningFlowLogic.afterPlacement(signingMode)
+        viewer.select(placementID: placement.id)
+        announce(SigningFlowLogic.placedAnnouncement(pageIndex: pageIndex))
     }
 
-    private func performRedoSignaturePlacement() {
-        syncUndoController()
-        signatureUndoController.redo()
-    }
-
-    private func canUndoSignaturePlacement() -> Bool {
-        undoManager?.canUndo ?? false
-    }
-
-    private func canRedoSignaturePlacement() -> Bool {
-        undoManager?.canRedo ?? false
-    }
-
-    private func canStartSigningAction() -> Bool {
-        canStartSigning
-    }
-
-    private func canSaveSignedCopyAction() -> Bool {
-        canSaveSignedCopy
-    }
-
-    private func syncUndoController() {
-        signatureUndoController.document = $document
-        signatureUndoController.undoManager = undoManager
+    private func configuredEditor() -> SignaturePlacementEditor {
+        editor.document = $document
+        editor.undoManager = undoManager
+        return editor
     }
 
     private func editSignature() {
         isEditingSignature = true
-        shouldResumeSigningAfterSetup = signingMode != .idle
+        modeAfterSetup = nil
         showSignatureSetupSheet = true
     }
 
-    private func saveSignedCopy() {
-        guard let destinationURL = lastSignedOutputURL else {
-            saveSignedCopyAs()
-            return
-        }
-
-        writeSignedCopy(to: destinationURL)
+    private func confirmDeleteSignature() {
+        showDeleteSignatureAlert = true
     }
 
-    private func saveSignedCopyAs() {
-        guard canSaveSignedCopy else { return }
+    private func deleteSignatureProfile() {
+        do {
+            try signatureStore.deleteProfile()
+            signingMode = .idle
+        } catch {
+            errorAlert = ErrorAlert(title: "Couldn’t Delete Signature", error: error)
+        }
+    }
+
+    // MARK: Saving
+
+    /// Asks for a destination in a sheet on this document's window, then writes the signed copy.
+    private func saveSignedCopy(completion: @escaping (Bool) -> Void = { _ in }) {
+        guard canSaveSignedCopy, let window = viewer.window else {
+            completion(false)
+            return
+        }
 
         let panel = NSSavePanel()
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [.pdf]
-        panel.nameFieldStringValue = defaultSignedFileName()
+        panel.nameFieldStringValue = SigningFlowLogic.signedFileName(for: fileURL)
+        panel.directoryURL = fileURL?.deletingLastPathComponent()
 
-        guard panel.runModal() == .OK, let url = panel.url else {
-            return
+        panel.beginSheetModal(for: window) { response in
+            guard response == .OK, let url = panel.url else {
+                completion(false)
+                return
+            }
+            completion(writeSignedCopy(to: url))
         }
-
-        writeSignedCopy(to: url)
     }
 
-    private func writeSignedCopy(to url: URL) {
+    private func writeSignedCopy(to url: URL) -> Bool {
         let didAccess = url.startAccessingSecurityScopedResource()
         defer {
             if didAccess {
@@ -314,60 +493,166 @@ struct PDFContentView: View {
 
         do {
             try document.writeSignedCopy(to: url)
-            lastSignedOutputURL = url
+            exportedPlacements = document.signaturePlacements
+            savedURL = url
+            announce(SigningFlowLogic.savedAnnouncement(fileName: url.lastPathComponent))
+            return true
         } catch {
-            activeAlertMessage = "Could not save signed PDF: \(error.localizedDescription)"
+            errorAlert = ErrorAlert(title: "Couldn’t Save Signed Copy", error: error)
+            return false
         }
     }
 
-    private func defaultSignedFileName() -> String {
-        let sourceURL = NSApp.keyWindow?.representedURL
-        let baseName = sourceURL?.deletingPathExtension().lastPathComponent ?? "document"
-        return "\(baseName)-signed.pdf"
+    private func attachCloseGuard(to window: NSWindow) {
+        closeGuard.documentName = fileURL?.lastPathComponent ?? "this document"
+        closeGuard.saveSignedCopy = { completion in saveSignedCopy(completion: completion) }
+        closeGuard.install(on: window)
+        closeGuard.isEdited = hasUnexportedPlacements
+    }
+
+    private func announce(_ message: String) {
+        NSAccessibility.post(
+            element: viewer.window ?? NSApp as Any,
+            notification: .announcementRequested,
+            userInfo: [.announcement: message, .priority: NSAccessibilityPriorityLevel.high.rawValue]
+        )
     }
 }
 
+/// Adds, moves, resizes and deletes placements on the document model, registering each change
+/// with the window's undo manager under a user-facing action name.
 @MainActor
-private final class SignaturePlacementUndoController: ObservableObject {
+final class SignaturePlacementEditor {
     var document: Binding<PDFViewerDocument>?
     weak var undoManager: UndoManager?
 
-    func addPlacement(_ placement: PDFViewerDocument.SignaturePlacement, registerUndo: Bool) {
-        guard let document else { return }
-        document.wrappedValue.addSignaturePlacement(placement)
-
-        guard registerUndo, let undoManager else { return }
-        let placementID = placement.id
-        undoManager.registerUndo(withTarget: self) { target in
-            // UndoManager invokes handlers on the main thread; assumeIsolated satisfies Swift 6 MainActor checking.
-            MainActor.assumeIsolated {
-                target.removePlacement(id: placementID, registerUndo: true)
-            }
-        }
-        undoManager.setActionName("Add Signature")
+    func add(_ placement: PDFViewerDocument.SignaturePlacement) {
+        insert(placement, at: nil, actionName: "Add Signature")
     }
 
-    func removePlacement(id: UUID, registerUndo: Bool) {
+    func delete(id: UUID) {
+        remove(id: id, actionName: "Delete Signature")
+    }
+
+    func setBounds(id: UUID, to bounds: CGRect, actionName: String) {
         guard let document,
-              let removedPlacement = document.wrappedValue.removeSignaturePlacement(id: id)
+              let current = document.wrappedValue.signaturePlacements.first(where: { $0.id == id }),
+              current.bounds != bounds,
+              let previous = document.wrappedValue.updatePlacementBounds(id: id, to: bounds)
         else {
             return
         }
+        registerUndo(actionName) { $0.setBounds(id: id, to: previous, actionName: actionName) }
+    }
 
-        guard registerUndo, let undoManager else { return }
+    private func insert(_ placement: PDFViewerDocument.SignaturePlacement, at index: Int?, actionName: String) {
+        guard let document else { return }
+        if let index {
+            document.wrappedValue.insertSignaturePlacement(placement, at: index)
+        } else {
+            document.wrappedValue.addSignaturePlacement(placement)
+        }
+        registerUndo(actionName) { $0.remove(id: placement.id, actionName: actionName) }
+    }
+
+    private func remove(id: UUID, actionName: String) {
+        guard let document,
+              let index = document.wrappedValue.signaturePlacements.firstIndex(where: { $0.id == id }),
+              let removed = document.wrappedValue.removeSignaturePlacement(id: id)
+        else {
+            return
+        }
+        registerUndo(actionName) { $0.insert(removed, at: index, actionName: actionName) }
+    }
+
+    private func registerUndo(_ actionName: String, _ undo: @escaping @MainActor (SignaturePlacementEditor) -> Void) {
+        guard let undoManager else { return }
         undoManager.registerUndo(withTarget: self) { target in
+            // UndoManager invokes handlers on the main thread; assumeIsolated satisfies Swift 6 MainActor checking.
             MainActor.assumeIsolated {
-                target.addPlacement(removedPlacement, registerUndo: true)
+                undo(target)
             }
         }
-        undoManager.setActionName("Remove Signature")
+        undoManager.setActionName(actionName)
+    }
+}
+
+/// Window delegate shim that asks before closing a window whose signatures were not saved.
+/// Every other delegate message is forwarded to the delegate SwiftUI installed.
+@MainActor
+final class DocumentCloseGuard: NSObject, NSWindowDelegate {
+    // swiftlint:disable:next modifier_order
+    private nonisolated(unsafe) static var associationKey: UInt8 = 0
+
+    var documentName = "this document"
+    var saveSignedCopy: (@escaping (Bool) -> Void) -> Void = { $0(false) }
+
+    /// Mirrors unexported placements into the window's edited dot.
+    var isEdited = false {
+        didSet { window?.isDocumentEdited = isEdited }
     }
 
-    func undo() {
-        undoManager?.undo()
+    private weak var window: NSWindow?
+    // swiftlint:disable:next modifier_order
+    private nonisolated(unsafe) weak var originalDelegate: NSWindowDelegate?
+    private var isCloseConfirmed = false
+
+    func install(on window: NSWindow) {
+        self.window = window
+        window.isDocumentEdited = isEdited
+        guard window.delegate !== self else { return }
+        originalDelegate = window.delegate
+        window.delegate = self
+        // The window holds the delegate weakly; tie the shim's lifetime to the window.
+        objc_setAssociatedObject(window, &Self.associationKey, self, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
     }
 
-    func redo() {
-        undoManager?.redo()
+    override nonisolated func responds(to aSelector: Selector!) -> Bool {
+        super.responds(to: aSelector) || originalDelegate?.responds(to: aSelector) == true
+    }
+
+    override nonisolated func forwardingTarget(for aSelector: Selector!) -> Any? {
+        originalDelegate?.responds(to: aSelector) == true ? originalDelegate : nil
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if isEdited, !isCloseConfirmed {
+            confirmClose(of: sender)
+            return false
+        }
+        return originalDelegate?.windowShouldClose?(sender) ?? true
+    }
+
+    private func confirmClose(of window: NSWindow) {
+        let alert = NSAlert()
+        alert.messageText = "Save a signed copy of “\(documentName)” before closing?"
+        alert.informativeText = "Your signatures will be lost if you don’t save."
+        alert.addButton(withTitle: "Save Signed Copy…")
+        let dontSave = alert.addButton(withTitle: "Don’t Save")
+        dontSave.keyEquivalent = "d"
+        dontSave.keyEquivalentModifierMask = .command
+        alert.addButton(withTitle: "Cancel")
+
+        alert.beginSheetModal(for: window) { [weak self, weak window] response in
+            MainActor.assumeIsolated {
+                switch response {
+                case .alertFirstButtonReturn:
+                    self?.saveSignedCopy { saved in
+                        if saved {
+                            self?.close(window)
+                        }
+                    }
+                case .alertSecondButtonReturn:
+                    self?.close(window)
+                default:
+                    break
+                }
+            }
+        }
+    }
+
+    private func close(_ window: NSWindow?) {
+        isCloseConfirmed = true
+        window?.performClose(nil)
     }
 }

@@ -1,10 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// About dialog displaying app version, build date, and copyright information
+/// About window in the style of the standard macOS About panel.
 struct AboutView: View {
-    @Environment(\.dismiss) private var dismiss
-
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
     }
@@ -14,53 +12,40 @@ struct AboutView: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 10) {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
-                .frame(width: 96, height: 96)
+                .frame(width: 128, height: 128)
+                .accessibilityHidden(true)
 
             Text("PDFView")
-                .font(.title)
-                .fontWeight(.bold)
+                .font(.title2)
+                .bold()
 
             Text("Version \(appVersion) (\(buildNumber))")
-                .font(.subheadline)
+                .font(.callout)
                 .foregroundStyle(.secondary)
+                .textSelection(.enabled)
 
-            Text("Built \(buildDateString)")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            Text("A private PDF reader that signs documents on your Mac.")
+                .font(.callout)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
 
-            Divider()
-                .frame(width: 200)
-
-            Text("© 2026 BigMac. All rights reserved.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Button("Close") {
-                dismiss()
+            HStack(spacing: 16) {
+                Link("GitHub", destination: AppLinks.repository)
+                Link("MIT License", destination: AppLinks.license)
             }
-            .keyboardShortcut(.defaultAction)
-            .padding(.top, 4)
-        }
-        .padding(32)
-        .frame(width: 320)
-    }
+            .font(.callout)
 
-    private var buildDateString: String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter.string(from: buildDate)
-    }
-
-    /// Compile-time build date derived from the __DATE__ equivalent.
-    /// Falls back to current date for development builds.
-    private var buildDate: Date {
-        if let infoDate = Bundle.main.infoDictionary?["BuildDate"] as? String,
-           let date = ISO8601DateFormatter().date(from: infoDate) {
-            return date
+            Text("© 2026 Adrian Marten")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
         }
-        return Date()
+        .padding(.horizontal, 24)
+        .padding(.top, 28)
+        .padding(.bottom, 20)
+        .frame(width: 280)
     }
 }
