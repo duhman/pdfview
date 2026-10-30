@@ -5,6 +5,8 @@ struct ReaderCommandActions {
     var isBusy: Bool
     var printDocument: () -> Void
     var pageSetup: () -> Void
+    var hasFormFields = false
+    var moveToFormField: (_ forward: Bool) -> Void = { _ in }
 }
 
 private struct ReaderCommandActionsKey: FocusedValueKey {
@@ -75,6 +77,13 @@ struct ReaderCommands: Commands {
         Button("Last Page") { reader?.view?.goToLastPage(nil) }
             .keyboardShortcut(MenuShortcuts.lastPage)
             .disabled(reader?.canRead != true)
+        Divider()
+        Button("Next Form Field") { actions?.moveToFormField(true) }
+            .keyboardShortcut(MenuShortcuts.nextFormField)
+            .disabled(reader?.canRead != true || actions?.hasFormFields != true)
+        Button("Previous Form Field") { actions?.moveToFormField(false) }
+            .keyboardShortcut(MenuShortcuts.previousFormField)
+            .disabled(reader?.canRead != true || actions?.hasFormFields != true)
         Divider()
         Button("Go to Page…") { reader?.showGoToPage = true }
             .keyboardShortcut(MenuShortcuts.goToPage)

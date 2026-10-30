@@ -74,7 +74,12 @@ struct PDFContentView: View {
             .focusedSceneValue(\.signingActions, signingActions)
             .focusedSceneValue(\.zoomActions, zoomActions)
             .focusedSceneValue(\.readerActions, ReaderCommandActions(
-                reader: reader, isBusy: export.isBusy, printDocument: printDocument, pageSetup: runPageSetup
+                reader: reader,
+                isBusy: export.isBusy,
+                printDocument: printDocument,
+                pageSetup: runPageSetup,
+                hasFormFields: formValues?.isEmpty == false,
+                moveToFormField: moveToFormField
             ))
     }
 
@@ -853,6 +858,15 @@ extension PDFContentView {
         case .closeSavedBanner: dismissSavedBanner()
         case .none: break
         }
+    }
+
+    private func moveToFormField(forward: Bool) {
+        guard let message = viewer.moveToFormField(forward: forward) else {
+            NSSound.beep()
+            announce(FormFieldNavigation.noFieldsAnnouncement)
+            return
+        }
+        announce(message)
     }
 
     private func closeFind() {

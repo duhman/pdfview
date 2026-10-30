@@ -118,6 +118,11 @@ final class PDFViewerProxy {
         coordinator?.location(of: bounds, onPageAt: pageIndex)
     }
 
+    /// Go > Next/Previous Form Field; nil when the document has no form fields.
+    func moveToFormField(forward: Bool) -> String? {
+        coordinator?.moveToFormField(forward: forward)
+    }
+
     func select(placementID: UUID?) {
         coordinator?.selectedPlacementID = placementID
         if let pdfView, placementID != nil {
@@ -235,6 +240,8 @@ extension PDFKitView {
         private var scanTask: Task<Void, Never>?
         private var reportedFormValues: [FormFieldValue]?
         private(set) var formScan: FormScan?
+        /// The widget Next/Previous Form Field last moved to.
+        private var lastFormFieldID: ObjectIdentifier?
         /// Counts overlay rebuilds, so tests can check that unrelated updates skip them.
         private(set) var overlayRefreshCount = 0
 
@@ -310,6 +317,7 @@ extension PDFKitView {
         private func rescanDocument() {
             scanTask?.cancel()
             formScan = nil
+            lastFormFieldID = nil
             reportedFormValues = nil
             signatureFields = []
             let document = pdfView?.document
@@ -363,6 +371,45 @@ extension PDFKitView {
             guard let values = formScan?.values(), values != reportedFormValues else { return }
             reportedFormValues = values
             parent.onFormValuesChange(values)
+        }
+
+        // MARK: Form field navigation
+
+        /// Reveals the next (or previous) editable widget and starts editing it when it is a text field.
+        /// Returns what VoiceOver should say, or nil when the document has no form fields.
+        func moveToFormField(forward: Bool) -> String? {
+            guard let pdfView, let document = pdfView.document, let widgets = formScan?.widgets else { return nil }
+            let located = widgets.compactMap { widget -> (PDFAnnotation, PDFPage, Int)? in
+                guard let page = widget.page else { return nil }
+                let index = document.index(for: page)
+                return index == NSNotFound ? nil : (widget, page, index)
+            }
+            let fields = located.map { widget, _, pageIndex in
+                FormFieldNavigation.Field(
+                    pageIndex: pageIndex,
+                    bounds: widget.bounds,
+                    name: FormFieldNavigation.name(of: widget),
+                    kind: FormFieldNavigation.kind(of: widget)
+                )
+            }
+            let order = FormFieldNavigation.readingOrder(fields)
+            let current = order.firstIndex { ObjectIdentifier(located[$0].0) == lastFormFieldID }
+            guard let position = FormFieldNavigation.adjacentPosition(
+                after: current,
+                count: order.count,
+                forward: forward
+            ) else { return nil }
+
+            let (widget, page, _) = located[order[position]]
+            lastFormFieldID = ObjectIdentifier(widget)
+            pdfView.go(to: widget.bounds.insetBy(dx: -40, dy: -40), on: page)
+            if fields[order[position]].kind == .text, !widget.isReadOnly {
+                // PDFKit has no API to start editing a widget, so click it once it has scrolled into view.
+                DispatchQueue.main.async { [weak pdfView] in
+                    pdfView?.clickWidget(widget, on: page)
+                }
+            }
+            return FormFieldNavigation.announcement(for: fields[order[position]])
         }
 
         // MARK: Zoom
@@ -637,6 +684,27 @@ final class SigningPDFView: PDFView {
         }
         super.keyDown(with: event)
         onUserInteraction?()
+    }
+
+    /// Posts a click at the widget's centre so PDFKit opens its text editor there.
+    func clickWidget(_ widget: PDFAnnotation, on page: PDFPage) {
+        guard let window, widget.page === page else { return }
+        let point = convert(convert(CGPoint(x: widget.bounds.midX, y: widget.bounds.midY), from: page), to: nil)
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            if let event = NSEvent.mouseEvent(
+                with: type,
+                location: point,
+                modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: window.windowNumber,
+                context: nil,
+                eventNumber: 0,
+                clickCount: 1,
+                pressure: type == .leftMouseDown ? 1 : 0
+            ) {
+                window.postEvent(event, atStart: false)
+            }
+        }
     }
 
     override func viewDidMoveToWindow() {

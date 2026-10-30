@@ -54,6 +54,8 @@ enum MenuShortcuts {
     static let firstPage = KeyboardShortcut(.upArrow, modifiers: [.command, .option])
     static let lastPage = KeyboardShortcut(.downArrow, modifiers: [.command, .option])
     static let goToPage = KeyboardShortcut("g", modifiers: [.command, .option])
+    static let nextFormField = KeyboardShortcut(.rightArrow, modifiers: [.command, .option])
+    static let previousFormField = KeyboardShortcut(.leftArrow, modifiers: [.command, .option])
     static let actualSize = KeyboardShortcut("0", modifiers: .command)
     static let zoomToFit = KeyboardShortcut("9", modifiers: .command)
     static let zoomIn = KeyboardShortcut("+", modifiers: .command)
@@ -72,7 +74,7 @@ enum MenuShortcuts {
             toggleSigning, placeSignature, placeInitials, placeDate, placeInNextField, placeOnCurrentPage,
             selectNextSignature, selectPreviousSignature, saveSignedCopy, shareSignedCopy, showSignedCopyInFinder,
             toggleSidebar, nextPage, previousPage,
-            firstPage, lastPage, goToPage, actualSize, zoomToFit, zoomIn, zoomOut,
+            firstPage, lastPage, goToPage, nextFormField, previousFormField, actualSize, zoomToFit, zoomIn, zoomOut,
         ]
     }
 
