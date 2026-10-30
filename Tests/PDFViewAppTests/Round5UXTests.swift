@@ -39,3 +39,10 @@ import Testing
 @Test func theRealHomeFolderIsUsedNotTheSandboxContainer() {
     #expect(!SigningFlowLogic.userHome.path.contains("/Library/Containers/"))
 }
+
+// MARK: Unlock
+
+@Test func aSuccessfulUnlockIsAnnouncedWithThePageCount() {
+    #expect(UnlockDocumentSheet.unlockedAnnouncement(pageCount: 1) == "Unlocked, 1 page")
+    #expect(UnlockDocumentSheet.unlockedAnnouncement(pageCount: 12) == "Unlocked, 12 pages")
+}

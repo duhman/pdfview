@@ -116,6 +116,11 @@ struct PDFContentView: View {
                             protectionSession.refresh()
                             reader.refresh()
                             viewer.focusDocumentWhenShown()
+                            let pageCount = protection.document.pageCount
+                            // On the next turn, after the sheet has closed and focus is back in the document.
+                            DispatchQueue.main.async {
+                                announce(UnlockDocumentSheet.unlockedAnnouncement(pageCount: pageCount))
+                            }
                         },
                         onCancel: { protectionSession.showsUnlock = false }
                     )
