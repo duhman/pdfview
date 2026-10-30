@@ -258,6 +258,7 @@ private final class WindowEditingFixture {
     window.makeFirstResponder(pdfView)
     // `undo:` and the menu title both resolve through the first responder.
     #expect(window.firstResponder?.undoManager === window.undoManager)
+    #expect(NSWindow.instancesRespond(to: Selector(("undo:"))))
 }
 
 @MainActor

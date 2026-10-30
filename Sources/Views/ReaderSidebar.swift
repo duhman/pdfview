@@ -32,7 +32,7 @@ struct ReaderSidebar: View {
             .pickerStyle(.segmented)
             // The label stays for VoiceOver; on screen the segments speak for themselves.
             .labelsHidden()
-            .help(Self.outlineHelp(hasOutline: hasOutline) ?? "")
+            .help(Self.outlineHelp(hasOutline: hasOutline) ?? "Show page thumbnails or the document outline")
             .padding(10)
 
             Divider()

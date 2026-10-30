@@ -306,8 +306,9 @@ extension PDFContentView {
             if let message = notice.text {
                 Label(message, systemImage: "exclamationmark.circle")
             } else {
-                Text(SigningFlowLogic.statusText(mode: signingMode, kind: stampKind))
-                    .help(SigningFlowLogic.statusHelp(kind: stampKind) ?? "")
+                let instruction = SigningFlowLogic.statusText(mode: signingMode, kind: stampKind)
+                Text(instruction)
+                    .help(SigningFlowLogic.statusHelp(kind: stampKind) ?? instruction)
                 if let location = fieldLocationText {
                     Text(location)
                         .foregroundStyle(.secondary)
