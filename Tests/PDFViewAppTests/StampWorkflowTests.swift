@@ -550,3 +550,25 @@ private func contrastOnWhite(_ color: NSColor) throws -> CGFloat {
     #expect(NSImage(systemSymbolName: idle, accessibilityDescription: nil) != nil)
     #expect(NSImage(systemSymbolName: signing, accessibilityDescription: nil) != nil)
 }
+
+// MARK: Find announcements
+
+@Test func findAnnouncesTheResultOnceTheSearchFinishesAndEachMove() {
+    var state = FindState()
+    #expect(FindBar.announcement(for: state) == nil)
+
+    let generation = state.begin("lease")
+    state.receiveMatch(generation: generation)
+    // Matches arrive one by one; nothing is spoken until the count is final.
+    #expect(FindBar.announcement(for: state) == nil)
+    state.receiveMatch(generation: generation)
+    state.finish(generation: generation)
+    #expect(FindBar.announcement(for: state) == "Match 1 of 2")
+
+    state.advance(backwards: false)
+    #expect(FindBar.announcement(for: state) == "Match 2 of 2")
+
+    let none = state.begin("zzz")
+    state.finish(generation: none)
+    #expect(FindBar.announcement(for: state) == "No matches")
+}

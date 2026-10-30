@@ -5,6 +5,14 @@ struct FindBar: View {
     let onEscape: () -> Void
     @FocusState private var focused: Bool
 
+    /// What VoiceOver hears when the result changes: nothing while matches are still arriving, then
+    /// the count, then the position after each Next or Previous.
+    nonisolated static func announcement(for state: FindState) -> String? {
+        guard !state.query.isEmpty, !state.isSearching else { return nil }
+        guard let index = state.currentIndex, !state.isEmpty else { return "No matches" }
+        return "Match \(index + 1) of \(state.count)"
+    }
+
     var body: some View {
         HStack {
             TextField("Find in document", text: Binding(get: { find.state.query }, set: find.search))
@@ -34,6 +42,11 @@ struct FindBar: View {
         .background(.bar)
         .onAppear { focused = true }
         .onChange(of: find.focusRequest) { _, _ in focused = true }
+        .onChange(of: Self.announcement(for: find.state)) { _, message in
+            if let message {
+                StampAccessibility.announce(message, in: NSApp.keyWindow, priority: .medium)
+            }
+        }
         .onExitCommand(perform: onEscape)
     }
 }
