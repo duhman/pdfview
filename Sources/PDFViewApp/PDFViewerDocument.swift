@@ -13,6 +13,7 @@ struct PDFViewerDocument: FileDocument {
         case invalidPlacementPage(index: Int)
         case cannotDecodeSignature(id: UUID)
         case cannotPreservePageGeometry
+        case cannotPreserveAccessPermissions
         case cannotPreserveNavigation
         case invalidExportedDocument
         case invalidDestinationURL
@@ -39,6 +40,13 @@ struct PDFViewerDocument: FileDocument {
                 This PDF uses a page coordinate system that could not be preserved safely. \
                 The destination was not changed. \
                 Use Print > Save as PDF to create a normalized PDF, then reopen it and place your signatures again.
+                """
+            case .cannotPreserveAccessPermissions:
+                """
+                PDFView could not keep this PDF's access permissions with the opening password. \
+                The destination was not changed. \
+                Ask the document owner for an unrestricted copy, or turn off Keep password protection \
+                to save a copy without password or access restrictions.
                 """
             case .cannotPreserveNavigation:
                 "Could not preserve the PDF's links or bookmarks."
@@ -141,16 +149,6 @@ struct PDFViewerDocument: FileDocument {
         }
 
         return signaturePlacements.remove(at: index)
-    }
-
-    /// Writes through the same snapshot/export path used by Save Signed Copy.
-    @MainActor
-    @discardableResult
-    func writeSignedCopy(to destinationURL: URL, password: String? = nil) async throws -> ExportedState {
-        guard let pdfDocument else { throw ExportError.missingDocument }
-        return try await SignedPDFExporter.writeAsync(
-            pdfDocument, placements: signaturePlacements, to: destinationURL, password: password
-        ) { _ in }
     }
 }
 

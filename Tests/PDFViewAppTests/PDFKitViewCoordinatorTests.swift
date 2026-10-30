@@ -90,7 +90,6 @@ private enum Sample {
     coordinator.checkFormValues()
     coordinator.checkFormValues()
     #expect(recorder.formValues.count == 1)
-    #expect(PDFViewerProxy().currentFormValues() == nil)
 }
 
 /// One page with a text field and a /Sig field, round-tripped through bytes.

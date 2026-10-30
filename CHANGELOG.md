@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Locked, never-unlocked PDFs no longer show an edited dot or request close/quit review for unavailable form values
+- Protected signed copies preserve the opening password's access permissions and user/owner role; reject copies whose permissions PDFKit cannot reproduce before changing the destination
+- Resolve the current outline section by destination page, including image-only pages, without extracting page text
+
+### Changed
+- Move the test-only signed-copy convenience into test support and remove unused viewer/store/date-format APIs
+
 ## [0.2.0] - 2026-10-30
 
 A full native reader with offline visual signing: correct signed export, visible and editable stamps, initials and dates, password-protected copies, keyboard and VoiceOver support.

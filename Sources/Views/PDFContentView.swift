@@ -434,7 +434,8 @@ extension PDFContentView {
             placements: document.signaturePlacements,
             exported: exportedPlacements,
             formValues: formValues,
-            savedFormValues: savedFormValues
+            savedFormValues: savedFormValues,
+            isLocked: document.pdfDocument?.isLocked == true
         )
     }
 

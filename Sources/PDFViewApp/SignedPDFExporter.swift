@@ -26,6 +26,37 @@ enum SignedPDFExporter {
         let state: ExportedState
     }
 
+    /// A user password must never become an owner credential for a restricted copy.
+    private struct Protection: Sendable {
+        let password: String
+        let ownerPassword: String
+        let permissions: UInt
+        let isOwner: Bool
+
+        init(source: PDFDocument, password: String) {
+            self.password = password
+            permissions = source.accessPermissions.rawValue
+            isOwner = source.permissionsStatus == .owner
+            ownerPassword = isOwner ? password : UUID().uuidString
+        }
+
+        var options: [PDFDocumentWriteOption: Any] {
+            [
+                .userPasswordOption: password,
+                .ownerPasswordOption: ownerPassword,
+                .accessPermissionsOption: NSNumber(value: permissions),
+            ]
+        }
+
+        func validate(_ document: PDFDocument) throws {
+            guard document.accessPermissions.rawValue == permissions,
+                  (document.permissionsStatus == .owner) == isOwner
+            else {
+                throw ExportError.cannotPreserveAccessPermissions
+            }
+        }
+    }
+
     @MainActor
     @discardableResult
     static func writeAsync(
@@ -42,6 +73,7 @@ enum SignedPDFExporter {
         try Task.checkCancellation()
         // No suspension between baseline capture and copying the live PDF.
         guard let values = FormScan.capture(source)?.values() else { throw ExportError.cannotEncodeDocumentData }
+        let protection = password.map { Protection(source: source, password: $0) }
         let copy = try snapshot(of: source)
         let snapshot = try Snapshot(
             document: copy, pages: pages(in: copy), state: ExportedState(placements: placements, formValues: values)
@@ -50,7 +82,7 @@ enum SignedPDFExporter {
             try await writeSnapshot(
                 snapshot,
                 to: destination,
-                password: password,
+                protection: protection,
                 originalURL: originalURL,
                 progress: progress
             )
@@ -65,7 +97,7 @@ enum SignedPDFExporter {
     private static func writeSnapshot(
         _ snapshot: Snapshot,
         to destination: URL,
-        password: String?,
+        protection: Protection?,
         originalURL: URL?,
         progress: @MainActor @Sendable (ExportProgress) -> Void
     ) async throws -> ExportedState {
@@ -82,7 +114,7 @@ enum SignedPDFExporter {
             let rendered = staging.appendingPathComponent("rendered.pdf")
             let completed = staging.appendingPathComponent("completed.pdf")
             try await renderAsync(snapshot.pages, stamps: stamps, to: rendered, progress: progress)
-            try await finalizeAsync(rendered, from: source, to: completed, password: password, progress: progress)
+            try await finalizeAsync(rendered, from: source, to: completed, protection: protection, progress: progress)
             try SignedCopyOperation.validateDestination(destination, originalURL: originalURL)
             try Task.checkCancellation()
             if manager.fileExists(atPath: destination.path) {
@@ -172,12 +204,10 @@ enum SignedPDFExporter {
         pages.map { PDFExportPageGeometry(media: $0.bounds(for: .mediaBox), crop: $0.bounds(for: .cropBox)) }
     }
 
-    private static func write(_ output: PreparedPDF, to url: URL, password: String?) throws {
+    private static func write(_ output: PreparedPDF, to url: URL, protection: Protection?) throws {
         // PDFKit destinations hold weak page references; retain every page through serialization.
         defer { withExtendedLifetime(output) {} }
-        let options: [PDFDocumentWriteOption: Any] = password.map {
-            [.userPasswordOption: $0, .ownerPasswordOption: $0]
-        } ?? [:]
+        let options = protection?.options ?? [:]
         guard output.document.write(to: url, withOptions: options) else { throw ExportError.cannotEncodeDocumentData }
     }
 
@@ -185,7 +215,7 @@ enum SignedPDFExporter {
         _ rendered: URL,
         from source: PDFDocument,
         to completed: URL,
-        password: String?,
+        protection: Protection?,
         progress: @MainActor @Sendable (ExportProgress) -> Void
     ) async throws {
         let boxes = try geometry(of: pages(in: source))
@@ -194,7 +224,7 @@ enum SignedPDFExporter {
         await progress(ExportProgress(completedPages: count, totalPages: count, stage: .writing))
         await Task.yield()
         try Task.checkCancellation()
-        try write(output, to: completed, password: password)
+        try write(output, to: completed, protection: protection)
         await progress(ExportProgress(completedPages: count, totalPages: count, stage: .restoringGeometry))
         await Task.yield()
         try Task.checkCancellation()
@@ -202,7 +232,8 @@ enum SignedPDFExporter {
         await progress(ExportProgress(completedPages: count, totalPages: count, stage: .validating))
         await Task.yield()
         try Task.checkCancellation()
-        _ = try validatedDocument(at: completed, pageCount: count, password: password)
+        let validated = try validatedDocument(at: completed, pageCount: count, password: protection?.password)
+        try protection?.validate(validated)
         await Task.yield()
         try Task.checkCancellation()
     }

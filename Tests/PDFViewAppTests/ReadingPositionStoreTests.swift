@@ -26,7 +26,7 @@ struct ReadingPositionStoreTests {
         }
         _ = store.position(for: urls[0], pageCount: 10)
         store.save(position, for: urls[200])
-        #expect(store.count == 200)
+        #expect(urls.filter { store.position(for: $0, pageCount: 10) != nil }.count == 200)
         #expect(store.position(for: urls[1], pageCount: 10) == nil)
         #expect(store.position(for: urls[0], pageCount: 10) == position)
     }
@@ -35,9 +35,9 @@ struct ReadingPositionStoreTests {
         var store = ReadingPositionStore(data: Data("broken".utf8))
         let url = URL(fileURLWithPath: "/a.pdf")
         store.save(ReadingPosition(pageIndex: -1, x: 0, y: 0, scale: nil), for: url)
-        #expect(store.isEmpty)
+        #expect(store.position(for: url, pageCount: 2) == nil)
         store.save(ReadingPosition(pageIndex: 1, x: .nan, y: 0, scale: nil), for: url)
-        #expect(store.isEmpty)
+        #expect(store.position(for: url, pageCount: 2) == nil)
         store.save(ReadingPosition(pageIndex: 1, x: 0, y: 0, scale: nil), for: url)
         #expect(store.position(for: url, pageCount: 2)?.scale == nil)
     }

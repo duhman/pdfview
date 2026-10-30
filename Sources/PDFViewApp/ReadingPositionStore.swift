@@ -22,14 +22,6 @@ struct ReadingPositionStore: Codable {
 
     private var entries: [String: Entry] = [:]
     private var clock = 0
-    var isEmpty: Bool {
-        entries.isEmpty
-    }
-
-    var count: Int {
-        entries.count
-    }
-
     init(data: Data? = nil) {
         if let data, let decoded = try? JSONDecoder().decode(Self.self, from: data) {
             self = decoded
