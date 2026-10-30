@@ -41,3 +41,24 @@ import Testing
     #expect(!text.contains("Next Field"))
     #expect(text.hasPrefix("Click a signature field, or choose Anywhere"))
 }
+
+// MARK: Cancelling setup
+
+@Test func cancellingInitialsSetupWhileSigningRestoresTheSignatureAndItsMode() {
+    let request = SetupRequest(
+        pending: .enter(.freePlacement),
+        restoring: SigningState(kind: .signature, mode: .fieldPlacement)
+    )
+    #expect(request.stateAfterCancel == SigningState(kind: .signature, mode: .fieldPlacement))
+}
+
+@Test func cancellingSetupFromIdleLeavesTheWindowIdleWithSignature() {
+    let request = SetupRequest(pending: .placeOnCurrentPage, restoring: SigningState(kind: .signature, mode: .idle))
+    #expect(request.stateAfterCancel == SigningState(kind: .signature, mode: .idle))
+}
+
+@Test func aRestoredKindOutsideSigningIsAlwaysSignature() {
+    // Idle windows always offer Signature next, whatever was active when the sheet opened.
+    let request = SetupRequest(pending: nil, restoring: SigningState(kind: .initials, mode: .idle))
+    #expect(request.stateAfterCancel == SigningState(kind: .signature, mode: .idle))
+}

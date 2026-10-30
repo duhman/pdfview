@@ -44,7 +44,8 @@ struct PDFContentView: View {
 
     @State private var showSignatureSetupSheet = false
     @State private var isEditingSignature = false
-    @State private var pendingAfterSetup: PendingSigningAction?
+    /// Why the setup sheet is open on the way to a stamp, and what Cancel goes back to.
+    @State private var setupRequest: SetupRequest?
     /// The saved profile the Delete Saved Signature/Initials… alert is asking about.
     @State private var profileToDelete: SignatureKind?
     @State private var errorAlert: ErrorAlert?
@@ -341,17 +342,17 @@ extension PDFContentView {
             fullName: signatureStore.profile?.fullName ?? signatureStore.profile(for: .initials)?.fullName ?? "",
             onCancel: {
                 showSignatureSetupSheet = false
-                pendingAfterSetup = nil
-                if signingMode == .idle {
-                    stampKind = StampWorkflow.kindAfterPlacementOrExit(stampKind)
-                }
+                let restored = (setupRequest ?? SetupRequest(restoring: currentSigningState)).stateAfterCancel
+                setupRequest = nil
+                stampKind = restored.kind
+                signingMode = restored.mode
             },
             onSave: { profile in
                 do {
                     try signatureStore.saveProfile(profile, for: setupKind)
                     showSignatureSetupSheet = false
-                    let pending = pendingAfterSetup
-                    pendingAfterSetup = nil
+                    let pending = setupRequest?.pending
+                    setupRequest = nil
                     switch pending {
                     case let .enter(mode)?: enterSigning(mode)
                     case .placeInNextField?: placeInNextField()
@@ -515,7 +516,7 @@ extension PDFContentView {
         documentState = nil
         signingMode = .idle
         stampKind = .signature
-        pendingAfterSetup = nil
+        setupRequest = nil
         showSignatureSetupSheet = false
         lastFieldIndex = nil
         exportedPlacements = nil
@@ -554,26 +555,36 @@ extension PDFContentView {
 
     private func chooseStamp(_ kind: StampKind) {
         guard canSign else { return }
+        let previous = currentSigningState
         stampKind = kind
-        startSigning(placementChoices.entryMode(for: kind, hasSignatureFields: hasSignatureFields))
+        startSigning(placementChoices.entryMode(for: kind, hasSignatureFields: hasSignatureFields), restoring: previous)
     }
 
     /// Enters signing, first asking the user to create a signature if there is none yet.
-    private func startSigning(_ mode: SigningMode) {
+    /// `previous` is what cancelling that setup returns to, when the caller already changed the kind.
+    private func startSigning(_ mode: SigningMode, restoring previous: SigningState? = nil) {
         guard canSign else { return }
         guard activeArtwork != nil else {
-            requestSignatureSetup(then: .enter(mode))
+            requestSignatureSetup(then: .enter(mode), restoring: previous)
             return
         }
         enterSigning(mode)
     }
 
+    private var currentSigningState: SigningState {
+        SigningState(kind: stampKind, mode: signingMode)
+    }
+
     /// Asks for a signature first; the requested action runs once the sheet saves.
-    private func requestSignatureSetup(then action: PendingSigningAction) {
-        guard let kind = stampKind.profileKind else { return }
+    private func requestSignatureSetup(
+        then action: PendingSigningAction,
+        restoring previous: SigningState? = nil,
+        kind: SignatureKind? = nil
+    ) {
+        guard let kind = kind ?? stampKind.profileKind else { return }
         setupKind = kind
         isEditingSignature = false
-        pendingAfterSetup = action
+        setupRequest = SetupRequest(pending: action, restoring: previous ?? currentSigningState)
         showSignatureSetupSheet = true
     }
 
@@ -670,10 +681,7 @@ extension PDFContentView {
             initials: signatureStore.profile(for: .initials)
         )
         guard let artwork, let imageSize = artwork.imageSize else {
-            setupKind = .initials
-            isEditingSignature = false
-            pendingAfterSetup = .placeInitialsOnEveryPage
-            showSignatureSetupSheet = true
+            requestSignatureSetup(then: .placeInitialsOnEveryPage, kind: .initials)
             return
         }
         let pages = (0 ..< pdf.pageCount).map { index in
@@ -750,7 +758,7 @@ extension PDFContentView {
     private func editProfile(_ kind: SignatureKind) {
         setupKind = kind
         isEditingSignature = signatureStore.profile(for: kind) != nil
-        pendingAfterSetup = nil
+        setupRequest = nil
         showSignatureSetupSheet = true
     }
 

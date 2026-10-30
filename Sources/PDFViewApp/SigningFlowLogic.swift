@@ -61,6 +61,25 @@ enum PendingSigningAction: Equatable {
     case placeInitialsOnEveryPage
 }
 
+/// The stamp kind and placement mode a window is in.
+struct SigningState: Equatable {
+    var kind: StampKind
+    var mode: SigningMode
+}
+
+/// A setup sheet opened on the way to a stamp: what to run once it saves, and the state to return to
+/// if it is cancelled, so a kind with no artwork never stays active.
+struct SetupRequest: Equatable {
+    var pending: PendingSigningAction?
+    var restoring: SigningState
+
+    var stateAfterCancel: SigningState {
+        restoring.mode == .idle
+            ? SigningState(kind: StampWorkflow.kindAfterPlacementOrExit(restoring.kind), mode: .idle)
+            : restoring
+    }
+}
+
 /// Key equivalents for the Sign menu, shown in the banner so the keyboard path is discoverable.
 /// Chosen to avoid the standard File, Edit (including Find), View, Window and Go menu chords.
 enum SigningShortcut {
