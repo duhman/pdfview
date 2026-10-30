@@ -502,8 +502,8 @@ extension PDFContentView {
             placeInitialsOnEveryPage: placeInitialsOnEveryPage,
             setAnywhere: setAnywhere,
             hasPlacements: !document.signaturePlacements.isEmpty,
-            selectNextSignature: { selectAdjacentSignature(forward: true) },
-            selectPreviousSignature: { selectAdjacentSignature(forward: false) },
+            selectNextStamp: { selectAdjacentStamp(forward: true) },
+            selectPreviousStamp: { selectAdjacentStamp(forward: false) },
             saveSignedCopy: { saveSignedCopy() },
             lastSavedURL: lastSavedURL,
             shareSignedCopy: { url in viewer.showSharingPicker(for: url) },
@@ -754,8 +754,8 @@ extension PDFContentView {
         stampKind = StampWorkflow.kindAfterPlacementOrExit(artwork.kind)
     }
 
-    /// Select Next/Previous Signature: reveals the stamp, gives it keyboard focus and reads its label.
-    private func selectAdjacentSignature(forward: Bool) {
+    /// Select Next/Previous Stamp: reveals the stamp, gives it keyboard focus and reads its label.
+    private func selectAdjacentStamp(forward: Bool) {
         let placements = document.signaturePlacements
         guard let id = SigningFlowLogic.adjacentPlacement(
             after: viewer.selectedPlacementID,

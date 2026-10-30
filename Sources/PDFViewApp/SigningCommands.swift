@@ -14,8 +14,8 @@ struct SigningCommandActions {
     var placeInitialsOnEveryPage: () -> Void
     var setAnywhere: (Bool) -> Void
     var hasPlacements: Bool
-    var selectNextSignature: () -> Void
-    var selectPreviousSignature: () -> Void
+    var selectNextStamp: () -> Void
+    var selectPreviousStamp: () -> Void
     var saveSignedCopy: () -> Void
     /// The last signed copy this window saved, for the File menu's Share and Show in Finder.
     var lastSavedURL: URL?
@@ -26,6 +26,17 @@ struct SigningCommandActions {
     var editInitials: () -> Void
     var canUnlock: Bool
     var unlock: () -> Void
+}
+
+/// Sign menu titles that change with state or cover every stamp kind.
+enum SignMenuTitles {
+    /// "Create Initials…" until a profile exists, then "Edit Initials…", the same for the signature.
+    static func profile(_ kind: SignatureKind, hasProfile: Bool) -> String {
+        "\(hasProfile ? "Edit" : "Create") \(kind.title)…"
+    }
+
+    static let selectNextStamp = "Select Next Stamp"
+    static let selectPreviousStamp = "Select Previous Stamp"
 }
 
 /// Every key equivalent PDFView adds to the menu bar, in one place so a test can prove none
@@ -39,8 +50,8 @@ enum MenuShortcuts {
     static let placeDate = KeyboardShortcut("d", modifiers: [.command, .option, .shift])
     static let placeInNextField = KeyboardShortcut("n", modifiers: [.command, .option])
     static let placeOnCurrentPage = KeyboardShortcut("p", modifiers: [.command, .option])
-    static let selectNextSignature = KeyboardShortcut("]", modifiers: [.command, .option])
-    static let selectPreviousSignature = KeyboardShortcut("[", modifiers: [.command, .option])
+    static let selectNextStamp = KeyboardShortcut("]", modifiers: [.command, .option])
+    static let selectPreviousStamp = KeyboardShortcut("[", modifiers: [.command, .option])
     /// ⇧⌘S is Save As's convention and ⌥⇧⌘S is taken; ⇧⌘E ("export") is free in the standard menus.
     static let saveSignedCopy = KeyboardShortcut("e", modifiers: [.command, .shift])
     static let shareSignedCopy = KeyboardShortcut("e", modifiers: [.command, .option, .shift])
@@ -72,7 +83,7 @@ enum MenuShortcuts {
     static var appSpecific: [KeyboardShortcut] {
         [
             toggleSigning, placeSignature, placeInitials, placeDate, placeInNextField, placeOnCurrentPage,
-            selectNextSignature, selectPreviousSignature, saveSignedCopy, shareSignedCopy, showSignedCopyInFinder,
+            selectNextStamp, selectPreviousStamp, saveSignedCopy, shareSignedCopy, showSignedCopyInFinder,
             toggleSidebar, nextPage, previousPage,
             firstPage, lastPage, goToPage, nextFormField, previousFormField, actualSize, zoomToFit, zoomIn, zoomOut,
         ]
@@ -227,16 +238,16 @@ struct SigningCommandMenu: Commands {
 
             Divider()
 
-            Button("Select Next Signature") {
-                actions?.selectNextSignature()
+            Button(SignMenuTitles.selectNextStamp) {
+                actions?.selectNextStamp()
             }
-            .keyboardShortcut(MenuShortcuts.selectNextSignature)
+            .keyboardShortcut(MenuShortcuts.selectNextStamp)
             .disabled(!(actions?.hasPlacements ?? false))
 
-            Button("Select Previous Signature") {
-                actions?.selectPreviousSignature()
+            Button(SignMenuTitles.selectPreviousStamp) {
+                actions?.selectPreviousStamp()
             }
-            .keyboardShortcut(MenuShortcuts.selectPreviousSignature)
+            .keyboardShortcut(MenuShortcuts.selectPreviousStamp)
             .disabled(!(actions?.hasPlacements ?? false))
 
             Divider()
@@ -249,13 +260,15 @@ struct SigningCommandMenu: Commands {
 
             Divider()
 
-            Button(SigningFlowLogic.signatureMenuTitle(hasProfile: signatureStore.profile != nil)) {
+            Button(SignMenuTitles.profile(.signature, hasProfile: signatureStore.profile != nil)) {
                 actions?.editSignature()
             }
             .disabled(actions == nil)
 
-            Button("Create/Edit Initials…") { actions?.editInitials() }
-                .disabled(actions == nil)
+            Button(SignMenuTitles.profile(.initials, hasProfile: signatureStore.profile(for: .initials) != nil)) {
+                actions?.editInitials()
+            }
+            .disabled(actions == nil)
 
             ForEach(SignatureKind.allCases, id: \.self) { kind in
                 Button(StampWorkflow.deleteMenuTitle(kind)) {

@@ -109,7 +109,7 @@ final class PDFViewerProxy {
         coordinator?.selectedPlacementID
     }
 
-    /// The VoiceOver label of a placement as it is now, e.g. for Select Next Signature.
+    /// The VoiceOver label of a placement as it is now, e.g. for Select Next Stamp.
     func label(for placement: PDFViewerDocument.SignaturePlacement) -> String? {
         coordinator?.label(for: placement, bounds: placement.bounds)
     }

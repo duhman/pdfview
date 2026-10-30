@@ -155,10 +155,6 @@ enum SigningFlowLogic {
     /// Shown in the signing banner when a click in Fields mode misses every signature field.
     static let clickInsideFieldNotice = "Click inside a signature field, or choose Anywhere."
 
-    static func signatureMenuTitle(hasProfile: Bool) -> String {
-        hasProfile ? "Edit Signature…" : "Create Signature…"
-    }
-
     static func escapeAction(
         isExporting: Bool,
         isSigning: Bool,
@@ -190,7 +186,7 @@ enum SigningFlowLogic {
         "Saved \(url.lastPathComponent) to \(url.deletingLastPathComponent().lastPathComponent)"
     }
 
-    /// Select Next/Previous Signature: reading order (page, then top to bottom, then left to right), wrapping.
+    /// Select Next/Previous Stamp: reading order (page, then top to bottom, then left to right), wrapping.
     static func adjacentPlacement(
         after currentID: UUID?,
         in placements: [PDFViewerDocument.SignaturePlacement],
