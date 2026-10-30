@@ -56,7 +56,7 @@ Signatures are **visual stamps, not certificate-based digital signatures**. They
 | Shortcut | Action |
 | --- | --- |
 | ⌥⌘S | Start/Stop Signing |
-| ⌥⇧⌘S | Save Signed Copy… |
+| ⇧⌘E | Save Signed Copy… |
 | Esc | Finish signing |
 | ⌘F | Find |
 | ⌘P | Print |
