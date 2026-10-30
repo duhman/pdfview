@@ -1,12 +1,8 @@
 import Foundation
 
-enum SignatureKind: String, CaseIterable, Identifiable {
+enum SignatureKind: String, CaseIterable {
     case signature
     case initials
-
-    var id: String {
-        rawValue
-    }
 
     var title: String {
         switch self {

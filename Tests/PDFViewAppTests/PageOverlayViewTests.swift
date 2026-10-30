@@ -126,7 +126,7 @@ private func color(of overlay: PageOverlayView, atPagePoint point: CGPoint) thro
         signaturePlacements: [placement],
         zoom: Binding(get: { zoom }, set: { zoom = $0 }),
         signingMode: .idle,
-        signatureProfile: nil,
+        stampPNGData: nil,
         viewer: PDFViewerProxy(),
         reader: ReaderController(),
         fileURL: nil,

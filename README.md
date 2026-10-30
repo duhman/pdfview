@@ -35,24 +35,26 @@ duti -s com.bigmac.pdfview com.adobe.pdf all
 - Page indicator with PDF page labels and a validated Go to Page sheet.
 - A native sidebar with a Thumbnails/Outline selector and current-section selection in the outline.
 - Asynchronous text search with match highlights and previous/next navigation.
-- Print the PDF with any placed signatures included; document print permissions are respected.
+- Unlock password-protected PDFs with secure entry; cancel keeps the locked reader open with an Unlock banner.
+- Print the PDF with any placed stamps included; document print permissions are respected.
 - Remember your page, scroll position and zoom for the 200 most recently read file paths.
 - Single-page and two-page layouts, continuous scrolling, and full screen.
 - Actual Size, Zoom to Fit, and manual zoom.
 
 ### Sign offline
 
-- Create a signature by drawing, typing, or importing an image; edit your saved signature.
-- Place it in the PDF's own signature fields or anywhere on a page.
+- Create and edit independent signature and initials profiles by drawing, typing, or importing an image.
+- Choose Signature, Initials, or Date from the Sign toolbar menu; dates use today’s date and your locale at placement time.
+- Place each stamp in the PDF’s own signature fields or anywhere on a page, including the keyboard placement commands.
 - Select, move, resize, delete, undo, and redo signature placements, with the mouse or the keyboard.
 - Fill the PDF's form fields; a filled form can be saved as a signed copy even without a stamp.
 - Get asked before closing or quitting with unsaved signatures or form entries.
-- VoiceOver reads each placed signature with its signer, page and field or position, and offers Remove and Move actions.
+- VoiceOver identifies signatures and initials by name, dates by displayed text, and every stamp by page and field or position, with Remove and Move actions.
 - Save a flattened signed copy while keeping page sizes, links, and bookmarks; the original stays separate.
 - Follow page-by-page save progress and cancel before the destination changes.
-- Keep the signature profile locally in the app's sandbox, shared across document windows.
+- Keep both profiles locally in the app's sandbox, shared across document windows.
 
-The signing components also support an optional initials profile with draw/type/import editing and a transparent, locale-aware date renderer. Initials and date placement commands await integration; the existing reader still places the signature profile.
+For encrypted sources, Save Signed Copy offers **Keep password protection**, enabled by default when PDFView knows the password. If you unlock through PDFKit’s own password field, the save panel explains that the password is unknown and the copy will be unprotected. Sign > Unlock… reopens secure entry while a PDF is locked.
 
 Signatures are **visual stamps, not certificate-based digital signatures**. They do not provide certificate identity verification or cryptographic tamper detection. Flattening puts the visible signature into the page content; it does not make the PDF tamper-proof.
 
@@ -60,7 +62,9 @@ Signatures are **visual stamps, not certificate-based digital signatures**. They
 
 | Shortcut | Action |
 | --- | --- |
-| ⌥⌘S | Start/Stop Signing |
+| ⌥⌘S | Start/Stop Signing with the selected stamp kind |
+| ⌥⇧⌘I | Place Initials (then click, or use a placement command) |
+| ⌥⇧⌘D | Place Date (then click, or use a placement command) |
 | ⌥⌘N | Place in Next Field |
 | ⌥⌘P | Place on Current Page |
 | ⌥⌘] / ⌥⌘[ | Select Next / Previous Signature |
@@ -104,7 +108,7 @@ To build a release bundle:
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the pinned SwiftLint and SwiftFormat setup, quality checks, icon generation, and manual verification. There is no hosted CI: run `/bin/bash scripts/ci-local.sh` before pushing. It builds both bundle configurations with `/bin/bash`, runs the tests, checks the bundle, and lints the unmodified checkout.
 
-Signed exports capture a stable start state and reject replacing the original file. The source also includes document-scoped password protection and unlock/save-accessory components; their window integration is described in [Architecture](ARCHITECTURE.md#round-2-integration-hooks). Protected export with nonzero page origins fails with recovery advice instead of risking an invalid copy.
+Signed exports capture a stable start state and reject replacing the original file. The window retains password state only for the current PDF, offers secure unlock, and passes the save accessory’s protection choice to export. Protected export with nonzero page origins fails with recovery advice instead of risking an invalid copy.
 
 ### Signing and notarization
 

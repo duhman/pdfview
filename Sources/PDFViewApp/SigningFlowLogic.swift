@@ -95,16 +95,17 @@ enum SigningFlowLogic {
         mode == .fieldPlacement && !hasSignatureFields ? .freePlacement : mode
     }
 
-    static func statusText(mode: SigningMode) -> String {
-        mode == .fieldPlacement
+    static func statusText(mode: SigningMode, kind: StampKind = .signature) -> String {
+        let instruction = kind == .signature ? "sign" : "place your \(kind.title.lowercased())"
+        return mode == .fieldPlacement
             ? "Click a signature field, choose Anywhere, or use Sign > Place in Next Field "
             + "(\(SigningShortcut.placeInNextField))."
-            : "Click where you want to sign, or use Sign > Place on Current Page "
+            : "Click where you want to \(instruction), or use Sign > Place on Current Page "
             + "(\(SigningShortcut.placeOnCurrentPage))."
     }
 
-    static func enteredAnnouncement(mode: SigningMode) -> String {
-        "Signing. \(statusText(mode: mode)) Press Escape to stop."
+    static func enteredAnnouncement(mode: SigningMode, kind: StampKind = .signature) -> String {
+        "Placing \(kind.title.lowercased()). \(statusText(mode: mode, kind: kind)) Press Escape to stop."
     }
 
     static let exitedAnnouncement = "Stopped signing."
@@ -203,14 +204,5 @@ enum SigningFlowLogic {
     /// Only `/FT /Sig` widgets count; a text field named "DesignatedContact" is not a signature field.
     static func isSignatureField(_ annotation: PDFAnnotation) -> Bool {
         annotation.widgetFieldType == .signature
-    }
-
-    static func signatureFields(in document: PDFDocument) -> [SignatureField] {
-        (0 ..< document.pageCount).flatMap { pageIndex -> [SignatureField] in
-            guard let page = document.page(at: pageIndex) else { return [] }
-            return page.annotations
-                .filter(isSignatureField)
-                .map { SignatureField(pageIndex: pageIndex, bounds: $0.bounds, name: $0.fieldName) }
-        }
     }
 }

@@ -126,7 +126,7 @@ struct PDFKitView: NSViewRepresentable {
     var signaturePlacements: [PDFViewerDocument.SignaturePlacement]
     @Binding var zoom: ZoomState
     var signingMode: SigningMode
-    var signatureProfile: SignatureProfile?
+    var stampPNGData: Data?
     var viewer: PDFViewerProxy
     var reader: ReaderController
     var fileURL: URL?
@@ -188,6 +188,7 @@ struct PDFKitView: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ nsView: SigningPDFView, coordinator: Coordinator) {
+        coordinator.cancelScan()
         coordinator.parent.reader.detach()
         nsView.pageOverlayViewProvider = nil
     }
@@ -282,13 +283,14 @@ extension PDFKitView {
             signatureFields = []
             let document = pdfView?.document
             scanTask = Task { [weak self] in
+                guard !Task.isCancelled, let self, pdfView?.document === document else { return }
                 let isLocked = document?.isLocked ?? false
-                self?.parent.onDocumentStateChange(DocumentState(signatureFields: [], isLocked: isLocked))
-                self?.updateOverlaysIfNeeded()
+                parent.onDocumentStateChange(DocumentState(signatureFields: [], isLocked: isLocked))
+                updateOverlaysIfNeeded()
                 guard let document, !isLocked else { return }
 
                 let scan = await FormScan.scan(document)
-                guard !scan.isCancelled, let self, pdfView?.document === document else { return }
+                guard !Task.isCancelled, !scan.isCancelled, pdfView?.document === document else { return }
                 formScan = scan
                 signatureFields = scan.signatureFields
                 let values = scan.values()
@@ -300,6 +302,11 @@ extension PDFKitView {
                 ))
                 updateOverlaysIfNeeded()
             }
+        }
+
+        func cancelScan() {
+            scanTask?.cancel()
+            scanTask = nil
         }
 
         // MARK: Form edits
@@ -363,7 +370,7 @@ extension PDFKitView {
             let inputs = OverlayInputs(
                 placements: parent.signaturePlacements,
                 signingMode: parent.signingMode,
-                profilePNGData: parent.signatureProfile?.signaturePNGData,
+                profilePNGData: parent.stampPNGData,
                 fields: signatureFields
             )
             guard inputs != overlayInputs else { return }
@@ -412,7 +419,9 @@ extension PDFKitView {
                 bounds: bounds,
                 cropBox: page?.bounds(for: .cropBox) ?? bounds,
                 rotation: page?.rotation ?? 0,
-                fields: signatureFields
+                fields: signatureFields,
+                kind: placement.kind,
+                dateText: placement.dateText
             )
         }
 
@@ -447,7 +456,7 @@ extension PDFKitView {
 
         /// Keyed by the PNG bytes, not the profile id: editing a signature keeps its id.
         private func profileImage() -> CGImage? {
-            guard let data = parent.signatureProfile?.signaturePNGData else { return nil }
+            guard let data = parent.stampPNGData else { return nil }
             if let profileImageCache, profileImageCache.data == data {
                 return profileImageCache.image
             }

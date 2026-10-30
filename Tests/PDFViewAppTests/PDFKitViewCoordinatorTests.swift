@@ -21,7 +21,7 @@ func makeRepresentable(
         signaturePlacements: placements,
         zoom: .constant(.fit),
         signingMode: .idle,
-        signatureProfile: nil,
+        stampPNGData: nil,
         viewer: PDFViewerProxy(),
         reader: ReaderController(),
         fileURL: nil,

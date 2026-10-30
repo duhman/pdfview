@@ -63,14 +63,17 @@ enum StampAccessibility {
         bounds: CGRect,
         cropBox: CGRect,
         rotation: Int = 0,
-        fields: [SignatureField]
+        fields: [SignatureField],
+        kind: StampKind = .signature,
+        dateText: String? = nil
     ) -> String {
         let place = location(of: bounds, pageIndex: pageIndex, cropBox: cropBox, rotation: rotation, fields: fields)
-        return "Signature by \(signerName), page \(pageIndex + 1), \(place)"
+        let subject = kind == .date ? "Date \(dateText ?? "")" : "\(kind.title) by \(signerName)"
+        return "\(subject), page \(pageIndex + 1), \(place)"
     }
 
-    static func placedAnnouncement(pageIndex: Int, location: String) -> String {
-        "Signature placed on page \(pageIndex + 1), \(location)"
+    static func placedAnnouncement(pageIndex: Int, location: String, kind: StampKind = .signature) -> String {
+        "\(kind.title) placed on page \(pageIndex + 1), \(location)"
     }
 
     static func movedAnnouncement(pageIndex: Int, location: String) -> String {

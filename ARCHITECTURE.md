@@ -16,7 +16,7 @@ Flattened stamps are page artwork. This is not certificate signing, identity ver
 
 `PDFKitView` bridges PDFKit into SwiftUI. A `PDFPageOverlayViewProvider` draws signature overlays that follow each page during scrolling and zooming. Placement, selection, moving, and aspect-locked resizing use page coordinates; the document model remains the source of truth. Undo and redo operate on model changes.
 
-Signing mode consumes placement clicks while normal reading retains PDFKit's selection and navigation behavior. Only signature widgets are treated as signature fields. `FormScan` walks the document a few pages at a time in a cancellable task after the pages are shown, collecting signature fields and the other form widgets; it reruns when a protected document is unlocked. Overlays redraw only when their inputs (placements, mode, profile image, fields, selection) change.
+Signing mode consumes placement clicks while normal reading retains PDFKit's selection and navigation behavior. Only signature widgets are treated as signature fields. `FormScan` uses `ReaderController.scanSignatureFields` to collect named signature fields and editable widgets in one cancellable page walk after the pages are shown; it reruns when a protected document is unlocked. Overlays redraw only when their inputs (placements, mode, stamp image, fields, selection) change.
 
 Each page overlay exposes its stamps as `StampAccessibilityElement` buttons labelled by `StampAccessibility` (signer, page, field or on-screen position, with PDF-supplied field names flattened and truncated) and offering Remove and Move actions. Keyboard editing lives in `PDFKitView+Keyboard`: arrows move a selected stamp 1/10/50 pt, Option-Shift arrows resize it, and the PDF view claims arrow key equivalents before the Go menu while a stamp is selected. Escape follows `SigningFlowLogic.escapeAction` (export, signing, Find, selection); the Find field closes Find itself.
 
@@ -28,7 +28,9 @@ One app-wide `SignatureStore` is injected into document windows. It persists a s
 
 `SignatureRenderer` handles drawn, typed, and imported artwork. Drawing uses a paper-white surface with black ink, smooth strokes, single-tap dots, uniform scaling, and crop-to-ink bounds. Typed signatures fit their names; imported images can remove white backgrounds. Editing restores existing artwork instead of discarding it.
 
-`SignatureSetupSheet(existingProfile:kind:fullName:onCancel:onSave:)` supports both kinds, defaulting new initials to the first character of each name component. Its native drawing canvas becomes first responder and registers strokes and clearing with the sheet window's UndoManager; undo restores saved artwork when appropriate. Text fields retain native text undo. `SignatureRenderer.renderDate` returns the same transparent PNG/point-size rendering as typed signatures, using today's date, the current locale and time zone, medium date style, or an optional custom format. Date, locale, time zone and font are injectable. The integrator must expose initials setup and wire initials/date menus and placement; this slice leaves document coordination unchanged.
+`SignatureSetupSheet(existingProfile:kind:fullName:onCancel:onSave:)` supports both kinds, defaulting new initials to the first character of each name component. Its native drawing canvas becomes first responder and registers strokes and clearing with the sheet window's UndoManager; undo restores saved artwork when appropriate. Text fields retain native text undo. `SignatureRenderer.renderDate` returns transparent artwork with today's date, the current locale and time zone, and medium date style. Date, locale, time zone and font are injectable.
+
+The Sign menu and compact toolbar menu select Signature, Initials, or Date. Missing initials open setup with kind `.initials` and resume the pending action after saving. `StampArtwork` snapshots the selected profile or renders the current date at placement time; each placement records kind, image bytes, signer and optional formatted date. All kinds share field/free placement, selection, move/resize, undo and export. VoiceOver labels name the stamp kind and signer or date.
 
 ## Reader features
 
@@ -44,13 +46,13 @@ The reader provides a page indicator, Go to Page, thumbnails and outline sidebar
 
 `DocumentProtection` owns an in-memory password for one open document and calls PDFKit's unlock API. `UnlockDocumentSheet` provides secure entry, wrong-password feedback and Cancel. The save accessory defaults to keeping protection when the password is known, exposes an explicit opt-out, and explains that an unknown password means an unprotected copy. Export writes both user and owner password options and validates the protected file by unlocking it before replacement. Encrypted output needing nonzero-origin geometry repair fails safely: appending plaintext streams would corrupt the encrypted file. The error advises making a normalized PDF using Print, reopening it and placing signatures again.
 
-### Round 2 integration hooks
+### Window integration
 
-The view-layer slice owns wiring these components into `PDFContentView` and `PDFKitView`; those files are untouched here:
+`DocumentProtectionSession` retains one `DocumentProtection` for the current PDF identity and discards it on replacement. A locked PDF opens `UnlockDocumentSheet`; Cancel leaves a banner naming unavailable actions and offering Unlock. Sign > Unlock… retries while locked. Both secure entry and PDFKit’s native unlock refresh protection/reader state and cancel/restart the field scan. Native entry cannot reveal its password, so the save accessory shows the unknown-password notice.
 
-- Retain `DocumentProtection(document:)` per document identity; present `UnlockDocumentSheet`, dismiss it through `onUnlock`/`onCancel`, and call `refresh()` after a native PDFKit unlock.
-- Call `SignedCopyOperation.configure(_:originalURL:protection:)` before presenting the save panel. The explicit original URL is required for SwiftUI documents parsed from bytes, where PDFKit's `documentURL` is nil. Configuration installs the accessory and carries its selected password into `write`.
-- Replace the synchronous signature-field scan with `try await ReaderController.scanSignatureFields(in:batchSize:batch:)`. It yields between batches and checks cancellation. Cancel/discard stale scan tasks on document replacement or unlock.
+After reserving its export slot, `PDFContentView` calls `SignedCopyOperation.configure(_:originalURL:protection:)` before presenting the save panel. This supplies SwiftUI’s original URL even when PDFKit parsed bytes and has no `documentURL`, installs the protection accessory, and passes its choice into writing. Printing uses the same selected password for a temporary signed export, unlocks it in memory for AppKit, and removes the temporary file on completion, cancellation or failure.
+
+`FormScan` collects widget references through the G1 scanner’s per-page callback instead of owning a second signature-field traversal. The coordinator cancels scans on unlock, replacement and dismantle, checks cancellation and document identity before publishing results, and keeps the editable form baseline scoped to that PDF.
 
 `ReaderController` scopes bounds notifications to the PDF view's clip view and caches outline lookups, including missing entries, per page until document refresh.
 

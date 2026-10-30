@@ -22,6 +22,9 @@ struct PDFContentView: View {
     @State private var editor = SignaturePlacementEditor()
     @State private var closeGuard = DocumentCloseGuard()
 
+    @State private var protectionSession = DocumentProtectionSession()
+    @State private var stampKind: StampKind = .signature
+    @State private var setupKind: SignatureKind = .signature
     @State private var signingMode: SigningMode = .idle
     /// Nil until the PDF view has scanned the document.
     @State private var documentState: PDFKitView.DocumentState?
@@ -48,6 +51,9 @@ struct PDFContentView: View {
             } message: { alert in
                 Text(alert.message)
             }
+            .onChange(of: document.pdfDocument.map(ObjectIdentifier.init), initial: true) { _, _ in
+                synchronizeDocument()
+            }
             .onExitCommand(perform: handleEscape)
             .onDisappear {
                 reader.persist()
@@ -71,6 +77,7 @@ struct PDFContentView: View {
 
     private var window: some View {
         @Bindable var reader = reader
+        @Bindable var protectionSession = protectionSession
         return content
             .sheet(isPresented: $reader.showGoToPage) { GoToPageSheet(reader: reader) }
             .frame(minWidth: 600, minHeight: 400)
@@ -78,6 +85,18 @@ struct PDFContentView: View {
                 toolbarContent
             }
             .toolbarRole(.editor)
+            .sheet(isPresented: $protectionSession.showsUnlock) {
+                if let protection = protectionSession.protection {
+                    UnlockDocumentSheet(
+                        protection: protection,
+                        onUnlock: {
+                            protectionSession.refresh()
+                            reader.refresh()
+                        },
+                        onCancel: { protectionSession.showsUnlock = false }
+                    )
+                }
+            }
             .sheet(isPresented: $showSignatureSetupSheet) {
                 signatureSetupSheet
             }
@@ -93,6 +112,16 @@ struct PDFContentView: View {
         VStack(spacing: 0) {
             if let progress = export.progress {
                 ExportProgressBanner(progress: progress, cancel: cancelExport)
+            }
+            if protectionSession.protection?.isLocked == true {
+                HStack {
+                    Text("This PDF is locked. Unlock it to read, sign, save a signed copy, or print.")
+                    Spacer()
+                    Button("Unlock…", action: protectionSession.requestUnlock)
+                }
+                .font(.callout)
+                .padding(12)
+                .background(.bar)
             }
             if signingMode != .idle {
                 signingBanner
@@ -121,7 +150,7 @@ struct PDFContentView: View {
             signaturePlacements: document.signaturePlacements,
             zoom: $zoom,
             signingMode: signingMode,
-            signatureProfile: signatureStore.profile,
+            stampPNGData: signingMode == .idle ? nil : activeArtwork?.pngData,
             viewer: viewer,
             reader: reader,
             fileURL: fileURL,
@@ -178,15 +207,21 @@ extension PDFContentView {
             }
             .help("Zoom to Fit")
 
-            Toggle(isOn: signingToggle) {
+            Menu {
+                ForEach(StampKind.allCases) { kind in
+                    Button("Place \(kind.title)") { chooseStamp(kind) }
+                }
+                if signingMode != .idle {
+                    Divider()
+                    Button("Stop Signing", action: exitSigning)
+                }
+            } label: {
                 Label("Sign", systemImage: "signature")
             }
-            .toggleStyle(.button)
-            .symbolVariant(signingMode == .idle ? .none : .fill)
             .foregroundStyle(signingMode == .idle ? Color.primary : Color.accentColor)
             .disabled(!canSign)
-            .help(signingMode == .idle ? "Start Signing" : "Stop Signing")
-            .accessibilityHint("Places your saved visual signature stamp on the document.")
+            .help("Place a signature, initials, or today's date")
+            .accessibilityHint("Choose Signature, Initials, or Date, then click to place. Done stops signing.")
 
             Button {
                 saveSignedCopy()
@@ -204,10 +239,10 @@ extension PDFContentView {
             Image(systemName: "signature")
                 .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
-            Text(SigningFlowLogic.statusText(mode: signingMode))
+            Text(SigningFlowLogic.statusText(mode: signingMode, kind: stampKind))
             Spacer()
             if hasSignatureFields {
-                Picker("Place signature in", selection: anywhereSelection) {
+                Picker("Place stamp in", selection: anywhereSelection) {
                     Text("Fields").tag(false)
                     Text("Anywhere").tag(true)
                 }
@@ -264,14 +299,16 @@ extension PDFContentView {
 
     private var signatureSetupSheet: some View {
         SignatureSetupSheet(
-            existingProfile: isEditingSignature ? signatureStore.profile : nil,
+            existingProfile: isEditingSignature ? signatureStore.profile(for: setupKind) : nil,
+            kind: setupKind,
+            fullName: signatureStore.profile?.fullName ?? signatureStore.profile(for: .initials)?.fullName ?? "",
             onCancel: {
                 showSignatureSetupSheet = false
                 pendingAfterSetup = nil
             },
             onSave: { profile in
                 do {
-                    try signatureStore.saveProfile(profile)
+                    try signatureStore.saveProfile(profile, for: setupKind)
                     showSignatureSetupSheet = false
                     let pending = pendingAfterSetup
                     pendingAfterSetup = nil
@@ -282,7 +319,7 @@ extension PDFContentView {
                     case nil: break
                     }
                 } catch {
-                    errorAlert = ErrorAlert(title: "Couldn’t Save Signature", error: error)
+                    errorAlert = ErrorAlert(title: "Couldn’t Save \(setupKind.title)", error: error)
                 }
             }
         )
@@ -296,17 +333,6 @@ extension PDFContentView {
             set: {
                 if !$0 {
                     errorAlert = nil
-                }
-            }
-        )
-    }
-
-    private var signingToggle: Binding<Bool> {
-        Binding(
-            get: { signingMode != .idle },
-            set: { isOn in
-                if isOn != (signingMode != .idle) {
-                    toggleSigning()
                 }
             }
         )
@@ -329,15 +355,16 @@ extension PDFContentView {
 
     private var canSign: Bool {
         guard let pdf = document.pdfDocument, pdf.pageCount > 0 else { return false }
-        return documentState?.isLocked == false
+        return !pdf.isLocked && documentState?.isLocked == false && !export.isBusy
     }
 
     private var canSaveSignedCopy: Bool {
-        document.pdfDocument != nil && !export.isBusy && SigningFlowLogic.hasSignedCopyContent(
-            placements: document.signaturePlacements,
-            formValues: formValues,
-            originalFormValues: originalFormValues
-        )
+        document.pdfDocument?.isLocked == false && protectionSession.protection != nil
+            && !export.isBusy && SigningFlowLogic.hasSignedCopyContent(
+                placements: document.signaturePlacements,
+                formValues: formValues,
+                originalFormValues: originalFormValues
+            )
     }
 
     private var unsavedWork: UnsavedWork {
@@ -353,11 +380,16 @@ extension PDFContentView {
         )
     }
 
+    private var activeArtwork: StampArtwork? {
+        StampArtwork.make(
+            kind: stampKind,
+            signature: signatureStore.profile,
+            initials: signatureStore.profile(for: .initials)
+        )
+    }
+
     private var signatureImageSize: CGSize? {
-        guard let data = signatureStore.profile?.signaturePNGData, let image = NSImage(data: data) else {
-            return nil
-        }
-        return image.size
+        activeArtwork?.imageSize
     }
 
     private var signingActions: SigningCommandActions {
@@ -377,7 +409,11 @@ extension PDFContentView {
             lastSavedURL: lastSavedURL,
             shareSignedCopy: { url in viewer.showSharingPicker(for: url) },
             editSignature: editSignature,
-            deleteSignature: confirmDeleteSignature
+            deleteSignature: confirmDeleteSignature,
+            placeStamp: chooseStamp,
+            editInitials: { editProfile(.initials) },
+            canUnlock: protectionSession.protection?.isLocked == true,
+            unlock: protectionSession.requestUnlock
         )
     }
 
@@ -395,12 +431,34 @@ extension PDFContentView {
     }
 
     private func applyDocumentState(_ state: PDFKitView.DocumentState) {
+        synchronizeDocument()
+        protectionSession.refresh()
+        reader.refresh()
         documentState = state
         formValues = state.formValues
-        originalFormValues = state.formValues
-        savedFormValues = state.formValues
+        if originalFormValues == nil {
+            originalFormValues = state.formValues
+            savedFormValues = state.formValues
+        }
         lastFieldIndex = nil
-        signingMode = SigningFlowLogic.refreshed(signingMode, hasSignatureFields: !state.signatureFields.isEmpty)
+        signingMode = state.isLocked ? .idle :
+            SigningFlowLogic.refreshed(signingMode, hasSignatureFields: !state.signatureFields.isEmpty)
+    }
+
+    private func synchronizeDocument() {
+        guard protectionSession.protection?.document !== document.pdfDocument else { return }
+        protectionSession.attach(document.pdfDocument)
+        documentState = nil
+        signingMode = .idle
+        pendingAfterSetup = nil
+        showSignatureSetupSheet = false
+        lastFieldIndex = nil
+        exportedPlacements = nil
+        formValues = nil
+        originalFormValues = nil
+        savedFormValues = nil
+        lastSavedURL = nil
+        showsSavedBanner = false
     }
 }
 
@@ -429,10 +487,16 @@ extension PDFContentView {
         }
     }
 
+    private func chooseStamp(_ kind: StampKind) {
+        guard canSign else { return }
+        stampKind = kind
+        startSigning(SigningFlowLogic.entryMode(hasSignatureFields: hasSignatureFields))
+    }
+
     /// Enters signing, first asking the user to create a signature if there is none yet.
     private func startSigning(_ mode: SigningMode) {
         guard canSign else { return }
-        guard signatureStore.profile != nil else {
+        guard activeArtwork != nil else {
             requestSignatureSetup(then: .enter(mode))
             return
         }
@@ -441,15 +505,18 @@ extension PDFContentView {
 
     /// Asks for a signature first; the requested action runs once the sheet saves.
     private func requestSignatureSetup(then action: PendingSigningAction) {
+        guard let kind = stampKind.profileKind else { return }
+        setupKind = kind
         isEditingSignature = false
         pendingAfterSetup = action
         showSignatureSetupSheet = true
     }
 
     private func enterSigning(_ mode: SigningMode) {
+        guard canSign else { return }
         viewer.select(placementID: nil)
         signingMode = mode
-        announce(SigningFlowLogic.enteredAnnouncement(mode: mode))
+        announce(SigningFlowLogic.enteredAnnouncement(mode: mode, kind: stampKind))
     }
 
     private func exitSigning() {
@@ -514,19 +581,13 @@ extension PDFContentView {
     }
 
     private func placeSignature(pageIndex: Int, bounds: CGRect) {
-        guard let profile = signatureStore.profile, let imageData = profile.signaturePNGData else { return }
-
-        let placement = PDFViewerDocument.SignaturePlacement(
-            pageIndex: pageIndex,
-            bounds: bounds,
-            signaturePNGData: imageData,
-            signerName: profile.fullName
-        )
+        guard canSign, let artwork = activeArtwork else { return }
+        let placement = artwork.placement(pageIndex: pageIndex, bounds: bounds)
         configuredEditor().add(placement)
         signingMode = SigningFlowLogic.afterPlacement(signingMode)
         viewer.select(placementID: placement.id)
         let location = viewer.location(of: bounds, onPageAt: pageIndex) ?? ""
-        announce(StampAccessibility.placedAnnouncement(pageIndex: pageIndex, location: location))
+        announce(StampAccessibility.placedAnnouncement(pageIndex: pageIndex, location: location, kind: stampKind))
     }
 
     /// Select Next/Previous Signature: reveals the stamp, gives it keyboard focus and reads its label.
@@ -552,7 +613,12 @@ extension PDFContentView {
 
     /// Edits the saved signature, or creates one when there is none yet.
     private func editSignature() {
-        isEditingSignature = signatureStore.profile != nil
+        editProfile(.signature)
+    }
+
+    private func editProfile(_ kind: SignatureKind) {
+        setupKind = kind
+        isEditingSignature = signatureStore.profile(for: kind) != nil
         pendingAfterSetup = nil
         showSignatureSetupSheet = true
     }
@@ -575,16 +641,20 @@ extension PDFContentView {
     /// Asks for a destination in a sheet on this document's window, then writes the signed copy.
     private func saveSignedCopy(completion: @escaping (Bool) -> Void = { _ in }) {
         viewer.refreshFormValues()
-        guard canSaveSignedCopy, let window = viewer.window, export.reserve() else { completion(false)
+        guard canSaveSignedCopy, let protection = protectionSession.protection,
+              let source = document.pdfDocument, let window = viewer.window, export.reserve()
+        else {
+            completion(false)
             return
         }
         let panel = NSSavePanel()
+        export.configure(panel, originalURL: fileURL, protection: protection)
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [.pdf]
         panel.nameFieldStringValue = SigningFlowLogic.signedFileName(for: fileURL)
         panel.directoryURL = fileURL?.deletingLastPathComponent()
         panel.beginSheetModal(for: window) { response in
-            guard response == .OK, let url = panel.url, let source = document.pdfDocument else {
+            guard response == .OK, let url = panel.url, document.pdfDocument === source else {
                 export.release()
                 completion(false)
                 return
@@ -613,6 +683,7 @@ extension PDFContentView {
     private func printDocument() {
         guard reader.canPrint, let source = document.pdfDocument, export.reserve() else { return }
         let placements = document.signaturePlacements
+        let selected = protectionSession.protection?.exportPassword
         printTask = Task {
             let printing = PDFPrinting()
             defer {
@@ -621,7 +692,9 @@ extension PDFContentView {
                 printTask = nil
             }
             do {
-                try await printing.prepare(source: source, placements: placements) { export.updateProgress($0) }
+                try await printing.prepare(source: source, placements: placements, password: selected) {
+                    export.updateProgress($0)
+                }
                 try Task.checkCancellation()
                 try printing.run()
             } catch {
