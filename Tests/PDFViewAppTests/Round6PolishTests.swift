@@ -166,3 +166,105 @@ private func stamp(page: Int, in field: SignatureField) -> PDFViewerDocument.Sig
     }
     #expect(SigningFlowLogic.statusHelp(kind: .signature) == nil)
 }
+
+// MARK: Edit > Undo names stamp edits
+
+/// Stamp editing on a real window's undo manager, the one the Edit menu follows.
+@MainActor
+private final class WindowEditingFixture {
+    let window = NSWindow(
+        contentRect: CGRect(x: 0, y: 0, width: 200, height: 200),
+        styleMask: [.titled, .closable],
+        backing: .buffered,
+        defer: true
+    )
+    let closeGuard = DocumentCloseGuard()
+    let editor = SignaturePlacementEditor()
+    var document = PDFViewerDocument()
+    let undoManager: UndoManager
+
+    init() throws {
+        window.isReleasedWhenClosed = false
+        closeGuard.install(on: window)
+        undoManager = try #require(closeGuard.undoManager)
+        // One explicit group per user action stands in for AppKit's group per event.
+        undoManager.groupsByEvent = false
+        editor.document = Binding(get: { self.document }, set: { self.document = $0 })
+        editor.undoManager = undoManager
+    }
+
+    func step(_ action: () -> Void) {
+        undoManager.beginUndoGrouping()
+        action()
+        undoManager.endUndoGrouping()
+    }
+
+    static func placement(_ kind: StampKind, page: Int) -> PDFViewerDocument.SignaturePlacement {
+        PDFViewerDocument.SignaturePlacement(
+            pageIndex: page,
+            bounds: CGRect(x: 10, y: 10, width: 100, height: 20),
+            signaturePNGData: Data([1]),
+            signerName: "Tester",
+            kind: kind
+        )
+    }
+}
+
+@MainActor
+@Test func stampEditsNameTheirUndoOnTheWindowsUndoManager() throws {
+    let fixture = try WindowEditingFixture()
+    #expect(fixture.undoManager === fixture.window.undoManager)
+    let signature = WindowEditingFixture.placement(.signature, page: 0)
+    fixture.step { fixture.editor.add(signature) }
+    #expect(fixture.undoManager.undoMenuItemTitle == "Undo Add Signature")
+
+    let moved = signature.bounds.offsetBy(dx: 5, dy: 0)
+    fixture.step { fixture.editor.setBounds(id: signature.id, to: moved, actionName: "Move Signature") }
+    #expect(fixture.undoManager.undoMenuItemTitle == "Undo Move Signature")
+
+    let batch = [WindowEditingFixture.placement(.initials, page: 0), WindowEditingFixture.placement(.initials, page: 1)]
+    fixture.step { fixture.editor.add(batch, actionName: StampWorkflow.everyPageActionName) }
+    #expect(fixture.undoManager.undoMenuItemTitle == "Undo Place Initials on Every Page")
+}
+
+@MainActor
+@Test func theEditMenuNamesTheNextUndoAndRedo() throws {
+    let fixture = try WindowEditingFixture()
+    let initials = WindowEditingFixture.placement(.initials, page: 2)
+    fixture.step { fixture.editor.add(initials) }
+    #expect(fixture.undoManager.undoMenuItemTitle == "Undo Add Initials")
+    fixture.step { fixture.editor.delete(id: initials.id) }
+    #expect(fixture.undoManager.undoMenuItemTitle == "Undo Remove Initials from Page")
+
+    fixture.undoManager.undo()
+    #expect(fixture.document.signaturePlacements.contains { $0.id == initials.id })
+    let menu = UndoMenuState(fixture.undoManager)
+    #expect(menu.undoTitle == "Undo Add Initials")
+    #expect(menu.redoTitle == "Redo Remove Initials from Page")
+    #expect(menu.canUndo && menu.canRedo)
+}
+
+@MainActor
+@Test func theEditMenuFindsTheWindowsUndoManagerFromThePDFView() {
+    let window = NSWindow(
+        contentRect: CGRect(x: 0, y: 0, width: 200, height: 200),
+        styleMask: [.titled, .closable],
+        backing: .buffered,
+        defer: true
+    )
+    window.isReleasedWhenClosed = false
+    let pdfView = SigningPDFView(frame: window.contentLayoutRect)
+    window.contentView = pdfView
+    window.makeFirstResponder(pdfView)
+    // `undo:` and the menu title both resolve through the first responder.
+    #expect(window.firstResponder?.undoManager === window.undoManager)
+}
+
+@MainActor
+@Test func anEmptyUndoMenuSaysUndoAndRedo() {
+    let state = UndoMenuState(nil)
+    #expect(state.undoTitle == "Undo")
+    #expect(state.redoTitle == "Redo")
+    #expect(!state.canUndo && !state.canRedo)
+    #expect(UndoMenuState(UndoManager()) == state)
+}

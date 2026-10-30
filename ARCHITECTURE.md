@@ -14,7 +14,7 @@ Flattened stamps are page artwork. This is not certificate signing, identity ver
 
 ## PDFKit bridge and interaction
 
-`PDFKitView` bridges PDFKit into SwiftUI. A `PDFPageOverlayViewProvider` draws signature overlays that follow each page during scrolling and zooming. Placement, selection, moving, and aspect-locked resizing use page coordinates; the document model remains the source of truth. Undo and redo operate on model changes.
+`PDFKitView` bridges PDFKit into SwiftUI. A `PDFPageOverlayViewProvider` draws signature overlays that follow each page during scrolling and zooming. Placement, selection, moving, and aspect-locked resizing use page coordinates; the document model remains the source of truth. Undo and redo operate on model changes, registered with the window's undo manager (the document has none, so macOS never treats it as edited). `UndoCommands` replaces SwiftUI's Edit > Undo and Redo: `UndoMenuModel` follows the key window's undo manager through undo-manager and key-window notifications so the titles carry the action name, and the items send the standard `undo:`/`redo:` actions through the responder chain.
 
 Signing mode consumes placement clicks while normal reading retains PDFKit's selection and navigation behavior. Only signature widgets are treated as signature fields. `FormScan` uses `ReaderController.scanSignatureFields` to collect named signature fields and editable widgets in one cancellable page walk after the pages are shown; it reruns when a protected document is unlocked. Overlays redraw only when their inputs (placements, mode, stamp image, fields, selection) change.
 

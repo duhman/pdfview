@@ -105,7 +105,7 @@ Help > Keyboard Shortcuts shows this list in the app, generated from the menus.
 | ⌃⌘F | Enter/Exit Full Screen |
 | ⇧⌘P | Page Setup… |
 | ⌘P | Print |
-| ⌘Z / ⇧⌘Z | Undo / redo drawing edits while the signature canvas has focus |
+| ⌘Z / ⇧⌘Z | Undo / redo the last stamp edit, named in the Edit menu ("Undo Add Signature"), or drawing edits while the signature canvas has focus |
 | ⌘0 | Actual Size |
 | ⌘9 | Zoom to Fit (whole page) |
 | ⌥⌘9 | Fit Width |

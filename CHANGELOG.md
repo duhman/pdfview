@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README: a short "Why PDFView instead of Preview" section before Install
 
 ### Fixed
+- Edit > Undo and Redo name stamp edits again ("Undo Add Signature", "Undo Move Initials"); they read plain "Undo" after stamp edits moved to the window's undo manager
 - Cancelling the Save Signed Copy panel now shows and announces "Save cancelled.", as the 0.2.1 notes describe; before, only a save cancelled after it started did
 - Freeze page content and annotation values together at save, then prepare annotations in the background to keep widget-heavy exports responsive.
 - Let Save write the current state after every saved stamp is deleted or saved form edits are reverted; compare unlocked forms with their baseline before the reader scan finishes.
