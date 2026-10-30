@@ -250,11 +250,12 @@ extension PDFContentView {
                     Button(StampWorkflow.signingToggleTitle(mode: signingMode, kind: stampKind), action: exitSigning)
                 }
             } label: {
-                Label("Sign", systemImage: "signature")
+                Label("Sign", systemImage: StampWorkflow.signToolbarSymbol(mode: signingMode))
             }
             .foregroundStyle(signingMode == .idle ? Color.primary : Color.accentColor)
             .disabled(!canSign)
             .help("Place a signature, initials, or today's date")
+            .accessibilityValue(StampWorkflow.signToolbarValue(mode: signingMode))
             .accessibilityHint("Choose Signature, Initials, or Date, then click to place. Done stops signing.")
 
             Button {

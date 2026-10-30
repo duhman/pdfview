@@ -190,4 +190,16 @@ enum StampWorkflow {
             "They will be removed from this Mac. Initials already placed in documents are not affected."
         }
     }
+
+    // MARK: Toolbar
+
+    /// Spoken by VoiceOver for the Sign toolbar menu, so the state is not carried by colour alone.
+    static func signToolbarValue(mode: SigningMode) -> String {
+        mode == .idle ? "Not signing" : "Signing"
+    }
+
+    /// A filled pencil while signing gives the state a second, shape-based cue beside the tint.
+    static func signToolbarSymbol(mode: SigningMode) -> String {
+        mode == .idle ? "signature" : "pencil.circle.fill"
+    }
 }

@@ -516,3 +516,37 @@ private func arrowEvent(_ key: Int, modifiers: NSEvent.ModifierFlags, in window:
     #expect(chords.contains(MenuShortcuts.Chord(MenuShortcuts.shareSignedCopy)))
     #expect(chords.contains(MenuShortcuts.Chord(MenuShortcuts.showSignedCopyInFinder)))
 }
+
+// MARK: Low vision
+
+/// WCAG contrast ratio of an opaque colour against a white page.
+private func contrastOnWhite(_ color: NSColor) throws -> CGFloat {
+    let rgb = try #require(color.usingColorSpace(.sRGB))
+    func linear(_ channel: CGFloat) -> CGFloat {
+        channel <= 0.04 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
+    }
+    let luminance = 0.2126 * linear(rgb.redComponent) + 0.7152 * linear(rgb.greenComponent)
+        + 0.0722 * linear(rgb.blueComponent)
+    return 1.05 / (luminance + 0.05)
+}
+
+@Test func increaseContrastThickensAndDarkensOverlayMarks() throws {
+    let standard = OverlayStyle(increaseContrast: false)
+    let increased = OverlayStyle(increaseContrast: true)
+    #expect(increased.fieldLineWidth > standard.fieldLineWidth)
+    #expect(increased.selectionLineWidth > standard.selectionLineWidth)
+    #expect(increased.handleLineWidth > standard.handleLineWidth)
+    // Even with the lightest accent, outlines keep 3:1 normally and 4.5:1 with Increase Contrast.
+    #expect(try contrastOnWhite(standard.strokeColor(accent: .systemYellow)) >= 3)
+    #expect(try contrastOnWhite(increased.strokeColor(accent: .systemYellow)) >= 4.5)
+}
+
+@Test func signToolbarStateIsSpokenAndNotOnlyColoured() {
+    #expect(StampWorkflow.signToolbarValue(mode: .idle) == "Not signing")
+    #expect(StampWorkflow.signToolbarValue(mode: .freePlacement) == "Signing")
+    let idle = StampWorkflow.signToolbarSymbol(mode: .idle)
+    let signing = StampWorkflow.signToolbarSymbol(mode: .fieldPlacement)
+    #expect(idle != signing)
+    #expect(NSImage(systemSymbolName: idle, accessibilityDescription: nil) != nil)
+    #expect(NSImage(systemSymbolName: signing, accessibilityDescription: nil) != nil)
+}
