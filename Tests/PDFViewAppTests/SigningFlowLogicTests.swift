@@ -110,7 +110,9 @@ import Testing
     let document = try makeFormDocument()
     let fields = SigningFlowLogic.signatureFields(in: document)
 
-    #expect(fields == [SignatureField(pageIndex: 1, bounds: CGRect(x: 20, y: 100, width: 220, height: 50))])
+    #expect(fields == [
+        SignatureField(pageIndex: 1, bounds: CGRect(x: 20, y: 100, width: 220, height: 50), name: "ClientSignature"),
+    ])
 }
 
 @Test func textFieldNamedLikeASignatureIsNotDetected() throws {

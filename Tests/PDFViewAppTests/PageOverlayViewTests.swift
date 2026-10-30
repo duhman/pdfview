@@ -136,7 +136,8 @@ private func color(of overlay: PageOverlayView, atPagePoint point: CGPoint) thro
         onPlaceSignature: { _, _ in },
         onUpdatePlacementBounds: { _, _, _ in },
         onDeletePlacement: { _ in },
-        onDocumentStateChange: { _ in }
+        onDocumentStateChange: { _ in },
+        onFormValuesChange: { _ in }
     )
     let coordinator = representable.makeCoordinator()
     let pdfView = SigningPDFView(frame: CGRect(x: 0, y: 0, width: 600, height: 800))

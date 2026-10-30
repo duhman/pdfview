@@ -5,6 +5,8 @@ import Foundation
 struct SignatureField: Equatable {
     let pageIndex: Int
     let bounds: CGRect
+    /// The field's `/T` name, used to tell VoiceOver users which field holds a stamp.
+    var name: String?
 }
 
 /// Alert copy for a failed action: the title names what failed, the message gives the reason
@@ -18,6 +20,25 @@ struct ErrorAlert: Equatable {
         let reason = error.localizedDescription
         let recovery = (error as? LocalizedError)?.recoverySuggestion
         message = [reason, recovery].compactMap(\.self).joined(separator: " ")
+    }
+}
+
+/// What a window would lose if it closed now.
+struct UnsavedWork: Equatable {
+    var signatures = false
+    var formEntries = false
+
+    var isEmpty: Bool {
+        !signatures && !formEntries
+    }
+
+    var lossWarning: String {
+        let subject = switch (signatures, formEntries) {
+        case (true, true): "Your signatures and form entries"
+        case (false, true): "Your form entries"
+        default: "Your signatures"
+        }
+        return "\(subject) will be lost if you don’t save."
     }
 }
 
@@ -82,6 +103,29 @@ enum SigningFlowLogic {
         !placements.isEmpty && placements != exported
     }
 
+    /// Placements not yet in a saved copy, and form values that differ from the last saved copy
+    /// (or from the file as opened). Nil form values mean the form scan has not finished.
+    static func unsavedWork(
+        placements: [PDFViewerDocument.SignaturePlacement],
+        exported: [PDFViewerDocument.SignaturePlacement]?,
+        formValues: [FormFieldValue]?,
+        savedFormValues: [FormFieldValue]?
+    ) -> UnsavedWork {
+        UnsavedWork(
+            signatures: hasUnexportedPlacements(placements, exported: exported),
+            formEntries: formValues != nil && formValues != savedFormValues
+        )
+    }
+
+    /// A signed copy is worth saving once it holds a stamp or a form entry the original lacks.
+    static func hasSignedCopyContent(
+        placements: [PDFViewerDocument.SignaturePlacement],
+        formValues: [FormFieldValue]?,
+        originalFormValues: [FormFieldValue]?
+    ) -> Bool {
+        !placements.isEmpty || (formValues != nil && formValues != originalFormValues)
+    }
+
     static func signedFileName(for sourceURL: URL?) -> String {
         let baseName = sourceURL?.deletingPathExtension().lastPathComponent ?? "document"
         return "\(baseName)-signed.pdf"
@@ -97,7 +141,7 @@ enum SigningFlowLogic {
             guard let page = document.page(at: pageIndex) else { return [] }
             return page.annotations
                 .filter(isSignatureField)
-                .map { SignatureField(pageIndex: pageIndex, bounds: $0.bounds) }
+                .map { SignatureField(pageIndex: pageIndex, bounds: $0.bounds, name: $0.fieldName) }
         }
     }
 }
