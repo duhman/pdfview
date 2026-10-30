@@ -71,7 +71,7 @@ struct DocumentProtectionTests {
         defer { try? FileManager.default.removeItem(at: url) }
         let baseline = Data("existing destination".utf8)
         try baseline.write(to: url)
-        await #expect(throws: PDFViewerDocument.ExportError.cannotPreservePageGeometry) {
+        await #expect(throws: PDFViewerDocument.ExportError.cannotPreserveProtectedPageGeometry(allowsPrinting: true)) {
             try await SignedPDFExporter.writeAsync(source, placements: [], to: url, password: phrase) { _ in }
         }
         #expect(try Data(contentsOf: url) == baseline)

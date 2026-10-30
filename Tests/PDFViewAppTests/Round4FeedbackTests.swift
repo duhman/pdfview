@@ -103,6 +103,7 @@ import Testing
 
 // MARK: Unlock sheet
 
+@MainActor
 @Test func theUnlockSheetAnnouncesItsTitleAndInstruction() {
     #expect(UnlockDocumentSheet.title == "Unlock PDF")
     #expect(UnlockDocumentSheet.instruction == "Enter this PDF’s password to read and sign it.")

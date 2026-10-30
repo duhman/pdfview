@@ -250,9 +250,11 @@ enum SigningFlowLogic {
     static func hasSignedCopyContent(
         placements: [PDFViewerDocument.SignaturePlacement],
         formValues: [FormFieldValue]?,
-        originalFormValues: [FormFieldValue]?
+        originalFormValues: [FormFieldValue]?,
+        exported: ExportedState? = nil
     ) -> Bool {
         !placements.isEmpty || (formValues != nil && formValues != originalFormValues)
+            || (exported != nil && exported?.matches(placements: placements, formValues: formValues) == false)
     }
 
     static func signedFileName(for sourceURL: URL?) -> String {

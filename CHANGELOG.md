@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Freeze page content and annotation values together at save, then prepare annotations in the background to keep widget-heavy exports responsive.
+- Let Save write the current state after every saved stamp is deleted or saved form edits are reverted; compare unlocked forms with their baseline before the reader scan finishes.
+- Offer an unprotected copy for protected PDFs with offset page origins, and suggest Print only when printing is allowed.
+
 ## [0.2.1] - 2026-10-30
 
 Fixes locked PDFs reporting unsaved work, keeps print and copy restrictions on protected signed copies, and makes initials, dates and form fields faster to use from the keyboard.

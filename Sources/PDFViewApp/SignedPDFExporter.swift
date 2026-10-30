@@ -18,11 +18,23 @@ enum SignedPDFExporter {
         let pages: [PDFPage]
     }
 
-    /// PDFKit does not declare Sendable. This private box transfers exclusive ownership of a deep
-    /// copy to one worker; neither the live document nor any of its pages are stored here.
+    private struct CapturedAnnotation {
+        let bounds: CGRect
+        let type: PDFAnnotationSubtype
+        let properties: [AnyHashable: Any]
+    }
+
+    private struct CapturedPage {
+        let content: CGPDFPage
+        let page: PDFPage
+        let annotations: [CapturedAnnotation]
+    }
+
+    /// PDFKit does not declare Sendable. Transfer only private page/structure objects, frozen
+    /// annotation properties and immutable CGPDFPage content to one worker, never live PDFKit pages.
     private struct Snapshot: @unchecked Sendable {
         let document: PDFDocument
-        let pages: [PDFPage]
+        let pages: [CapturedPage]
         let state: ExportedState
     }
 
@@ -32,11 +44,13 @@ enum SignedPDFExporter {
         let ownerPassword: String
         let permissions: UInt
         let isOwner: Bool
+        let allowsPrinting: Bool
 
         init(source: PDFDocument, password: String) {
             self.password = password
             permissions = source.accessPermissions.rawValue
             isOwner = source.permissionsStatus == .owner
+            allowsPrinting = source.allowsPrinting
             ownerPassword = isOwner ? password : UUID().uuidString
         }
 
@@ -71,13 +85,10 @@ enum SignedPDFExporter {
         try SignedCopyOperation.validateDestination(destination, originalURL: originalURL)
         guard !source.isLocked else { throw ExportError.documentLocked }
         try Task.checkCancellation()
-        // No suspension between baseline capture and copying the live PDF.
+        // Freeze values, page content and annotation properties together, without a suspension.
         guard let values = FormScan.capture(source)?.values() else { throw ExportError.cannotEncodeDocumentData }
         let protection = password.map { Protection(source: source, password: $0) }
-        let copy = try snapshot(of: source)
-        let snapshot = try Snapshot(
-            document: copy, pages: pages(in: copy), state: ExportedState(placements: placements, formValues: values)
-        )
+        let snapshot = try snapshot(of: source, state: ExportedState(placements: placements, formValues: values))
         let worker = Task.detached(priority: .userInitiated) {
             try await writeSnapshot(
                 snapshot,
@@ -133,7 +144,10 @@ enum SignedPDFExporter {
     }
 
     private static func renderAsync(
-        _ pages: [PDFPage], stamps: [Int: [Stamp]], to url: URL, progress: @MainActor @Sendable (ExportProgress) -> Void
+        _ pages: [CapturedPage],
+        stamps: [Int: [Stamp]],
+        to url: URL,
+        progress: @MainActor @Sendable (ExportProgress) -> Void
     ) async throws {
         guard let context = CGContext(url as CFURL, mediaBox: nil, nil) else {
             throw ExportError.cannotCreatePDFContext
@@ -149,18 +163,40 @@ enum SignedPDFExporter {
         }
     }
 
-    private static func renderPage(_ page: PDFPage, stamps: [Stamp], in context: CGContext) {
+    private static func renderPage(_ captured: CapturedPage, stamps: [Stamp], in context: CGContext) {
         autoreleasepool {
+            let page = captured.page
+            for annotation in captured.annotations {
+                page.addAnnotation(PDFAnnotation(
+                    bounds: annotation.bounds, forType: annotation.type, withProperties: annotation.properties
+                ))
+            }
             let media = page.bounds(for: .mediaBox)
             context.beginPDFPage([
                 kCGPDFContextMediaBox as String: boxData(media),
                 kCGPDFContextCropBox as String: boxData(page.bounds(for: .cropBox)),
             ] as CFDictionary)
             defer { context.endPDFPage() }
-            draw(page, media: media, in: context)
+            context.drawPDFPage(captured.content)
+            drawAnnotations(on: page, media: media, in: context)
             for stamp in stamps {
                 context.draw(stamp.image, in: stamp.bounds)
             }
+        }
+    }
+
+    private static func drawAnnotations(on page: PDFPage, media: CGRect, in context: CGContext) {
+        let rotation = page.rotation
+        page.rotation = 0
+        context.saveGState()
+        defer {
+            page.rotation = rotation
+            context.restoreGState()
+        }
+        // PDFKit normalizes annotation coordinates to the unrotated media-box origin.
+        context.translateBy(x: media.minX, y: media.minY)
+        for annotation in page.annotations where annotation.shouldPrint && annotation.type != "Link" {
+            annotation.draw(with: .mediaBox, in: context)
         }
     }
 
@@ -184,20 +220,29 @@ enum SignedPDFExporter {
         return PreparedPDF(document: output, rendered: renderedDocument, pages: outputPages)
     }
 
-    private static func snapshot(of source: PDFDocument) throws -> PDFDocument {
-        let originalPages = try pages(in: source)
-        defer { withExtendedLifetime(originalPages) {} }
-        guard let copy = source.copy() as? PDFDocument, !copy.isLocked else {
-            throw ExportError.cannotEncodeDocumentData
-        }
-        // NSCopying freezes page/annotation state, including unlocked encrypted pages, but loses GoTo targets.
-        for page in try pages(in: copy) {
-            for link in page.annotations where link.type == "Link" {
-                page.removeAnnotation(link)
+    private static func snapshot(of source: PDFDocument, state: ExportedState) throws -> Snapshot {
+        let document = PDFDocument()
+        var captured: [CapturedPage] = []
+        for index in 0 ..< source.pageCount {
+            guard let original = source.page(at: index), let content = original.pageRef else {
+                throw ExportError.cannotReadPage(index: index)
             }
+            let page = PDFPage()
+            page.setBounds(original.bounds(for: .mediaBox), for: .mediaBox)
+            page.setBounds(original.bounds(for: .cropBox), for: .cropBox)
+            let annotations = original.annotations.compactMap { annotation -> CapturedAnnotation? in
+                guard annotation.type != "Link", let type = annotation.type else { return nil }
+                return CapturedAnnotation(
+                    bounds: annotation.bounds,
+                    type: PDFAnnotationSubtype(rawValue: type),
+                    properties: annotation.annotationKeyValues.mapValues(frozenValue)
+                )
+            }
+            document.insert(page, at: index)
+            captured.append(CapturedPage(content: content, page: page, annotations: annotations))
         }
-        try restoreStructure(from: source, to: copy)
-        return copy
+        try restoreStructure(from: source, to: document)
+        return Snapshot(document: document, pages: captured, state: state)
     }
 
     private static func geometry(of pages: [PDFPage]) -> [PDFExportPageGeometry] {
@@ -219,6 +264,9 @@ enum SignedPDFExporter {
         progress: @MainActor @Sendable (ExportProgress) -> Void
     ) async throws {
         let boxes = try geometry(of: pages(in: source))
+        if let protection, boxes.contains(where: { $0.media.origin != .zero }) {
+            throw ExportError.cannotPreserveProtectedPageGeometry(allowsPrinting: protection.allowsPrinting)
+        }
         let count = source.pageCount
         let output = try structuredDocument(rendered, from: source)
         await progress(ExportProgress(completedPages: count, totalPages: count, stage: .writing))
@@ -260,22 +308,6 @@ enum SignedPDFExporter {
         return stamps
     }
 
-    private static func draw(_ page: PDFPage, media: CGRect, in context: CGContext) {
-        let rotation = page.rotation
-        let displaysAnnotations = page.displaysAnnotations
-        page.rotation = 0
-        page.displaysAnnotations = true
-        context.saveGState()
-        defer {
-            context.restoreGState()
-            page.rotation = rotation
-            page.displaysAnnotations = displaysAnnotations
-        }
-        // PDFKit normalizes the media-box origin; undo that translation to keep PDF page coordinates.
-        context.translateBy(x: media.minX, y: media.minY)
-        page.draw(with: .mediaBox, to: context)
-    }
-
     private static func boxData(_ box: CGRect) -> Data {
         var box = box
         return Data(bytes: &box, count: MemoryLayout<CGRect>.size)
@@ -299,6 +331,18 @@ enum SignedPDFExporter {
 }
 
 extension SignedPDFExporter {
+    /// PDFKit exposes arrays, dictionaries and mutable drawing objects in annotation properties.
+    /// Copy those values now; no live annotation or mutable property crosses to the worker.
+    private static func frozenValue(_ value: Any) -> Any {
+        if let dictionary = value as? [AnyHashable: Any] {
+            return dictionary.mapValues(frozenValue)
+        }
+        if let array = value as? [Any] {
+            return array.map(frozenValue)
+        }
+        return (value as? NSCopying)?.copy(with: nil) ?? value
+    }
+
     private static func restoreStructure(from source: PDFDocument, to output: PDFDocument) throws {
         for index in 0 ..< source.pageCount {
             guard let page = source.page(at: index), let result = output.page(at: index) else {

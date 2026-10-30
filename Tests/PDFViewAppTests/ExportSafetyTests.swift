@@ -5,10 +5,10 @@ import Testing
 
 @MainActor
 struct ExportSafetyTests {
-    @Test(arguments: [false, true])
-    func asyncExportFreezesFormValuesBeforeFirstYield(encrypted: Bool) async throws {
+    @Test(arguments: [false, true], [CGPoint.zero, CGPoint(x: -20, y: -30)])
+    func asyncExportFreezesFormValuesBeforeFirstYield(encrypted: Bool, origin: CGPoint) async throws {
         var source = try ExportFixture.document(mediaBoxes: Array(
-            repeating: CGRect(x: 0, y: 0, width: 400, height: 600), count: 8
+            repeating: CGRect(origin: origin, size: CGSize(width: 400, height: 600)), count: 8
         ))
         if encrypted {
             let bytes = try #require(source.dataRepresentation(options: [
@@ -24,7 +24,7 @@ struct ExportSafetyTests {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
         defer { try? FileManager.default.removeItem(at: url) }
         try await SignedPDFExporter.writeAsync(source, placements: [], to: url) { progress in
-            if progress.completedPages == 1 {
+            if progress.completedPages == 0 {
                 fields.forEach { $0.widgetStringValue = "Changed during save" }
             }
         }

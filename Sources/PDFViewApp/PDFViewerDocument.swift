@@ -13,6 +13,7 @@ struct PDFViewerDocument: FileDocument {
         case invalidPlacementPage(index: Int)
         case cannotDecodeSignature(id: UUID)
         case cannotPreservePageGeometry
+        case cannotPreserveProtectedPageGeometry(allowsPrinting: Bool)
         case cannotPreserveAccessPermissions
         case cannotPreserveNavigation
         case invalidExportedDocument
@@ -41,6 +42,12 @@ struct PDFViewerDocument: FileDocument {
                 The destination was not changed. \
                 Use Print > Save as PDF to create a normalized PDF, then reopen it and place your signatures again.
                 """
+            case let .cannotPreserveProtectedPageGeometry(allowsPrinting):
+                """
+                This PDF uses a page coordinate system that could not be preserved with password protection. \
+                The destination was not changed. \
+                To save a copy without password or access restrictions, turn off Keep password protection.
+                """ + (allowsPrinting ? PDFViewerDocument.printRecovery : "")
             case .cannotPreserveAccessPermissions:
                 """
                 PDFView could not keep this PDF's access permissions with the opening password. \
@@ -63,6 +70,9 @@ struct PDFViewerDocument: FileDocument {
             }
         }
     }
+
+    private static let printRecovery = " Or use Print > Save as PDF to create a normalized PDF, "
+        + "then reopen it and place your signatures again."
 
     struct SignaturePlacement: Identifiable, Equatable, Sendable {
         let id: UUID

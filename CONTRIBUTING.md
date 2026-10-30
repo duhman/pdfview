@@ -92,6 +92,7 @@ For reader or signing changes, verify the affected flows on a Mac:
 - Create or edit a signature, place it in a field and on a page, move/resize, and undo/redo.
 - Save and reopen a signed copy; check page dimensions, rotation, links, bookmarks, and form content.
 - Check multiwindow state, keyboard commands, VoiceOver, and Print.
+- On macOS 14.2, 15, 26 and 27, use Go > Next/Previous Form Field and Activate Form Field to focus a visible text widget, type, then Tab onward. Confirm signing mode, a stamp overlay, an offscreen field or an overlapping link never receives the synthesized widget click. Record the exact OS version and visible result; automated hit-target checks do not verify PDFKit's native editor.
 
 Report which checks ran and what remains unverified. A successful build is not evidence that the on-screen flow works.
 
