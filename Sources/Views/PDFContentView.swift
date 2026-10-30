@@ -290,8 +290,10 @@ extension PDFContentView {
                 Label("Save Signed Copy…", systemImage: "square.and.arrow.down")
             }
             .disabled(!canSaveSignedCopy)
-            .help("Save Signed Copy…")
-            .accessibilityHint("Saves a copy of the PDF with your signature stamps flattened in.")
+            .help(saveSignedCopyUnavailableReason ?? "Save Signed Copy…")
+            .accessibilityHint(
+                saveSignedCopyUnavailableReason ?? "Saves a copy of the PDF with your signature stamps flattened in."
+            )
         }
     }
 
@@ -468,6 +470,14 @@ extension PDFContentView {
                 formValues: formValues,
                 originalFormValues: originalFormValues
             )
+    }
+
+    private var saveSignedCopyUnavailableReason: String? {
+        SigningFlowLogic.saveSignedCopyUnavailableReason(
+            canSave: canSaveSignedCopy,
+            isLocked: isLocked,
+            isBusy: export.isBusy
+        )
     }
 
     private var unsavedWork: UnsavedWork {

@@ -279,6 +279,20 @@ enum SigningFlowLogic {
         !placements.isEmpty || (formValues != nil && formValues != originalFormValues)
     }
 
+    /// Why Save Signed Copy is disabled, for the toolbar button's help tag and VoiceOver hint; nil when
+    /// it can be used.
+    static func saveSignedCopyUnavailableReason(canSave: Bool, isLocked: Bool, isBusy: Bool) -> String? {
+        if canSave {
+            nil
+        } else if isLocked {
+            "Unlock this PDF first."
+        } else if isBusy {
+            "Wait for the current save or print to finish."
+        } else {
+            "Place a signature or fill a field first."
+        }
+    }
+
     static func signedFileName(for sourceURL: URL?) -> String {
         let baseName = sourceURL?.deletingPathExtension().lastPathComponent ?? "document"
         return "\(baseName)-signed.pdf"

@@ -46,3 +46,15 @@ import Testing
     #expect(UnlockDocumentSheet.unlockedAnnouncement(pageCount: 1) == "Unlocked, 1 page")
     #expect(UnlockDocumentSheet.unlockedAnnouncement(pageCount: 12) == "Unlocked, 12 pages")
 }
+
+// MARK: Save Signed Copy explains itself
+
+@Test func aDisabledSaveSignedCopySaysWhatIsMissing() {
+    #expect(SigningFlowLogic.saveSignedCopyUnavailableReason(canSave: true, isLocked: false, isBusy: false) == nil)
+    #expect(SigningFlowLogic.saveSignedCopyUnavailableReason(canSave: false, isLocked: false, isBusy: false)
+        == "Place a signature or fill a field first.")
+    #expect(SigningFlowLogic.saveSignedCopyUnavailableReason(canSave: false, isLocked: true, isBusy: false)
+        == "Unlock this PDF first.")
+    #expect(SigningFlowLogic.saveSignedCopyUnavailableReason(canSave: false, isLocked: false, isBusy: true)
+        == "Wait for the current save or print to finish.")
+}
