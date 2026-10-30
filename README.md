@@ -65,6 +65,8 @@ Signatures are **visual stamps, not certificate-based digital signatures**. They
 
 ### Keyboard shortcuts
 
+Help > Keyboard Shortcuts shows this list in the app, generated from the menus.
+
 | Shortcut | Action |
 | --- | --- |
 | ⌥⌘S | Start/Stop Signing |

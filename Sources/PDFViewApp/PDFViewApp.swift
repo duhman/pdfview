@@ -26,6 +26,11 @@ struct PDFViewApp: App {
             SigningCommandMenu(signatureStore: signatureStore)
         }
 
+        Window("Keyboard Shortcuts", id: "keyboard-shortcuts") {
+            KeyboardShortcutsView()
+        }
+        .commandsRemoved()
+
         Window("About PDFView", id: "about") {
             AboutView()
         }
@@ -51,9 +56,16 @@ private struct AppInfoCommands: Commands {
 private struct HelpCommands: Commands {
     @Environment(\.openURL)
     private var openURL
+    @Environment(\.openWindow)
+    private var openWindow
 
     var body: some Commands {
         CommandGroup(replacing: .help) {
+            // Offline and generated from the menus, so it comes before the online README.
+            Button("Keyboard Shortcuts") {
+                openWindow(id: "keyboard-shortcuts")
+            }
+
             Button("PDFView Help") {
                 openURL(AppLinks.readme)
             }

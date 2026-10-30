@@ -80,13 +80,12 @@ struct SetupRequest: Equatable {
     }
 }
 
-/// Key equivalents for the Sign menu, shown in the banner so the keyboard path is discoverable.
-/// Chosen to avoid the standard File, Edit (including Find), View, Window and Go menu chords.
+/// Sign menu chords as the signing banner and announcements show them, taken from `MenuShortcuts`.
 enum SigningShortcut {
-    static let placeInNextField = "⌥⌘N"
-    static let placeOnCurrentPage = "⌥⌘P"
-    static let selectNextStamp = "⌥⌘]"
-    static let placeInitialsOnEveryPage = "⌥⌘I"
+    static let placeInNextField = MenuShortcuts.display(MenuShortcuts.placeInNextField)
+    static let placeOnCurrentPage = MenuShortcuts.display(MenuShortcuts.placeOnCurrentPage)
+    static let selectNextStamp = MenuShortcuts.display(MenuShortcuts.selectNextStamp)
+    static let placeInitialsOnEveryPage = MenuShortcuts.display(MenuShortcuts.placeInitialsOnEveryPage)
 }
 
 /// The Fields/Anywhere choice per stamp kind, remembered for one window. Signatures default to the
